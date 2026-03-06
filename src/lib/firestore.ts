@@ -657,3 +657,36 @@ export async function seedDefaultPlans(
     ...therapistPlans.map(setTherapistPlan),
   ]);
 }
+
+// ─── Platform Settings ────────────────────────────────────────────────────────
+// Single document: settings/platform
+
+export interface PlatformSettings {
+  platformName: string;
+  domain: string;
+  supportEmail: string;
+  timezone: string;
+  language: string;
+  notifications: {
+    newCompany: boolean;
+    weeklyReport: boolean;
+    paymentAlerts: boolean;
+    newUsers: boolean;
+    planUpgrades: boolean;
+  };
+  updatedAt?: Timestamp;
+}
+
+const SETTINGS_DOC = doc(db, "settings", "platform");
+
+export async function getPlatformSettings(): Promise<PlatformSettings | null> {
+  try {
+    const snap = await getDoc(SETTINGS_DOC);
+    if (!snap.exists()) return null;
+    return snap.data() as PlatformSettings;
+  } catch { return null; }
+}
+
+export async function savePlatformSettings(data: Omit<PlatformSettings, "updatedAt">): Promise<void> {
+  await setDoc(SETTINGS_DOC, { ...data, updatedAt: serverTimestamp() }, { merge: true });
+}
