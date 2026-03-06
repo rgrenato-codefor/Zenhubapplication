@@ -9,6 +9,7 @@ import {
   serverTimestamp, Timestamp, orderBy, limit,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import type { CompanyPlan, TherapistPlan } from "../app/lib/planConfig";
 
 // ─── Internal helper ─────────────────────────────────────────────────────────
 /** Strip the `id` (and `createdAt`) fields before writing to Firestore so that
@@ -592,4 +593,67 @@ export async function getCompletedSessionIds(companyId: string): Promise<Set<str
     const records = await getSessionRecordsByCompany(companyId);
     return new Set(records.map((r) => r.appointmentId));
   } catch { return new Set(); }
+}
+
+// ─── Plans ────────────────────────────────────────────────────────────────────
+// Collections: "companyPlans" and "therapistPlans"
+// Each document ID = plan.id (deterministic, enables safe upserts)
+
+// -- Company Plans --
+
+export async function getCompanyPlans(): Promise<CompanyPlan[]> {
+  try {
+    const snap = await getDocs(query(collection(db, "companyPlans"), orderBy("order")));
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as CompanyPlan));
+  } catch { return []; }
+}
+
+export async function setCompanyPlan(plan: CompanyPlan): Promise<void> {
+  const { id, ...data } = plan;
+  await setDoc(doc(db, "companyPlans", id), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+export async function deleteCompanyPlan(id: string): Promise<void> {
+  await deleteDoc(doc(db, "companyPlans", id));
+}
+
+export async function deleteAllCompanyPlans(): Promise<void> {
+  const snap = await getDocs(collection(db, "companyPlans"));
+  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+}
+
+// -- Therapist Plans --
+
+export async function getTherapistPlans(): Promise<TherapistPlan[]> {
+  try {
+    const snap = await getDocs(query(collection(db, "therapistPlans"), orderBy("order")));
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as TherapistPlan));
+  } catch { return []; }
+}
+
+export async function setTherapistPlan(plan: TherapistPlan): Promise<void> {
+  const { id, ...data } = plan;
+  await setDoc(doc(db, "therapistPlans", id), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+export async function deleteTherapistPlan(id: string): Promise<void> {
+  await deleteDoc(doc(db, "therapistPlans", id));
+}
+
+export async function deleteAllTherapistPlans(): Promise<void> {
+  const snap = await getDocs(collection(db, "therapistPlans"));
+  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+}
+
+// -- Seed (reset + recreate defaults) --
+
+export async function seedDefaultPlans(
+  companyPlans: CompanyPlan[],
+  therapistPlans: TherapistPlan[]
+): Promise<void> {
+  await Promise.all([deleteAllCompanyPlans(), deleteAllTherapistPlans()]);
+  await Promise.all([
+    ...companyPlans.map(setCompanyPlan),
+    ...therapistPlans.map(setTherapistPlan),
+  ]);
 }
