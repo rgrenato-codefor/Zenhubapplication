@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   CalendarDays, DollarSign, Star, TrendingUp, Clock, CheckCircle,
   AlertCircle, Building2, Sparkles, ArrowRight, CalendarCheck,
@@ -7,50 +8,124 @@ import {
 } from "recharts";
 import { useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
-import { therapists, appointments, clients, therapies, companies, therapistEarningsData } from "../../data/mockData";
-import { useTherapistStore } from "../../store/therapistStore";
+import { usePageData } from "../../hooks/usePageData";
 
 export default function TherapistDashboard() {
   const { user } = useAuth();
-  const store = useTherapistStore();
   const navigate = useNavigate();
+  const {
+    myTherapist: therapist,
+    appointments: allAppointments,
+    company,
+    sessionRecords,
+    completedSessionIds,
+    therapistEarningsData,
+    clients,
+    therapies,
+  } = usePageData();
 
-  const therapist = therapists.find((t) => t.id === user?.therapistId);
-  const myAppointments = appointments.filter((a) => a.therapistId === user?.therapistId);
-  const company = companies.find((c) => c.id === therapist?.companyId);
+  // ── Own appointments & records ─────────────────────────────────────────────
+  const myId = therapist?.id ?? user?.therapistId ?? "";
+
+  // Use DataContext sessionRecords (works for both demo AND real Firestore users)
+  const myRecords = useMemo(
+    () => sessionRecords.filter((r) => r.therapistId === myId),
+    [sessionRecords, myId]
+  );
+
+  // Use DataContext completedSessionIds (works for both demo AND real Firestore users)
+  const isCompleted = (aptId: string) => completedSessionIds.has(aptId);
+
+  const myAppointments = useMemo(
+    () => allAppointments.filter((a) => a.therapistId === myId),
+    [allAppointments, myId]
+  );
+
   const isAutonomous = !company;
   const commissionPct = therapist?.commission ?? 100;
 
-  const todayStr = "2026-03-04";
+  // ── Date helpers ────────────────────────────────────────────────────────────
+  const todayStr = new Date().toISOString().split("T")[0];
+  const currentMonthPrefix = todayStr.slice(0, 7); // "YYYY-MM"
+
   const todayAppointments = myAppointments.filter((a) => a.date === todayStr);
   const pendingClosure = todayAppointments.filter(
-    (a) => !store.isCompleted(a.id) && (a.status === "confirmed" || a.status === "pending")
+    (a) => !isCompleted(a.id) && (a.status === "confirmed" || a.status === "pending")
   );
 
-  // Recent completed sessions from store
-  const recentRecords = store.getTherapistRecords(therapist?.id ?? "").slice(0, 3);
+  // ── Earnings computed from real records ─────────────────────────────────────
+  const monthRecords = myRecords.filter((r) => r.date.startsWith(currentMonthPrefix));
+  const monthEarned = monthRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
+  const allTimeEarned = myRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
 
-  // Accumulated earnings from store
-  const storeRecords = store.getTherapistRecords(therapist?.id ?? "");
-  const storeEarned = storeRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
-  const baseEarnings = therapist?.totalEarnings ?? 0;
-  const totalEarned = baseEarnings + storeEarned;
+  // Unpaid vs paid breakdown (company owes therapist)
+  const unpaidRecords = myRecords.filter((r) => !r.paidByCompany);
+  const paidRecords   = myRecords.filter((r) => r.paidByCompany === true);
+  const pendingReceivable = unpaidRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
+  const alreadyReceived   = paidRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
 
-  if (!therapist) return <div className="text-gray-500 text-center py-20">Terapeuta não encontrado</div>;
+  // Total = historical base (from profile) + all records tracked in the system
+  const profileTotal = therapist?.totalEarnings ?? 0;
+  const totalEarned = Math.max(profileTotal, allTimeEarned);
+
+  // Month earnings: prefer computed from records; fall back to profile field
+  const monthEarnings = monthEarned > 0 ? monthEarned : (therapist?.monthEarnings ?? 0);
+
+  // Sessions count this month (from records)
+  const monthSessionCount = monthRecords.length > 0
+    ? monthRecords.length
+    : (therapist?.monthSessions ?? 0);
+
+  const recentRecords = myRecords.slice(0, 3);
+
+  // ── Chart: build from real records if available, else use mock data ─────────
+  const chartData = useMemo(() => {
+    if (myRecords.length === 0) return therapistEarningsData;
+
+    // Group by "MMM/YY"
+    const map: Record<string, { gross: number; net: number; sessions: number }> = {};
+    myRecords.forEach((r) => {
+      const d = new Date(r.date + "T12:00:00");
+      const key = d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+      if (!map[key]) map[key] = { gross: 0, net: 0, sessions: 0 };
+      map[key].gross += r.totalCharged;
+      map[key].net += r.therapistEarned;
+      map[key].sessions += 1;
+    });
+    const built = Object.entries(map).map(([month, v]) => ({
+      month,
+      gross: Math.round(v.gross),
+      net: Math.round(v.net),
+      commission: Math.round(v.gross - v.net),
+      sessions: v.sessions,
+    }));
+    // Merge with mock data for the chart (last 6 months mock + real data)
+    return built.length >= 2 ? built : therapistEarningsData;
+  }, [myRecords, therapistEarningsData]);
+
+  if (!therapist) return (
+    <div className="text-gray-500 text-center py-20">Carregando dados do terapeuta...</div>
+  );
 
   return (
     <div className="space-y-6">
       {/* ── Welcome ──────────────────────────────────────────────────────── */}
       <div className="bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl p-6 text-white">
         <div className="flex items-center gap-4">
-          <img
-            src={therapist.avatar}
-            alt={therapist.name}
-            className="w-16 h-16 rounded-2xl object-cover border-2 border-white/30"
-          />
+          {therapist.avatar ? (
+            <img
+              src={therapist.avatar}
+              alt={therapist.name}
+              className="w-16 h-16 rounded-2xl object-cover border-2 border-white/30"
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-2xl bg-white/20 border-2 border-white/30 flex items-center justify-center text-white text-2xl" style={{ fontWeight: 700 }}>
+              {therapist.name.charAt(0)}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-white/80 text-sm">Bem-vinda de volta,</p>
+              <p className="text-white/80 text-sm">Bem-vindo(a) de volta,</p>
               {company ? (
                 <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-white/20">
                   <Building2 className="w-3 h-3" /> {company.name}
@@ -74,12 +149,12 @@ export default function TherapistDashboard() {
             <p className="text-white/80 text-xs">Hoje</p>
           </div>
           <div className="bg-white/20 rounded-xl p-3 text-center">
-            <p className="text-xl text-white" style={{ fontWeight: 700 }}>{therapist.monthSessions}</p>
+            <p className="text-xl text-white" style={{ fontWeight: 700 }}>{monthSessionCount}</p>
             <p className="text-white/80 text-xs">Este mês</p>
           </div>
           <div className="bg-white/20 rounded-xl p-3 text-center">
             <p className="text-xl text-white" style={{ fontWeight: 700 }}>
-              R${(therapist.monthEarnings / 1000).toFixed(1)}k
+              R${(monthEarnings / 1000).toFixed(1)}k
             </p>
             <p className="text-white/80 text-xs">Ganhos/mês</p>
           </div>
@@ -120,19 +195,28 @@ export default function TherapistDashboard() {
         {[
           {
             title: "Ganho este mês",
-            value: `R$ ${therapist.monthEarnings.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-            icon: DollarSign, trend: "+8% vs mês anterior", color: "bg-emerald-50", iconColor: "text-emerald-600",
+            value: `R$ ${monthEarnings.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+            icon: DollarSign,
+            trend: `${monthSessionCount} sessão${monthSessionCount !== 1 ? "s" : ""} este mês`,
+            color: "bg-emerald-50", iconColor: "text-emerald-600",
           },
           {
-            title: "Total acumulado",
-            value: `R$ ${totalEarned.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+            title: isAutonomous ? "Total acumulado" : "A receber",
+            value: isAutonomous
+              ? `R$ ${totalEarned.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+              : `R$ ${pendingReceivable.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
             icon: TrendingUp,
-            trend: `${therapist.totalSessions + storeRecords.length} sessões`,
-            color: "bg-violet-50", iconColor: "text-violet-600",
+            trend: isAutonomous
+              ? `${therapist.totalSessions + myRecords.length} sessões`
+              : alreadyReceived > 0
+                ? `R$ ${alreadyReceived.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} já recebido`
+                : "saldo pendente da empresa",
+            color: isAutonomous ? "bg-violet-50" : (pendingReceivable > 0 ? "bg-amber-50" : "bg-emerald-50"),
+            iconColor: isAutonomous ? "text-violet-600" : (pendingReceivable > 0 ? "text-amber-600" : "text-emerald-600"),
           },
           {
             title: "Sessões hoje",
-            value: `${todayAppointments.filter((a) => store.isCompleted(a.id)).length}/${todayAppointments.length}`,
+            value: `${todayAppointments.filter((a) => isCompleted(a.id)).length}/${todayAppointments.length}`,
             icon: CalendarDays, trend: "encerradas / agendadas", color: "bg-blue-50", iconColor: "text-blue-600",
           },
           {
@@ -160,7 +244,7 @@ export default function TherapistDashboard() {
         <h3 className="text-gray-900 mb-1">Histórico de Ganhos</h3>
         <p className="text-gray-400 text-xs mb-4">Valor bruto da sessão vs. seu ganho líquido</p>
         <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={therapistEarningsData}>
+          <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#EDE9FE" />
             <XAxis dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
             <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
@@ -175,7 +259,7 @@ export default function TherapistDashboard() {
       </div>
 
       {/* ── Recent completed sessions ──────────────────────────────────── */}
-      {recentRecords.length > 0 && (
+      {recentRecords.length > 0 ? (
         <div className="bg-white rounded-xl border border-violet-100 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-gray-900">Atendimentos Encerrados</h3>
@@ -214,6 +298,19 @@ export default function TherapistDashboard() {
             ))}
           </div>
         </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-violet-100 p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-2">
+            <h3 className="text-gray-900">Atendimentos Encerrados</h3>
+          </div>
+          <div className="flex flex-col items-center justify-center py-6 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-violet-50 flex items-center justify-center mb-3">
+              <CheckCircle className="w-6 h-6 text-violet-300" />
+            </div>
+            <p className="text-gray-500 text-sm">Nenhuma sessão encerrada ainda</p>
+            <p className="text-gray-400 text-xs mt-1">Após encerrar uma sessão, ela aparece aqui com o valor recebido.</p>
+          </div>
+        </div>
       )}
 
       {/* ── Today's schedule ──────────────────────────────────────────── */}
@@ -232,28 +329,32 @@ export default function TherapistDashboard() {
           {todayAppointments.map((apt) => {
             const client = clients.find((c) => c.id === apt.clientId);
             const therapy = therapies.find((t) => t.id === apt.therapyId);
-            const isCompleted = store.isCompleted(apt.id);
+            const completed = isCompleted(apt.id);
             const earned = isAutonomous ? apt.price : apt.price * commissionPct / 100;
             return (
-              <div key={apt.id} className={`flex items-center gap-4 p-3 rounded-xl ${isCompleted ? "bg-emerald-50" : "bg-violet-50"}`}>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs shrink-0 ${isCompleted ? "bg-emerald-500" : "bg-violet-600"}`} style={{ fontWeight: 700 }}>
-                  {isCompleted ? <CheckCircle className="w-5 h-5" /> : apt.time}
+              <div key={apt.id} className={`flex items-center gap-4 p-3 rounded-xl ${completed ? "bg-emerald-50" : "bg-violet-50"}`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs shrink-0 ${completed ? "bg-emerald-500" : "bg-violet-600"}`} style={{ fontWeight: 700 }}>
+                  {completed ? <CheckCircle className="w-5 h-5" /> : apt.time}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-900" style={{ fontWeight: 600 }}>{client?.name}</p>
-                  <p className="text-xs text-gray-500">{therapy?.name} · {apt.duration}min</p>
+                  <p className="text-sm text-gray-900" style={{ fontWeight: 600 }}>{client?.name ?? "Cliente"}</p>
+                  <p className="text-xs text-gray-500">{therapy?.name ?? "Terapia"} · {apt.duration}min</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm text-emerald-600" style={{ fontWeight: 700 }}>
                     +R$ {earned.toFixed(0)}
                   </p>
-                  {isCompleted && <p className="text-xs text-emerald-500">✓ Encerrado</p>}
+                  {completed && <p className="text-xs text-emerald-500">✓ Encerrado</p>}
                 </div>
               </div>
             );
           })}
           {todayAppointments.length === 0 && (
-            <p className="text-gray-400 text-sm text-center py-4">Nenhuma sessão hoje</p>
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <Clock className="w-8 h-8 text-violet-200 mb-2" />
+              <p className="text-gray-400 text-sm">Nenhuma sessão hoje</p>
+              <p className="text-gray-400 text-xs mt-1">Suas próximas sessões aparecem aqui no dia.</p>
+            </div>
           )}
         </div>
       </div>

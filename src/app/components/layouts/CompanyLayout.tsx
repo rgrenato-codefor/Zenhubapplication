@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router";
 import {
   LayoutDashboard, Users, Sparkles, CalendarDays, UserCircle,
@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronRight, DoorOpen, MapPin, Check, Building2,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { companies } from "../../data/mockData";
+import { usePageData } from "../../hooks/usePageData";
 import { CompanyProvider, useCompanyUnit } from "../../context/CompanyContext";
 
 // ── Dashboard sub-items ──────────────────────────────────────────────────────
@@ -117,19 +117,20 @@ function UnitSwitcher({ primaryColor }: { primaryColor: string }) {
 function CompanyLayoutInner() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dashOpen, setDashOpen] = useState(true);
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
+  const { company } = usePageData();
+  const { selectedUnitId, setSelectedUnitId, companyUnits } = useCompanyUnit();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const company = companies.find((c) => c.id === user?.companyId);
-  const primaryColor = company?.color ?? "#0D9488";
+  const primaryColor = company?.color || "#0D9488";
   const flatItems = getFlatItems(user?.role ?? "sales");
 
   const dashActive = dashboardChildren.some((c) =>
     c.end ? location.pathname === c.path : location.pathname.startsWith(c.path)
   );
 
-  const handleLogout = () => { logout(); navigate("/"); };
+  const handleLogout = () => { signOut(); navigate("/"); };
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">

@@ -1,33 +1,35 @@
+import { useState } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area,
 } from "recharts";
 import { DollarSign, TrendingUp, Calendar, Award, Building2, Sparkles, CheckCircle } from "lucide-react";
-import { therapistEarningsData, therapists, companies } from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
-import { useTherapistStore } from "../../store/therapistStore";
+import { usePageData } from "../../hooks/usePageData";
 
 export default function TherapistEarnings() {
   const { user } = useAuth();
-  const store = useTherapistStore();
-  const therapist = therapists.find((t) => t.id === user?.therapistId);
-  const records = store.getTherapistRecords(therapist?.id ?? "");
+  const { myTherapist: therapist, company, therapistStore: store, therapistEarningsData, sessionRecords } = usePageData();
 
-  if (!therapist) return null;
-
-  const company = companies.find((c) => c.id === therapist.companyId);
+  const storeRecords = store.getTherapistRecords(therapist?.id ?? "");
+  const commissionPct = therapist?.commission ?? 100;
   const isAutonomous = !company;
 
-  const totalEarned = therapistEarningsData.reduce((acc, d) => acc + d.net, 0);
-  const avgPerSession = totalEarned / therapistEarningsData.reduce((acc, d) => acc + d.sessions, 0);
+  // Prefer real session records, fall back to store
+  const allRecords = sessionRecords.length > 0
+    ? sessionRecords.filter((r) => r.therapistId === therapist?.id)
+    : storeRecords;
 
-  // Store-based earned (from closures this session)
-  const storeEarned = records.reduce((acc, r) => acc + r.therapistEarned, 0);
-  const companyRecords = records.filter((r) => r.companyId);
-  const autonomousRecords = records.filter((r) => !r.companyId);
+  const totalEarned = allRecords.reduce((acc, r) => acc + (r.therapistEarned ?? 0), 0);
+  const totalSessions = allRecords.length;
+  const avgPerSession = totalSessions > 0 ? totalEarned / totalSessions : 0;
+
+  const storeEarned = storeRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
+  const companyRecords = allRecords.filter((r) => r.companyId);
+  const autonomousRecords = allRecords.filter((r) => !r.companyId);
 
   // Earnings by therapy from records
-  const byTherapy = records.reduce<Record<string, { name: string; sessions: number; earned: number }>>((acc, r) => {
+  const byTherapy = allRecords.reduce<Record<string, { name: string; sessions: number; earned: number }>>((acc, r) => {
     if (!acc[r.therapyName]) acc[r.therapyName] = { name: r.therapyName, sessions: 0, earned: 0 };
     acc[r.therapyName].sessions += 1;
     acc[r.therapyName].earned += r.therapistEarned;
@@ -86,7 +88,7 @@ export default function TherapistEarnings() {
             title: "Total acumulado",
             value: `R$ ${(therapist.totalEarnings + storeEarned).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
             icon: Award,
-            sub: `${therapist.totalSessions + records.length} sessões no total`,
+            sub: `${therapist.totalSessions + storeRecords.length} sessões no total`,
             color: "text-teal-600", bg: "bg-teal-50",
           },
           {
@@ -116,7 +118,7 @@ export default function TherapistEarnings() {
       </div>
 
       {/* ── Completed sessions from store ─────────────────────────────── */}
-      {records.length > 0 && (
+      {storeRecords.length > 0 && (
         <div className="bg-white rounded-xl border border-violet-100 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-violet-50 flex items-center justify-between">
             <h3 className="text-gray-900">Atendimentos Encerrados</h3>
@@ -136,7 +138,7 @@ export default function TherapistEarnings() {
             </div>
           </div>
           <div className="divide-y divide-violet-50">
-            {records.map((rec) => (
+            {storeRecords.map((rec) => (
               <div key={rec.id} className="flex items-center gap-4 px-6 py-4 hover:bg-violet-50/30 transition-colors">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${rec.companyId ? "bg-orange-100" : "bg-violet-100"}`}>
                   {rec.companyId
@@ -171,7 +173,7 @@ export default function TherapistEarnings() {
               </div>
             ))}
           </div>
-          {records.length > 0 && (
+          {storeRecords.length > 0 && (
             <div className="px-6 py-4 border-t border-violet-50 flex items-center justify-between bg-emerald-50/50">
               <p className="text-sm text-gray-600" style={{ fontWeight: 600 }}>Total encerrado</p>
               <p className="text-base text-emerald-600" style={{ fontWeight: 700 }}>

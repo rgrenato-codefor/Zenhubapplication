@@ -35,6 +35,8 @@ export default function Login() {
         code === "auth/invalid-credential"
       ) {
         setError("E-mail ou senha incorretos.");
+      } else if (code === "auth/user-not-registered") {
+        setError("Nenhum cadastro encontrado para este e-mail. Por favor, faça o registro.");
       } else if (code === "auth/too-many-requests") {
         setError("Muitas tentativas. Aguarde alguns minutos.");
       } else if (code === "auth/user-disabled") {

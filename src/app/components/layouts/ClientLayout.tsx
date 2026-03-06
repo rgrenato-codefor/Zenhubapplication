@@ -3,7 +3,7 @@ import {
   Home, Users, CalendarDays, UserCircle, LogOut, Bell, Sparkles,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { companies } from "../../data/mockData";
+import { usePageData } from "../../hooks/usePageData";
 
 const navItems = [
   { path: "/cliente", icon: Home, label: "Início", end: true },
@@ -13,13 +13,13 @@ const navItems = [
 ];
 
 export default function ClientLayout() {
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
+  const { company } = usePageData();
   const navigate = useNavigate();
-
-  const company = companies.find((c) => c.id === user?.companyId);
+  const primaryColor = company?.color || "#7C3AED";
 
   const handleLogout = () => {
-    logout();
+    signOut();
     navigate("/");
   };
 
@@ -30,7 +30,7 @@ export default function ClientLayout() {
         <div className="flex items-center gap-3">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs"
-            style={{ background: company?.color || "#7C3AED", fontWeight: 700 }}
+            style={{ background: primaryColor, fontWeight: 700 }}
           >
             {company?.logo || "TF"}
           </div>

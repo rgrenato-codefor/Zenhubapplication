@@ -1,37 +1,38 @@
 import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { usePageData } from "../../hooks/usePageData";
 import { Outlet, NavLink, useNavigate } from "react-router";
 import {
   LayoutDashboard, CalendarDays, DollarSign, UserCircle,
-  LogOut, Menu, X, Bell, ChevronDown, Sparkles, Layers,
+  LogOut, Menu, X, Bell, Sparkles, Layers,
 } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
-import { therapists } from "../../data/mockData";
 
 const navItems = [
-  { path: "/terapeuta", icon: LayoutDashboard, label: "Dashboard", end: true },
-  { path: "/terapeuta/agenda", icon: CalendarDays, label: "Minha Agenda" },
-  { path: "/terapeuta/terapias", icon: Layers, label: "Minhas Terapias" },
-  { path: "/terapeuta/ganhos", icon: DollarSign, label: "Ganhos" },
-  { path: "/terapeuta/perfil", icon: UserCircle, label: "Meu Perfil" },
+  { path: "/terapeuta",          icon: LayoutDashboard, label: "Dashboard",  end: true },
+  { path: "/terapeuta/agenda",   icon: CalendarDays,    label: "Agenda" },
+  { path: "/terapeuta/terapias", icon: Layers,          label: "Terapias" },
+  { path: "/terapeuta/ganhos",   icon: DollarSign,      label: "Ganhos" },
+  { path: "/terapeuta/perfil",   icon: UserCircle,      label: "Perfil" },
 ];
 
 export default function TherapistLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
+  const { myTherapist: therapist } = usePageData();
   const navigate = useNavigate();
-
-  const therapist = therapists.find((t) => t.id === user?.therapistId);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    logout();
+    signOut();
     navigate("/");
   };
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Sidebar */}
+
+      {/* ── Desktop sidebar ──────────────────────────────────────────────────── */}
       <aside
-        className={`${sidebarOpen ? "w-64" : "w-16"} flex flex-col bg-white border-r border-violet-100 transition-all duration-300 shrink-0 shadow-sm`}
+        className={`hidden md:flex ${sidebarOpen ? "w-64" : "w-16"} flex-col bg-white border-r border-violet-100 transition-all duration-300 shrink-0 shadow-sm`}
       >
         {/* Logo */}
         <div className="flex items-center gap-3 p-4 border-b border-violet-100 h-16">
@@ -50,11 +51,17 @@ export default function TherapistLayout() {
         {sidebarOpen && therapist && (
           <div className="mx-3 mt-3 p-3 bg-violet-50 rounded-xl border border-violet-100">
             <div className="flex items-center gap-3">
-              <img
-                src={therapist.avatar}
-                alt={therapist.name}
-                className="w-10 h-10 rounded-full object-cover shrink-0"
-              />
+              {therapist.avatar ? (
+                <img
+                  src={therapist.avatar}
+                  alt={therapist.name}
+                  className="w-10 h-10 rounded-full object-cover shrink-0"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-violet-200 flex items-center justify-center shrink-0 text-violet-700" style={{ fontWeight: 700 }}>
+                  {therapist.name.charAt(0)}
+                </div>
+              )}
               <div className="min-w-0">
                 <p className="text-xs text-gray-900 truncate" style={{ fontWeight: 600 }}>{therapist.name}</p>
                 <p className="text-xs text-violet-500 truncate">{therapist.specialty}</p>
@@ -100,37 +107,85 @@ export default function TherapistLayout() {
         </div>
       </aside>
 
-      {/* Main */}
+      {/* ── Main area ─────────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-violet-100 flex items-center justify-between px-6 shrink-0 shadow-sm">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="text-gray-400 hover:text-gray-700 transition-colors"
-          >
-            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+
+        {/* Header */}
+        <header className="h-14 md:h-16 bg-white border-b border-violet-100 flex items-center justify-between px-4 md:px-6 shrink-0 shadow-sm z-30">
+          {/* Desktop: toggle sidebar | Mobile: logo */}
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="hidden md:flex text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+
+            {/* Mobile logo */}
+            <div className="flex md:hidden items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
+                <Sparkles className="w-3.5 h-3.5 text-white" />
+              </div>
+              <span className="text-sm text-gray-900" style={{ fontWeight: 700 }}>ZEN HUB</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 md:gap-3">
             <button className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 hover:text-violet-700 transition-colors relative">
               <Bell className="w-4 h-4" />
             </button>
-            <div className="flex items-center gap-2 cursor-pointer">
-              <img
-                src={user?.avatar || ""}
-                alt={user?.name}
-                className="w-8 h-8 rounded-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
+            <div className="flex items-center gap-2">
+              {user?.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt={user?.name}
+                  className="w-8 h-8 rounded-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-violet-200 flex items-center justify-center text-violet-700 text-xs" style={{ fontWeight: 700 }}>
+                  {user?.name?.charAt(0) ?? "T"}
+                </div>
+              )}
               <span className="text-sm text-gray-700 hidden sm:block">{user?.name}</span>
-              <ChevronDown className="w-4 h-4 text-gray-400" />
             </div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
-          <Outlet />
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6 pb-24 md:pb-6">
+          <div className="max-w-2xl mx-auto md:mx-0">
+            <Outlet />
+          </div>
         </main>
+
+        {/* ── Mobile bottom nav ──────────────────────────────────────────────── */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-violet-100 z-40 safe-area-pb">
+          <div className="flex items-stretch h-16">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.end}
+                className={({ isActive }) =>
+                  `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                    isActive ? "text-violet-600" : "text-gray-400"
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors ${isActive ? "bg-violet-100" : ""}`}>
+                      <item.icon className="w-5 h-5" />
+                    </div>
+                    <span className="text-[10px]" style={{ fontWeight: isActive ? 600 : 400 }}>{item.label}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
+        </nav>
+
       </div>
     </div>
   );

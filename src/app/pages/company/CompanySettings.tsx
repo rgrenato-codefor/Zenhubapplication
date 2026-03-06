@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Save, Building2, Bell, Users, Link, Copy, CheckCheck,
   MapPin, Plus, Edit2, Trash2, X, Phone, Mail, Star,
   CheckCircle, AlertCircle, ChevronRight, ToggleLeft, ToggleRight,
+  Download, QrCode, Smartphone, Share2,
 } from "lucide-react";
-import { companies } from "../../data/mockData";
+import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { useAuth } from "../../context/AuthContext";
-import { useUnitStore, type Unit, type UnitStatus } from "../../store/unitStore";
+import { usePageData } from "../../hooks/usePageData";
+import { type Unit } from "../../context/DataContext";
+
+type UnitStatus = "active" | "inactive";
 
 // ── Unit Form Modal ──────────────────────────────────────────────────────────
 
@@ -54,7 +58,7 @@ function UnitModal({ mode, initial, companyId, primaryColor, onSave, onClose }: 
     if (Object.keys(e).length) { setErrors(e); return; }
     const unit: Unit = {
       id: initial?.id ?? `un_${Date.now()}`,
-      companyId,
+      companyId: companyId,
       fullName: `Unidade ${form.name}`,
       therapistsCount: initial?.therapistsCount ?? 0,
       roomsCount: initial?.roomsCount ?? 0,
@@ -227,54 +231,99 @@ function UnitModal({ mode, initial, companyId, primaryColor, onSave, onClose }: 
 
 export default function CompanySettings() {
   const { user } = useAuth();
-  const store = useUnitStore();
-  const company = companies.find((c) => c.id === user?.companyId);
-  const primaryColor = company?.color || "#0D9488";
+  const {
+    company: companyData, units: unitsData,
+    mutateCompany, mutateAddUnit, mutateUpdateUnit, mutateDeleteUnit,
+  } = usePageData();
+
   const companyId = user?.companyId ?? "";
+  const primaryColor = companyData?.color || "#0D9488";
 
+  const [activeTab, setActiveTab] = useState<ActiveTab>("company");
   const [copied, setCopied] = useState(false);
-  const [tab, setTab] = useState("geral");
-
-  // Units state
-  const units = store.getUnits(companyId);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const qrCanvasRef = useRef<HTMLDivElement>(null);
   const [unitModal, setUnitModal] = useState<{ mode: "add" | "edit"; unit?: Unit } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<Unit | null>(null);
-  const [unitToast, setUnitToast] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const showUnitToast = (msg: string) => {
-    setUnitToast(msg);
-    setTimeout(() => setUnitToast(""), 3000);
+  // Company form — syncs whenever companyData loads or changes from Firestore
+  const [companyForm, setCompanyForm] = useState({
+    name: companyData?.name ?? "",
+    email: companyData?.email ?? "",
+    phone: companyData?.phone ?? "",
+    address: companyData?.address ?? "",
+    cnpj: (companyData as any)?.cnpj ?? "",
+    segment: (companyData as any)?.segment ?? "",
+    color: companyData?.color ?? "#0D9488",
+  });
+
+  // Keep form in sync when companyData arrives from Firestore asynchronously
+  useEffect(() => {
+    if (!companyData) return;
+    setCompanyForm({
+      name: companyData.name ?? "",
+      email: companyData.email ?? "",
+      phone: companyData.phone ?? "",
+      address: companyData.address ?? "",
+      cnpj: (companyData as any)?.cnpj ?? "",
+      segment: (companyData as any)?.segment ?? "",
+      color: companyData.color ?? "#0D9488",
+    });
+  }, [companyData]);
+
+  const units = unitsData;
+
+  const handleSaveCompany = async () => {
+    await mutateCompany(companyForm);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
   };
 
-  const handleSaveUnit = (unit: Unit) => {
-    if (unitModal?.mode === "add") {
-      store.addUnit(unit);
-      showUnitToast("Unidade criada com sucesso!");
-    } else {
-      store.updateUnit(unit);
-      showUnitToast("Unidade atualizada!");
-    }
+  const handleAddUnit = async (form: Omit<Unit, "id" | "createdAt">) => {
+    await mutateAddUnit(form);
     setUnitModal(null);
   };
 
-  const handleDeleteUnit = (unit: Unit) => {
-    store.deleteUnit(unit.id);
+  const handleEditUnit = async (id: string, form: Partial<Unit>) => {
+    await mutateUpdateUnit(id, form);
+    setUnitModal(null);
+  };
+
+  const handleDeleteUnit = async (id: string) => {
+    await mutateDeleteUnit(id);
     setDeleteConfirm(null);
-    showUnitToast("Unidade removida.");
   };
 
   const copyInviteCode = () => {
-    navigator.clipboard.writeText(company?.inviteCode || "");
+    navigator.clipboard.writeText(companyData?.inviteCode || "");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const inviteLink = `https://zenhub.com.br/cadastro?invite=${companyData?.inviteCode ?? ""}`;
+
+  const copyInviteLink = () => {
+    navigator.clipboard.writeText(inviteLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const downloadQR = () => {
+    const canvas = qrCanvasRef.current?.querySelector("canvas");
+    if (!canvas) return;
+    const url = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qrcode-${companyData?.inviteCode ?? "convite"}.png`;
+    a.click();
+  };
+
   const tabs = [
-    { id: "geral",         label: "Geral" },
-    { id: "unidades",      label: "Unidades" },
-    { id: "equipe",        label: "Equipe" },
-    { id: "notificacoes",  label: "Notificações" },
-    { id: "convites",      label: "Convites" },
+    { id: "company",       label: "Geral" },
+    { id: "units",         label: "Unidades" },
+    { id: "notifications", label: "Notificações" },
+    { id: "invites",       label: "Convites" },
   ];
 
   return (
@@ -289,11 +338,11 @@ export default function CompanySettings() {
         {tabs.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => setActiveTab(t.id as ActiveTab)}
             className={`px-4 py-2 rounded-md text-sm whitespace-nowrap transition-colors ${
-              tab === t.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              activeTab === t.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}
-            style={tab === t.id ? { fontWeight: 600 } : {}}
+            style={activeTab === t.id ? { fontWeight: 600 } : {}}
           >
             {t.label}
           </button>
@@ -301,7 +350,7 @@ export default function CompanySettings() {
       </div>
 
       {/* ── Geral ─────────────────────────────────────────────────────────────── */}
-      {tab === "geral" && (
+      {activeTab === "company" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
@@ -313,19 +362,20 @@ export default function CompanySettings() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { label: "Nome da empresa", value: company?.name },
-                  { label: "E-mail", value: company?.email },
-                  { label: "Telefone", value: company?.phone },
-                  { label: "Endereço (sede)", value: company?.address },
-                ].map((field) => (
-                  <div key={field.label} className={field.label === "Endereço (sede)" ? "col-span-2" : ""}>
+                  { label: "Nome da empresa",  field: "name"    as const },
+                  { label: "E-mail",           field: "email"   as const },
+                  { label: "Telefone",         field: "phone"   as const },
+                  { label: "Endereço (sede)",  field: "address" as const },
+                ].map(({ label, field }) => (
+                  <div key={field} className={field === "address" ? "col-span-2" : ""}>
                     <label className="block text-sm text-gray-600 mb-1" style={{ fontWeight: 600 }}>
-                      {field.label}
+                      {label}
                     </label>
                     <input
-                      defaultValue={field.value || ""}
+                      value={companyForm[field] || ""}
                       className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2"
                       style={{ ["--tw-ring-color" as string]: `${primaryColor}50` }}
+                      onChange={(e) => setCompanyForm((p) => ({ ...p, [field]: e.target.value }))}
                     />
                   </div>
                 ))}
@@ -341,10 +391,10 @@ export default function CompanySettings() {
                   className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-lg shadow-lg"
                   style={{ background: primaryColor, fontWeight: 700 }}
                 >
-                  {company?.logo}
+                  {companyData?.logo}
                 </div>
                 <div>
-                  <p className="text-sm text-gray-700" style={{ fontWeight: 600 }}>{company?.name}</p>
+                  <p className="text-sm text-gray-700" style={{ fontWeight: 600 }}>{companyData?.name}</p>
                   <p className="text-xs text-gray-400">Logo da empresa</p>
                 </div>
               </div>
@@ -361,15 +411,22 @@ export default function CompanySettings() {
             <button
               className="w-full flex items-center justify-center gap-2 py-3 text-white rounded-xl text-sm hover:opacity-90 transition-opacity"
               style={{ background: primaryColor, fontWeight: 600 }}
+              onClick={handleSaveCompany}
             >
               <Save className="w-4 h-4" /> Salvar Alterações
             </button>
+            {saveSuccess && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
+                <CheckCircle className="w-4 h-4" />
+                <span style={{ fontWeight: 600 }}>Alterações salvas com sucesso!</span>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* ── Unidades ──────────────────────────────────────────────────────────── */}
-      {tab === "unidades" && (
+      {activeTab === "units" && (
         <div className="space-y-4">
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -385,10 +442,10 @@ export default function CompanySettings() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {unitToast && (
+              {unitModal && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
                   <CheckCircle className="w-4 h-4" />
-                  <span style={{ fontWeight: 600 }}>{unitToast}</span>
+                  <span style={{ fontWeight: 600 }}>Unidade salva com sucesso!</span>
                 </div>
               )}
               <button
@@ -524,7 +581,7 @@ export default function CompanySettings() {
                       <div className="flex items-center gap-2 shrink-0 ml-4">
                         {!unit.isMain && (
                           <button
-                            onClick={() => store.setMain(unit.id, companyId)}
+                            onClick={() => mutateUpdateUnit(unit.id, { isMain: true })}
                             className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700 transition-colors"
                           >
                             Tornar principal
@@ -538,7 +595,7 @@ export default function CompanySettings() {
                           <Edit2 className="w-3.5 h-3.5 text-gray-500" />
                         </button>
                         <button
-                          onClick={() => setDeleteConfirm(unit)}
+                          onClick={() => setDeleteConfirm(unit.id)}
                           disabled={units.length === 1}
                           className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-red-100 flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           title={units.length === 1 ? "Não é possível remover a única unidade" : "Remover"}
@@ -555,55 +612,8 @@ export default function CompanySettings() {
         </div>
       )}
 
-      {/* ── Equipe ────────────────────────────────────────────────────────────── */}
-      {tab === "equipe" && (
-        <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: primaryColor }}>
-                <Users className="w-4 h-4" />
-              </div>
-              <h3 className="text-gray-900">Membros da Equipe</h3>
-            </div>
-            <button
-              className="px-3 py-2 text-sm text-white rounded-lg hover:opacity-90 transition-opacity"
-              style={{ background: primaryColor, fontWeight: 600 }}
-            >
-              + Convidar Membro
-            </button>
-          </div>
-          <div className="space-y-3">
-            {[
-              { name: "Juliana Santos", email: "juliana@espacozen.com", role: "Admin da Empresa" },
-              { name: "Pedro Alves", email: "pedro@espacozen.com", role: "Vendas" },
-              { name: "Ana Carolina Silva", email: "ana.silva@espacozen.com", role: "Terapeuta" },
-              { name: "Bruno Martins", email: "bruno.martins@espacozen.com", role: "Terapeuta" },
-              { name: "Fernanda Costa", email: "fernanda.costa@espacozen.com", role: "Terapeuta" },
-            ].map((member) => (
-              <div key={member.email} className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm"
-                    style={{ background: primaryColor, fontWeight: 700 }}
-                  >
-                    {member.name.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-900" style={{ fontWeight: 600 }}>{member.name}</p>
-                    <p className="text-xs text-gray-400">{member.email}</p>
-                  </div>
-                </div>
-                <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-lg border border-gray-200">
-                  {member.role}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* ── Notificações ──────────────────────────────────────────────────────── */}
-      {tab === "notificacoes" && (
+      {activeTab === "notifications" && (
         <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: primaryColor }}>
@@ -641,51 +651,150 @@ export default function CompanySettings() {
         </div>
       )}
 
-      {/* ── Convites ──────────────────────────────────────────────────────────── */}
-      {tab === "convites" && (
+      {/* ── Convites ─────────────────────────────────────────────────────────── */}
+      {activeTab === "invites" && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-4">
+          {/* Header card */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-1">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: primaryColor }}>
-                <Link className="w-4 h-4" />
+                <QrCode className="w-4 h-4" />
               </div>
-              <h3 className="text-gray-900">Links de Convite para Clientes</h3>
+              <h3 className="text-gray-900">QR Code de Convite</h3>
             </div>
-            <p className="text-sm text-gray-500 mb-6">
-              Compartilhe o link ou código abaixo para que seus clientes possam se cadastrar e já
-              serem vinculados à sua empresa automaticamente.
+            <p className="text-sm text-gray-400 mt-1 mb-6">
+              Exiba ou compartilhe o QR Code para que seus clientes se cadastrem e sejam
+              vinculados automaticamente à sua empresa.
             </p>
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <div className="flex-1">
-                  <p className="text-xs text-gray-400 mb-1">Código de convite</p>
-                  <p className="text-lg font-mono text-gray-900" style={{ fontWeight: 700 }}>
-                    {company?.inviteCode}
-                  </p>
+
+            <div className="flex flex-col lg:flex-row gap-8 items-center lg:items-start">
+
+              {/* ── QR Code ────────────────────────────────────── */}
+              <div className="flex flex-col items-center gap-4 shrink-0">
+                {/* Visual frame */}
+                <div
+                  className="relative p-5 rounded-3xl shadow-xl"
+                  style={{ background: `linear-gradient(135deg, ${primaryColor}18 0%, ${primaryColor}08 100%)`, border: `2px solid ${primaryColor}30` }}
+                >
+                  {/* Corner accents */}
+                  {["top-0 left-0", "top-0 right-0", "bottom-0 left-0", "bottom-0 right-0"].map((pos, i) => (
+                    <div
+                      key={i}
+                      className={`absolute w-5 h-5 ${pos} ${i < 2 ? "rounded-tl-xl rounded-tr-xl" : "rounded-bl-xl rounded-br-xl"}`}
+                      style={{ [i % 2 === 0 ? "borderLeft" : "borderRight"]: `3px solid ${primaryColor}`, [i < 2 ? "borderTop" : "borderBottom"]: `3px solid ${primaryColor}` }}
+                    />
+                  ))}
+
+                  <QRCodeSVG
+                    value={inviteLink}
+                    size={200}
+                    bgColor="#ffffff"
+                    fgColor="#111827"
+                    level="H"
+                    imageSettings={{
+                      src: "",
+                      x: undefined,
+                      y: undefined,
+                      height: 0,
+                      width: 0,
+                      opacity: 0,
+                      excavate: false,
+                    }}
+                  />
                 </div>
+
+                {/* Company label below QR */}
+                <div className="text-center">
+                  <p className="text-sm text-gray-700" style={{ fontWeight: 700 }}>{companyData?.name}</p>
+                  <p className="text-xs text-gray-400">Escaneie para se cadastrar</p>
+                </div>
+
+                {/* Hidden canvas for download */}
+                <div ref={qrCanvasRef} className="hidden">
+                  <QRCodeCanvas value={inviteLink} size={512} level="H" />
+                </div>
+
+                {/* Download button */}
                 <button
-                  onClick={copyInviteCode}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm hover:opacity-90 transition-opacity"
+                  onClick={downloadQR}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm hover:opacity-90 transition-all shadow-md"
                   style={{ background: primaryColor, fontWeight: 600 }}
                 >
-                  {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  {copied ? "Copiado!" : "Copiar"}
+                  <Download className="w-4 h-4" />
+                  Baixar QR Code
                 </button>
               </div>
-              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <div className="flex-1">
-                  <p className="text-xs text-gray-400 mb-1">Link de cadastro</p>
-                  <p className="text-sm text-gray-600 font-mono">
-                    https://zenhub.com.br/cadastro?invite={company?.inviteCode}
+
+              {/* ── Right side: info + copy ─────────────────────── */}
+              <div className="flex-1 w-full space-y-4">
+
+                {/* How it works */}
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3">
+                  <p className="text-xs text-gray-500 uppercase" style={{ fontWeight: 700, letterSpacing: "0.05em" }}>Como funciona</p>
+                  {[
+                    { icon: <QrCode className="w-4 h-4" />, text: "Cliente escaneia o QR Code com a câmera do celular" },
+                    { icon: <Smartphone className="w-4 h-4" />, text: "É direcionado para o cadastro já com sua empresa vinculada" },
+                    { icon: <CheckCircle className="w-4 h-4" />, text: "Após o cadastro, pode visualizar serviços e agendar sessões" },
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-white" style={{ background: primaryColor }}>
+                        {step.icon}
+                      </div>
+                      <p className="text-sm text-gray-600 pt-0.5">{step.text}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Invite code */}
+                <div>
+                  <p className="text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Código de convite</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                      <p className="flex-1 font-mono text-lg text-gray-900" style={{ fontWeight: 700, letterSpacing: "0.1em" }}>
+                        {companyData?.inviteCode ?? "—"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={copyInviteCode}
+                      className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm hover:opacity-90 transition-all shrink-0"
+                      style={copied
+                        ? { background: "#ECFDF5", color: "#059669", fontWeight: 600 }
+                        : { background: primaryColor, color: "#fff", fontWeight: 600 }}
+                    >
+                      {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {copied ? "Copiado!" : "Copiar"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Invite link */}
+                <div>
+                  <p className="text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Link de cadastro</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+                      <Link className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <p className="text-xs text-gray-500 font-mono truncate">{inviteLink}</p>
+                    </div>
+                    <button
+                      onClick={copyInviteLink}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm hover:opacity-90 transition-all shrink-0"
+                      style={copiedLink
+                        ? { background: "#ECFDF5", color: "#059669", fontWeight: 600 }
+                        : { background: "#F3F4F6", color: "#374151", fontWeight: 600 }}
+                    >
+                      {copiedLink ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {copiedLink ? "Copiado!" : "Copiar"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Share tip */}
+                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-50 border border-blue-100">
+                  <Share2 className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-600">
+                    <span style={{ fontWeight: 700 }}>Dica:</span> Imprima o QR Code e cole na recepção, nos cards de visita ou nas redes sociais para facilitar o cadastro dos seus clientes.
                   </p>
                 </div>
-                <button
-                  onClick={copyInviteCode}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm hover:opacity-90 transition-opacity"
-                  style={{ background: primaryColor, fontWeight: 600 }}
-                >
-                  <Copy className="w-4 h-4" /> Copiar
-                </button>
               </div>
             </div>
           </div>
@@ -699,7 +808,13 @@ export default function CompanySettings() {
           initial={unitModal.unit}
           companyId={companyId}
           primaryColor={primaryColor}
-          onSave={handleSaveUnit}
+          onSave={(unit) => {
+            if (unitModal.mode === "add") {
+              handleAddUnit(unit);
+            } else {
+              handleEditUnit(unit.id, unit);
+            }
+          }}
           onClose={() => setUnitModal(null)}
         />
       )}
@@ -715,7 +830,7 @@ export default function CompanySettings() {
               Remover unidade?
             </h3>
             <p className="text-gray-500 text-sm text-center mb-5">
-              A unidade <strong>{deleteConfirm.name}</strong> será removida permanentemente. Os
+              A unidade <strong>{deleteConfirm}</strong> será removida permanentemente. Os
               terapeutas e salas vinculados a ela não serão excluídos.
             </p>
             <div className="flex gap-3">

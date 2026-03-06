@@ -2,18 +2,18 @@ import { useState } from "react";
 import {
   Plus, Search, Star, DollarSign, Phone, Mail, Edit2,
   Trash2, X, CheckCircle, UserPlus, Link2, Link2Off,
-  AlertCircle, Sparkles, Building2, Percent, ArrowLeft, MapPin,
+  AlertCircle, Sparkles, Building2, Percent, ArrowLeft, MapPin, Loader2,
 } from "lucide-react";
-import { therapists as allTherapists, therapies, companies, units } from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
-import { useTherapistStore } from "../../store/therapistStore";
+import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
+import { getTherapistByUsername } from "../../../lib/firestore";
 
 export default function CompanyTherapists() {
-  const { user } = useAuth();
-  const store = useTherapistStore();
+  const { user, isDemoMode } = useAuth();
+  const { company, therapists: allTherapists, therapies, therapistStore: store,
+    mutateInviteTherapist, mutateDissociateTherapist, mutateUpdateTherapistCommission } = usePageData();
   const { selectedUnitId, companyUnits } = useCompanyUnit();
-  const company = companies.find((c) => c.id === user?.companyId);
   const primaryColor = company?.color || "#0D9488";
 
   const [search, setSearch] = useState("");
@@ -21,19 +21,35 @@ export default function CompanyTherapists() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState("");
   const [newCommission, setNewCommission] = useState(50);
+  const [newUnitId, setNewUnitId] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState("");
+  const [searching, setSearching] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
   // Two-step association flow
   const [addStep, setAddStep] = useState<"search" | "preview">("search");
   const [previewTherapist, setPreviewTherapist] = useState<typeof allTherapists[0] | null>(null);
 
-  // Get company therapists via store associations, filtered by unit
-  const companyAssociations = store.getCompanyTherapists(user?.companyId ?? "");
-  const companyTherapistIds = companyAssociations.map((a) => a.therapistId);
+  // Get company therapists:
+  //  - Demo mode: use the in-memory store (supports runtime add/remove)
+  //  - Real mode: use allTherapists from DataContext (already fetched from Firestore)
+  const companyTherapistIds: string[] = isDemoMode
+    ? store.getCompanyTherapists(user?.companyId ?? "").map((a) => a.therapistId)
+    : allTherapists
+        .filter((t) => t.companyId === user?.companyId)
+        .map((t) => t.id);
+
   const companyTherapists = allTherapists
-    .filter((t) => companyTherapistIds.includes(t.id))
-    .filter((t) => !selectedUnitId || (t as any).unitId === selectedUnitId)
+    .filter((t) =>
+      isDemoMode
+        ? companyTherapistIds.includes(t.id)
+        : t.companyId === user?.companyId
+    )
+    .filter((t) => {
+      if (!selectedUnitId) return true;
+      const assoc = store.getAssociation(t.id);
+      return assoc.unitId === selectedUnitId || (t as any).unitId === selectedUnitId;
+    })
     .filter((t) => t.name.toLowerCase().includes(search.toLowerCase()));
 
   const selectedTherapist = allTherapists.find((t) => t.id === selectedId);
@@ -41,18 +57,35 @@ export default function CompanyTherapists() {
   const detailTherapist = allTherapists.find((t) => t.id === detailId);
   const detailAssoc = detailId ? store.getAssociation(detailId) : null;
 
-  const handleSearchTherapist = () => {
+  const handleSearchTherapist = async () => {
     setInviteError("");
-    const query = inviteCode.trim();
+    const query = inviteCode.trim().replace(/^@/, "").toLowerCase();
     if (!query) {
       setInviteError("Digite o @username ou código do terapeuta.");
       return;
     }
-    const found = allTherapists.find(
-      (t) => t.username === query.replace(/^@/, "") || t.id === query
+
+    // 1️⃣ Try local store first (covers mock/demo and already-loaded therapists)
+    let found = allTherapists.find(
+      (t) => t.username?.toLowerCase() === query || t.id === query
     );
+
+    // 2️⃣ If not found locally and NOT in demo mode, hit Firestore
+    if (!found && !isDemoMode) {
+      setSearching(true);
+      try {
+        found = (await getTherapistByUsername(query)) ?? undefined;
+      } catch {
+        setInviteError("Erro ao buscar no servidor. Verifique sua conexão.");
+        setSearching(false);
+        return;
+      } finally {
+        setSearching(false);
+      }
+    }
+
     if (!found) {
-      setInviteError("Terapeuta não encontrado. Verifique o código ou username.");
+      setInviteError("Terapeuta não encontrado. Verifique o @username.");
       return;
     }
     const current = store.getAssociation(found.id);
@@ -68,14 +101,16 @@ export default function CompanyTherapists() {
     setAddStep("preview");
   };
 
-  const handleAssociate = () => {
+  const handleAssociate = async () => {
     if (!user?.companyId || !previewTherapist) return;
-    store.associateTherapist(previewTherapist.id, user.companyId, newCommission);
+    const username = previewTherapist.username ?? previewTherapist.id;
+    store.associateTherapist(previewTherapist.id, user.companyId, newCommission, newUnitId);
     setModal(null);
     setInviteCode("");
     setInviteError("");
     setAddStep("search");
     setPreviewTherapist(null);
+    await mutateInviteTherapist(username, newCommission, newUnitId);
   };
 
   const closeAddModal = () => {
@@ -85,6 +120,7 @@ export default function CompanyTherapists() {
     setAddStep("search");
     setPreviewTherapist(null);
     setNewCommission(50);
+    setNewUnitId(null);
   };
 
   const handleDissociate = () => {
@@ -93,12 +129,14 @@ export default function CompanyTherapists() {
     setModal(null);
     setSelectedId(null);
     setDetailId(null);
+    mutateDissociateTherapist(selectedId);
   };
 
-  const handleUpdateCommission = () => {
+  const handleUpdateCommission = async () => {
     if (!selectedId) return;
     store.updateCommission(selectedId, newCommission);
     setModal(null);
+    await mutateUpdateTherapistCommission(selectedId, newCommission);
   };
 
   const openEditCommission = (therapistId: string) => {
@@ -349,18 +387,20 @@ export default function CompanyTherapists() {
                   </div>
 
                   <div className="flex gap-3 pt-1">
-                    <button onClick={closeAddModal} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors">
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={handleSearchTherapist}
-                      disabled={!inviteCode.trim()}
-                      className="flex-1 py-2.5 text-white rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity"
-                      style={{ background: primaryColor, fontWeight: 600 }}
-                    >
-                      <Search className="w-4 h-4" /> Buscar terapeuta
-                    </button>
-                  </div>
+                     <button onClick={closeAddModal} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors">
+                       Cancelar
+                     </button>
+                     <button
+                       onClick={handleSearchTherapist}
+                       disabled={!inviteCode.trim() || searching}
+                       className="flex-1 py-2.5 text-white rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity"
+                       style={{ background: primaryColor, fontWeight: 600 }}
+                     >
+                       {searching
+                         ? <><Loader2 className="w-4 h-4 animate-spin" /> Buscando...</>
+                         : <><Search className="w-4 h-4" /> Buscar terapeuta</>}
+                     </button>
+                   </div>
                 </>
               )}
 
@@ -434,6 +474,31 @@ export default function CompanyTherapists() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Unit selector — only when company has multiple units */}
+                  {companyUnits.length > 0 && (
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>
+                        Unidade de atendimento
+                      </label>
+                      <select
+                        value={newUnitId ?? ""}
+                        onChange={(e) => setNewUnitId(e.target.value || null)}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
+                      >
+                        <option value="">Sem unidade específica</option>
+                        {companyUnits.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}{u.isMain ? " (principal)" : ""}</option>
+                        ))}
+                      </select>
+                      {newUnitId && (
+                        <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {companyUnits.find((u) => u.id === newUnitId)?.address ?? ""}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Commission */}
                   <div>

@@ -1,22 +1,20 @@
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Star, ArrowRight, Clock, Sparkles, CalendarDays } from "lucide-react";
-import { therapists, therapies, appointments, clients, companies } from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
+import { usePageData } from "../../hooks/usePageData";
 
 export default function ClientHome() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const company = companies.find((c) => c.id === user?.companyId);
-  const primaryColor = company?.color || "#7C3AED";
-  const client = clients.find((c) => c.id === user?.clientId);
-  const myAppointments = appointments.filter((a) => a.clientId === user?.clientId);
-  const upcomingAppointments = myAppointments.filter(
-    (a) => a.status === "confirmed" && a.date >= "2026-03-04"
-  );
-  const companyTherapists = therapists.filter((t) => t.companyId === user?.companyId);
-  const companyTherapies = therapies.filter((t) => t.companyId === user?.companyId);
+  const { company, therapists, therapies, appointments: allAppointments, myClient: client } = usePageData();
 
+  const primaryColor = company?.color || "#7C3AED";
+  const myAppointments = allAppointments.filter((a) => a.clientId === user?.clientId);
+  const upcomingAppointments = myAppointments.filter(
+    (a) => a.status === "confirmed" && a.date >= new Date().toISOString().split("T")[0]
+  );
   const favoriteTherapist = therapists.find((t) => t.id === client?.preferredTherapist);
 
   return (
@@ -97,7 +95,7 @@ export default function ClientHome() {
           <button className="text-xs" style={{ color: primaryColor }}>Ver todas</button>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2 -mx-5 px-5">
-          {companyTherapies.map((therapy) => (
+          {therapies.map((therapy) => (
             <div
               key={therapy.id}
               className="flex-shrink-0 w-36 bg-white rounded-2xl border border-gray-100 p-4 shadow-sm cursor-pointer"
@@ -157,7 +155,7 @@ export default function ClientHome() {
           </button>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2 -mx-5 px-5">
-          {companyTherapists.map((t) => (
+          {therapists.map((t) => (
             <div
               key={t.id}
               className="flex-shrink-0 w-28 text-center cursor-pointer"

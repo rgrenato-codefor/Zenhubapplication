@@ -1,165 +1,212 @@
-import { useState } from "react";
-import { Plus, Clock, DollarSign, BarChart3, Edit, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
-import { therapies as allTherapies, companies } from "../../data/mockData";
+import { useState, useEffect } from "react";
+import { Plus, Clock, DollarSign, BarChart3, Edit, Trash2, X, Save } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { usePageData } from "../../hooks/usePageData";
+
+const CATEGORIES = ["Relaxamento", "Oriental", "Terapêutica", "Reflexologia", "Holística", "Esportiva", "Outra"];
+const COLORS = ["#7C3AED", "#0D9488", "#D97706", "#DC2626", "#059669", "#3B82F6", "#EC4899"];
+
+type TherapyForm = {
+  name: string;
+  description: string;
+  duration: number;
+  price: number;
+  category: string;
+  color: string;
+};
+
+const EMPTY_FORM: TherapyForm = {
+  name: "", description: "", duration: 60, price: 0, category: "Relaxamento", color: "#7C3AED",
+};
 
 export default function CompanyTherapies() {
   const { user } = useAuth();
-  const company = companies.find((c) => c.id === user?.companyId);
+  const { company, therapies: firestoreTherapies, mutateAddTherapy, mutateUpdateTherapy, mutateDeleteTherapy } = usePageData();
   const primaryColor = company?.color || "#0D9488";
-  const [showModal, setShowModal] = useState(false);
-  const [activeStates, setActiveStates] = useState<Record<string, boolean>>(
-    Object.fromEntries(allTherapies.filter((t) => t.companyId === user?.companyId).map((t) => [t.id, t.active]))
-  );
 
-  const companyTherapies = allTherapies.filter((t) => t.companyId === user?.companyId);
+  const [therapies, setTherapies] = useState<any[]>(firestoreTherapies);
+  const [modal, setModal] = useState<"add" | "edit" | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState<TherapyForm>({ ...EMPTY_FORM });
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const toggleActive = (id: string) => {
-    setActiveStates((prev) => ({ ...prev, [id]: !prev[id] }));
+  // Sync with Firestore data when it loads
+  useEffect(() => { setTherapies(firestoreTherapies); }, [firestoreTherapies]);
+
+  const set = (k: keyof TherapyForm, v: string | number) => setForm((p) => ({ ...p, [k]: v }));
+
+  const openAdd = () => { setForm({ ...EMPTY_FORM }); setEditId(null); setModal("add"); };
+  const openEdit = (t: any) => {
+    setForm({ name: t.name, description: t.description ?? "", duration: t.duration, price: t.price, category: t.category ?? "Relaxamento", color: t.color });
+    setEditId(t.id);
+    setModal("edit");
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim() || form.price <= 0 || form.duration <= 0) return;
+    if (modal === "add") {
+      const newT = await mutateAddTherapy({ ...form, companyId: user?.companyId ?? "", active: true, totalBookings: 0 });
+      setTherapies((prev) => [...prev, newT]);
+    } else if (editId) {
+      await mutateUpdateTherapy(editId, { ...form });
+      setTherapies((prev) => prev.map((t) => t.id === editId ? { ...t, ...form } : t));
+    }
+    setModal(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    await mutateDeleteTherapy(id);
+    setTherapies((prev) => prev.filter((t) => t.id !== id));
+    setDeleteConfirm(null);
+  };
+
+  const toggleActive = async (t: any) => {
+    await mutateUpdateTherapy(t.id, { active: !t.active });
+    setTherapies((prev) => prev.map((x) => x.id === t.id ? { ...x, active: !x.active } : x));
   };
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-gray-900">Terapias & Serviços</h1>
-          <p className="text-gray-500 text-sm mt-0.5">{companyTherapies.length} serviços cadastrados</p>
+          <p className="text-gray-500 text-sm mt-0.5">{therapies.filter((t) => t.active !== false).length} serviços ativos</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm"
-          style={{ background: primaryColor, fontWeight: 600 }}
-        >
+        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm" style={{ background: primaryColor, fontWeight: 600 }}>
           <Plus className="w-4 h-4" /> Nova Terapia
         </button>
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 p-4 text-center shadow-sm">
-          <p className="text-2xl text-gray-900" style={{ fontWeight: 700 }}>{companyTherapies.length}</p>
-          <p className="text-sm text-gray-500">Total de Serviços</p>
+      {/* List */}
+      {therapies.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center py-16 text-center px-6">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: `${primaryColor}15` }}>
+            <BarChart3 className="w-7 h-7" style={{ color: primaryColor }} />
+          </div>
+          <h3 className="text-gray-900 mb-2">Nenhuma terapia cadastrada</h3>
+          <p className="text-gray-500 text-sm mb-6 max-w-xs">Cadastre as terapias que sua empresa oferece para começar a agendar sessões.</p>
+          <button onClick={openAdd} className="flex items-center gap-2 px-6 py-2.5 text-white rounded-xl text-sm" style={{ background: primaryColor, fontWeight: 600 }}>
+            <Plus className="w-4 h-4" /> Cadastrar primeira terapia
+          </button>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 text-center shadow-sm">
-          <p className="text-2xl text-gray-900" style={{ fontWeight: 700 }}>
-            R$ {Math.round(companyTherapies.reduce((acc, t) => acc + t.price, 0) / companyTherapies.length)}
-          </p>
-          <p className="text-sm text-gray-500">Ticket Médio</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 text-center shadow-sm">
-          <p className="text-2xl text-gray-900" style={{ fontWeight: 700 }}>
-            {companyTherapies.reduce((acc, t) => acc + t.totalBookings, 0)}
-          </p>
-          <p className="text-sm text-gray-500">Total de Sessões</p>
-        </div>
-      </div>
-
-      {/* Therapies Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {companyTherapies.map((therapy) => {
-          const isActive = activeStates[therapy.id] ?? therapy.active;
-          return (
-            <div
-              key={therapy.id}
-              className={`bg-white rounded-xl border shadow-sm transition-all ${
-                isActive ? "border-gray-100" : "border-gray-100 opacity-60"
-              }`}
-            >
-              {/* Top color bar */}
-              <div className="h-1.5 rounded-t-xl" style={{ background: therapy.color }} />
-
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {therapies.map((t) => (
+            <div key={t.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${t.active === false ? "opacity-60" : ""}`} style={{ borderColor: `${t.color}20` }}>
+              <div className="h-1.5" style={{ background: t.color }} />
               <div className="p-5">
-                <div className="flex items-start justify-between mb-3">
+                <div className="flex items-start justify-between gap-2 mb-3">
                   <div>
-                    <h3 className="text-gray-900">{therapy.name}</h3>
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full text-white mt-1 inline-block"
-                      style={{ background: therapy.color }}
-                    >
-                      {therapy.category}
-                    </span>
+                    <p className="text-gray-900" style={{ fontWeight: 700 }}>{t.name}</p>
+                    {t.category && (
+                      <span className="inline-block text-xs px-2 py-0.5 rounded-full mt-1" style={{ background: `${t.color}15`, color: t.color, fontWeight: 600 }}>
+                        {t.category}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => toggleActive(therapy.id)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      {isActive
-                        ? <ToggleRight className="w-5 h-5" style={{ color: primaryColor }} />
-                        : <ToggleLeft className="w-5 h-5" />
-                      }
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => openEdit(t)} className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center hover:bg-gray-100 transition-colors">
+                      <Edit className="w-3.5 h-3.5 text-gray-400" />
+                    </button>
+                    <button onClick={() => setDeleteConfirm(t.id)} className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5 text-red-400" />
                     </button>
                   </div>
                 </div>
-
-                <p className="text-sm text-gray-500 mb-4 line-clamp-2">{therapy.description}</p>
-
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  <div className="flex flex-col items-center bg-gray-50 rounded-lg p-2">
-                    <Clock className="w-3.5 h-3.5 text-gray-400 mb-1" />
-                    <p className="text-sm text-gray-900" style={{ fontWeight: 700 }}>{therapy.duration}min</p>
+                {t.description && <p className="text-gray-400 text-xs mb-3 line-clamp-2">{t.description}</p>}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-gray-400" />
+                      <span className="text-xs text-gray-500">{t.duration} min</span>
+                    </div>
+                    {t.totalBookings > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <BarChart3 className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-xs text-gray-500">{t.totalBookings}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex flex-col items-center bg-gray-50 rounded-lg p-2">
-                    <DollarSign className="w-3.5 h-3.5 text-emerald-500 mb-1" />
-                    <p className="text-sm text-gray-900" style={{ fontWeight: 700 }}>R$ {therapy.price}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-gray-900" style={{ color: t.color, fontWeight: 700 }}>
+                      R$ {t.price.toFixed(0)}
+                    </p>
+                    <button
+                      onClick={() => toggleActive(t)}
+                      className={`w-6 h-3.5 rounded-full relative transition-colors ${t.active !== false ? "bg-emerald-500" : "bg-gray-200"}`}
+                    >
+                      <span className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow-sm transition-transform ${t.active !== false ? "left-3" : "left-0.5"}`} />
+                    </button>
                   </div>
-                  <div className="flex flex-col items-center bg-gray-50 rounded-lg p-2">
-                    <BarChart3 className="w-3.5 h-3.5 text-blue-500 mb-1" />
-                    <p className="text-sm text-gray-900" style={{ fontWeight: 700 }}>{therapy.totalBookings}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
-                  <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs hover:bg-gray-50 transition-colors">
-                    <Edit className="w-3.5 h-3.5" /> Editar
-                  </button>
-                  <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-red-100 text-red-500 text-xs hover:bg-red-50 transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" /> Remover
-                  </button>
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h2 className="text-gray-900 mb-6">Nova Terapia</h2>
-            <div className="space-y-4">
-              {[
-                { label: "Nome da terapia", placeholder: "Ex: Massagem Relaxante" },
-                { label: "Descrição", placeholder: "Descrição breve da terapia" },
-              ].map((f) => (
-                <div key={f.label}>
-                  <label className="block text-sm text-gray-600 mb-1" style={{ fontWeight: 600 }}>{f.label}</label>
-                  <input placeholder={f.placeholder} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500" />
-                </div>
-              ))}
-              <div className="grid grid-cols-2 gap-4">
+      {/* Add/Edit Modal */}
+      {modal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="text-gray-900" style={{ fontWeight: 700 }}>{modal === "add" ? "Nova Terapia" : "Editar Terapia"}</h3>
+              <button onClick={() => setModal(null)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Nome *</label>
+                <input className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" placeholder="Massagem Relaxante" value={form.name} onChange={(e) => set("name", e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Descrição</label>
+                <textarea rows={2} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 resize-none" placeholder="Descreva a terapia..." value={form.description} onChange={(e) => set("description", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1" style={{ fontWeight: 600 }}>Duração (min)</label>
-                  <input type="number" defaultValue={60} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                  <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Duração (min) *</label>
+                  <input type="number" min={15} step={5} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" placeholder="60" value={form.duration || ""} onChange={(e) => set("duration", Number(e.target.value))} />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1" style={{ fontWeight: 600 }}>Preço (R$)</label>
-                  <input type="number" defaultValue={150} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                  <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Valor (R$) *</label>
+                  <input type="number" min={0} step={0.5} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" placeholder="150" value={form.price || ""} onChange={(e) => set("price", Number(e.target.value))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Categoria</label>
+                  <select className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" value={form.category} onChange={(e) => set("category", e.target.value)}>
+                    {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1" style={{ fontWeight: 600 }}>Categoria</label>
-                <select className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500">
-                  {["Relaxamento", "Terapêutica", "Oriental", "Holística", "Reflexologia"].map((c) => (
-                    <option key={c}>{c}</option>
+                <label className="block text-xs text-gray-500 mb-2" style={{ fontWeight: 600 }}>Cor</label>
+                <div className="flex gap-2 flex-wrap">
+                  {COLORS.map((c) => (
+                    <button key={c} onClick={() => set("color", c)} className="w-7 h-7 rounded-full transition-all" style={{ background: c, outline: form.color === c ? `3px solid ${c}` : "none", outlineOffset: "2px" }} />
                   ))}
-                </select>
+                </div>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowModal(false)} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
-              <button onClick={() => setShowModal(false)} className="flex-1 py-2.5 text-white rounded-lg text-sm" style={{ background: primaryColor, fontWeight: 600 }}>Criar Terapia</button>
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+              <button onClick={() => setModal(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancelar</button>
+              <button onClick={handleSave} disabled={!form.name.trim() || form.price <= 0} className="flex-1 py-2.5 rounded-xl text-white text-sm disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: primaryColor, fontWeight: 600 }}>
+                <Save className="w-4 h-4" /> Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <p className="text-gray-900 mb-1" style={{ fontWeight: 700 }}>Remover terapia?</p>
+            <p className="text-gray-500 text-sm mb-5">Esta ação não pode ser desfeita.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2 border border-gray-200 rounded-xl text-sm text-gray-600">Cancelar</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm" style={{ fontWeight: 600 }}>Remover</button>
             </div>
           </div>
         </div>

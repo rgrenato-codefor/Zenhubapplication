@@ -5,8 +5,8 @@ import {
   Check, AlertCircle, ChevronRight, Copy, CheckCheck,
   Clock, Sparkles, MessageCircle,
 } from "lucide-react";
-import { clients as mockClients, therapists, companies, appointments } from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
+import { usePageData } from "../../hooks/usePageData";
 
 /* ─── Types ──────────────────────────────────────────── */
 interface Client {
@@ -462,13 +462,10 @@ function DetailPanel({ client, primaryColor, therapistList, clientAppointments, 
 /* ─── Main Page ───────────────────────────────────────── */
 export default function CompanyClients() {
   const { user } = useAuth();
-  const company = companies.find((c) => c.id === user?.companyId);
+  const { company, clients: mockClients, therapists, appointments, mutateAddClient, mutateUpdateClient } = usePageData();
   const primaryColor = company?.color || "#0D9488";
 
-  const companyTherapists = therapists.filter((t) => t.companyId === user?.companyId);
-  const [localClients, setLocalClients] = useState<Client[]>(
-    mockClients.filter((c) => c.companyId === user?.companyId) as Client[]
-  );
+  const [clients, setClients] = useState(() => mockClients as any[]);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
   const [showNewModal, setShowNewModal] = useState(false);
@@ -483,7 +480,7 @@ export default function CompanyClients() {
 
   /* filter + sort */
   const filtered = useMemo(() => {
-    let list = localClients;
+    let list = clients;
     if (filterStatus !== "all") list = list.filter((c) => c.status === filterStatus);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -494,7 +491,7 @@ export default function CompanyClients() {
       );
     }
     return [...list].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }, [localClients, search, filterStatus]);
+  }, [clients, search, filterStatus]);
 
   /* group by first letter */
   const grouped = useMemo(() => {
@@ -508,13 +505,15 @@ export default function CompanyClients() {
   }, [filtered]);
 
   const handleSave = (c: Client) => {
-    setLocalClients((prev) => [...prev, c]);
+    setClients((prev) => [...prev, c]);
     setSelectedClient(c);
     setShowNewModal(false);
+    mutateAddClient(c);
   };
   const handleUpdate = (c: Client) => {
-    setLocalClients((prev) => prev.map((x) => (x.id === c.id ? c : x)));
+    setClients((prev) => prev.map((x) => (x.id === c.id ? c : x)));
     setSelectedClient(c);
+    mutateUpdateClient(c);
   };
   const clientApts = selectedClient
     ? appointments.filter((a) => a.clientId === selectedClient.id)
@@ -527,7 +526,7 @@ export default function CompanyClients() {
         <div className="flex items-center justify-between mb-1">
           <div>
             <h1 className="text-gray-900">Clientes</h1>
-            <p className="text-gray-400 text-sm mt-0.5">{localClients.length} contatos cadastrados</p>
+            <p className="text-gray-400 text-sm mt-0.5">{clients.length} contatos cadastrados</p>
           </div>
           <div className="flex items-center gap-2">
             {/* Invite code pill */}
@@ -572,7 +571,7 @@ export default function CompanyClients() {
                   style={filterStatus === f ? { background: primaryColor, fontWeight: 600 } : {}}>
                   {f === "all" ? "Todos" : f === "active" ? "Ativos" : "Inativos"}
                   <span className="ml-1 opacity-70">
-                    ({f === "all" ? localClients.length : localClients.filter((c) => c.status === f).length})
+                    ({f === "all" ? clients.length : clients.filter((c) => c.status === f).length})
                   </span>
                 </button>
               ))}
@@ -645,7 +644,7 @@ export default function CompanyClients() {
               key={selectedClient.id}
               client={selectedClient}
               primaryColor={primaryColor}
-              therapistList={companyTherapists}
+              therapistList={therapists}
               clientAppointments={clientApts}
               onClose={() => setSelectedClient(null)}
               onUpdate={handleUpdate}
@@ -672,7 +671,7 @@ export default function CompanyClients() {
         <NewClientModal
           companyId={user?.companyId ?? ""}
           primaryColor={primaryColor}
-          therapistList={companyTherapists}
+          therapistList={therapists}
           onClose={() => setShowNewModal(false)}
           onSave={handleSave}
         />

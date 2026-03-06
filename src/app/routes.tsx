@@ -19,6 +19,7 @@ import AdminCompanies from "./pages/admin/AdminCompanies";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminPlans from "./pages/admin/AdminPlans";
 
 // Company Pages
 import CompanyDashboard from "./pages/company/CompanyDashboard";
@@ -72,6 +73,7 @@ export const router = createBrowserRouter([
               { path: "empresas", Component: AdminCompanies },
               { path: "usuarios", Component: AdminUsers },
               { path: "relatorios", Component: AdminReports },
+              { path: "planos", Component: AdminPlans },
               { path: "configuracoes", Component: AdminSettings },
             ],
           },

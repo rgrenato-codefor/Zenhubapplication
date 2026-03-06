@@ -3,7 +3,7 @@ import {
   Plus, Search, MoreVertical, Building2, Users, DollarSign,
   Edit, Trash2, Eye, CheckCircle, XCircle, Filter, TrendingUp,
 } from "lucide-react";
-import { companies } from "../../data/mockData";
+import { useData } from "../../context/DataContext";
 
 const planColors: Record<string, string> = {
   Premium: "bg-violet-100 text-violet-700 border-violet-200",
@@ -12,15 +12,20 @@ const planColors: Record<string, string> = {
 };
 
 export default function AdminCompanies() {
+  const { allAdminCompanies, loading } = useData();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
-  const filtered = companies.filter((c) => {
-    const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.email.toLowerCase().includes(search.toLowerCase());
-    const matchFilter = filter === "all" || c.status === filter || c.plan.toLowerCase() === filter;
+  const filtered = allAdminCompanies.filter((c) => {
+    const matchSearch =
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.email || "").toLowerCase().includes(search.toLowerCase());
+    const matchFilter =
+      filter === "all" ||
+      c.status === filter ||
+      (c.plan || "").toLowerCase() === filter;
     return matchSearch && matchFilter;
   });
 
@@ -30,7 +35,9 @@ export default function AdminCompanies() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-white">Empresas</h1>
-          <p className="text-gray-400 text-sm mt-0.5">{companies.length} empresas cadastradas na plataforma</p>
+          <p className="text-gray-400 text-sm mt-0.5">
+            {loading ? "Carregando..." : `${allAdminCompanies.length} empresas cadastradas na plataforma`}
+          </p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -71,6 +78,16 @@ export default function AdminCompanies() {
         </div>
       </div>
 
+      {/* Empty state */}
+      {!loading && filtered.length === 0 && (
+        <div className="bg-gray-800 rounded-xl border border-gray-700 p-12 text-center">
+          <Building2 className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+          <p className="text-gray-400 text-sm">
+            {search || filter !== "all" ? "Nenhuma empresa encontrada com esses filtros" : "Nenhuma empresa cadastrada"}
+          </p>
+        </div>
+      )}
+
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filtered.map((company) => (
@@ -82,13 +99,13 @@ export default function AdminCompanies() {
               <div className="flex items-center gap-3">
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-sm shadow-lg"
-                  style={{ background: company.color, fontWeight: 700 }}
+                  style={{ background: company.color || "#7C3AED", fontWeight: 700 }}
                 >
-                  {company.logo}
+                  {company.logo || company.name.charAt(0)}
                 </div>
                 <div>
                   <h3 className="text-white">{company.name}</h3>
-                  <p className="text-xs text-gray-400">{company.address}</p>
+                  <p className="text-xs text-gray-400">{company.address || company.email}</p>
                 </div>
               </div>
               <div className="relative">
@@ -119,14 +136,14 @@ export default function AdminCompanies() {
                 <div className="flex items-center justify-center gap-1 mb-1">
                   <Users className="w-3 h-3 text-teal-400" />
                 </div>
-                <p className="text-lg text-white" style={{ fontWeight: 700 }}>{company.therapistsCount}</p>
+                <p className="text-lg text-white" style={{ fontWeight: 700 }}>{company.therapistsCount || 0}</p>
                 <p className="text-xs text-gray-400">Terapeutas</p>
               </div>
               <div className="bg-gray-700/50 rounded-lg p-3 text-center">
                 <div className="flex items-center justify-center gap-1 mb-1">
                   <Building2 className="w-3 h-3 text-blue-400" />
                 </div>
-                <p className="text-lg text-white" style={{ fontWeight: 700 }}>{company.clientsCount}</p>
+                <p className="text-lg text-white" style={{ fontWeight: 700 }}>{company.clientsCount || 0}</p>
                 <p className="text-xs text-gray-400">Clientes</p>
               </div>
               <div className="bg-gray-700/50 rounded-lg p-3 text-center">
@@ -134,7 +151,7 @@ export default function AdminCompanies() {
                   <TrendingUp className="w-3 h-3 text-emerald-400" />
                 </div>
                 <p className="text-sm text-white" style={{ fontWeight: 700 }}>
-                  R${(company.monthRevenue / 1000).toFixed(1)}k
+                  R${((company.monthRevenue || 0) / 1000).toFixed(1)}k
                 </p>
                 <p className="text-xs text-gray-400">Este mês</p>
               </div>
@@ -142,8 +159,8 @@ export default function AdminCompanies() {
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className={`text-xs px-2 py-0.5 rounded-full border ${planColors[company.plan]}`}>
-                  {company.plan}
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${planColors[company.plan] || "bg-gray-700 text-gray-400 border-gray-600"}`}>
+                  {company.plan || "—"}
                 </span>
                 {company.status === "active" ? (
                   <div className="flex items-center gap-1 text-emerald-400">
@@ -160,15 +177,21 @@ export default function AdminCompanies() {
               <div className="flex items-center gap-1 text-amber-400">
                 <DollarSign className="w-3.5 h-3.5" />
                 <span className="text-xs" style={{ fontWeight: 600 }}>
-                  R$ {company.totalRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  R$ {(company.totalRevenue || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
 
             <div className="mt-3 pt-3 border-t border-gray-700">
               <div className="flex items-center justify-between text-xs text-gray-500">
-                <span>Código de convite: <span className="text-violet-400 font-mono">{company.inviteCode}</span></span>
-                <span>Desde {new Date(company.createdAt).toLocaleDateString("pt-BR")}</span>
+                <span>
+                  Código: <span className="text-violet-400 font-mono">{company.inviteCode || "—"}</span>
+                </span>
+                <span>
+                  {company.createdAt
+                    ? `Desde ${new Date((company.createdAt as any).seconds ? (company.createdAt as any).seconds * 1000 : company.createdAt as any).toLocaleDateString("pt-BR")}`
+                    : "—"}
+                </span>
               </div>
             </div>
           </div>

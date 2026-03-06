@@ -10,20 +10,22 @@ export type SessionRecord = {
   clientName: string;
   therapyName: string;
   duration: number;
-  sessionPrice: number;      // preço base (definido pela empresa se vinculado)
-  extraCharge: number;       // cobrança extra adicionada durante o atendimento
-  totalCharged: number;      // sessionPrice + extraCharge
-  therapistEarned: number;   // quanto o terapeuta recebe (comissão sobre totalCharged)
-  commissionPct: number;     // % de comissão (100 se autônomo, empresa define se vinculado)
-  companyNet: number;        // receita líquida da empresa = totalCharged - therapistEarned
+  sessionPrice: number;
+  extraCharge: number;
+  totalCharged: number;
+  therapistEarned: number;
+  commissionPct: number;
+  companyNet: number;
   companyId: string | null;
   companyName: string | null;
   completedAt: string;
   notes: string;
-  extraNotes: string;        // observações sobre cobrança extra
+  extraNotes: string;
   date: string;
   time: string;
   closedBy: "therapist" | "company";
+  /** Set to true by the company when commission is paid to the therapist */
+  paidByCompany?: boolean;
 };
 
 export type CatalogItem = {
@@ -39,6 +41,7 @@ export type CatalogItem = {
 export type TherapistAssociation = {
   therapistId: string;
   companyId: string | null;
+  unitId?: string | null;
   commission: number;
   linkedAt: string | null;
 };
@@ -55,6 +58,7 @@ function seedRecords(): SessionRecord[] {
       companyNet: 75, companyId: "c1", companyName: "Espaço Zen Massagens",
       completedAt: "2026-03-03T10:55:00", notes: "", extraNotes: "",
       date: "2026-03-03", time: "10:00", closedBy: "therapist",
+      paidByCompany: false,
     },
     {
       id: "sr_a8", appointmentId: "a8", therapistId: "t2",
@@ -66,6 +70,7 @@ function seedRecords(): SessionRecord[] {
       notes: "Cliente pediu mais pressão nos ombros.",
       extraNotes: "Produto de aromaterapia adicional utilizado.",
       date: "2026-03-03", time: "14:00", closedBy: "company",
+      paidByCompany: false,
     },
   ];
 }
@@ -76,6 +81,7 @@ function seedAssociations(): Record<string, TherapistAssociation> {
     result[t.id] = {
       therapistId: t.id,
       companyId: t.companyId ?? null,
+      unitId: (t as any).unitId ?? null,
       commission: t.commission,
       linkedAt: t.companyId ? "2024-01-15" : null,
     };
@@ -115,6 +121,15 @@ export const therapistStore = {
     notify();
   },
 
+  /** Mark a list of session record IDs as paid by the company */
+  markRecordsPaid: (ids: string[]) => {
+    const idSet = new Set(ids);
+    sessionRecords = sessionRecords.map((r) =>
+      idSet.has(r.id) ? { ...r, paidByCompany: true } : r
+    );
+    notify();
+  },
+
   // ── Association ───────────────────────────────────────────────────────────
 
   getAssociation: (therapistId: string): TherapistAssociation => {
@@ -122,6 +137,7 @@ export const therapistStore = {
       const t = initialTherapists.find((t) => t.id === therapistId);
       associations[therapistId] = {
         therapistId, companyId: t?.companyId ?? null,
+        unitId: (t as any)?.unitId ?? null,
         commission: t?.commission ?? 50, linkedAt: null,
       };
     }
@@ -134,9 +150,10 @@ export const therapistStore = {
   getCommission: (therapistId: string): number =>
     therapistStore.getAssociation(therapistId).commission,
 
-  associateTherapist: (therapistId: string, companyId: string, commission: number) => {
+  associateTherapist: (therapistId: string, companyId: string, commission: number, unitId?: string | null) => {
     associations[therapistId] = {
       therapistId, companyId, commission,
+      unitId: unitId ?? null,
       linkedAt: new Date().toISOString(),
     };
     notify();

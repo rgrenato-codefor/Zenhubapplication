@@ -18,8 +18,6 @@ function AppLoadingScreen() {
 function InnerApp() {
   const { loading } = useAuth();
   if (loading) return <AppLoadingScreen />;
-  // RouterProvider (and everything inside it) has Router context,
-  // so DemoModeBanner's useNavigate() will work correctly via RootLayout.
   return <RouterProvider router={router} />;
 }
 

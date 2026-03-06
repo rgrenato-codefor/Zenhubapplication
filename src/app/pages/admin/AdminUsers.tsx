@@ -1,10 +1,10 @@
 import { useState } from "react";
 import React from "react";
-import { Search, Plus, Shield, Building2, Star, UserCircle, MoreVertical, Edit, Trash2, CheckCircle } from "lucide-react";
-import { users, companies } from "../../data/mockData";
+import { Search, Plus, Shield, Building2, Star, UserCircle, Edit, Trash2, CheckCircle } from "lucide-react";
+import { useData } from "../../context/DataContext";
 
 const roleConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  superadmin: { label: "Super Admin", color: "bg-violet-100 text-violet-700", icon: Shield },
+  super_admin: { label: "Super Admin", color: "bg-violet-100 text-violet-700", icon: Shield },
   company_admin: { label: "Admin Empresa", color: "bg-teal-100 text-teal-700", icon: Building2 },
   sales: { label: "Vendas", color: "bg-blue-100 text-blue-700", icon: UserCircle },
   therapist: { label: "Terapeuta", color: "bg-orange-100 text-orange-700", icon: Star },
@@ -12,12 +12,35 @@ const roleConfig: Record<string, { label: string; color: string; icon: React.Ele
 };
 
 export default function AdminUsers() {
+  const { allAdminTherapists, allAdminClients, allAdminCompanies, loading } = useData();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
 
-  const filtered = users.filter((u) => {
-    const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
+  // Build a unified user list from real Firestore data:
+  // therapists + clients (company admins aren't stored as separate users in Firestore client SDK)
+  const allUsers = [
+    ...allAdminTherapists.map((t) => ({
+      id: t.id,
+      name: t.name,
+      email: t.email,
+      role: "therapist" as const,
+      companyId: t.companyId,
+      status: t.status,
+    })),
+    ...allAdminClients.map((c) => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      role: "client" as const,
+      companyId: c.companyId,
+      status: c.status,
+    })),
+  ];
+
+  const filtered = allUsers.filter((u) => {
+    const matchSearch =
+      u.name.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase());
     const matchRole = roleFilter === "all" || u.role === roleFilter;
     return matchSearch && matchRole;
@@ -28,7 +51,11 @@ export default function AdminUsers() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-white">Usuários</h1>
-          <p className="text-gray-400 text-sm mt-0.5">{users.length} usuários cadastrados</p>
+          <p className="text-gray-400 text-sm mt-0.5">
+            {loading
+              ? "Carregando..."
+              : `${allAdminTherapists.length} terapeutas · ${allAdminClients.length} clientes`}
+          </p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -51,7 +78,7 @@ export default function AdminUsers() {
           />
         </div>
         <div className="flex gap-2 flex-wrap">
-          {["all", "superadmin", "company_admin", "sales", "therapist"].map((r) => (
+          {["all", "therapist", "client"].map((r) => (
             <button
               key={r}
               onClick={() => setRoleFilter(r)}
@@ -69,74 +96,88 @@ export default function AdminUsers() {
 
       {/* Table */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-gray-700">
-              <th className="text-left text-xs text-gray-400 px-6 py-4">Usuário</th>
-              <th className="text-left text-xs text-gray-400 px-6 py-4">Perfil</th>
-              <th className="text-left text-xs text-gray-400 px-6 py-4">Empresa</th>
-              <th className="text-left text-xs text-gray-400 px-6 py-4">Status</th>
-              <th className="text-left text-xs text-gray-400 px-6 py-4">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-700">
-            {filtered.map((u) => {
-              const role = roleConfig[u.role];
-              const company = companies.find((c) => c.id === u.company);
-              return (
-                <tr key={u.id} className="hover:bg-gray-750 group">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-violet-600/30 flex items-center justify-center text-violet-400 text-sm" style={{ fontWeight: 700 }}>
-                        {u.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="text-sm text-white">{u.name}</p>
-                        <p className="text-xs text-gray-400">{u.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2.5 py-1 rounded-full flex items-center gap-1 ${role.color}`}>
-                        <role.icon className="w-3 h-3" />
-                        {role.label}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {company ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded flex items-center justify-center text-white text-xs" style={{ background: company.color, fontWeight: 700 }}>
-                          {company.logo.charAt(0)}
+        {filtered.length === 0 && !loading ? (
+          <div className="text-center py-12 text-gray-500 text-sm">
+            {search || roleFilter !== "all"
+              ? "Nenhum usuário encontrado com esses filtros"
+              : "Nenhum usuário cadastrado"}
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-700">
+                <th className="text-left text-xs text-gray-400 px-6 py-4">Usuário</th>
+                <th className="text-left text-xs text-gray-400 px-6 py-4">Perfil</th>
+                <th className="text-left text-xs text-gray-400 px-6 py-4">Empresa</th>
+                <th className="text-left text-xs text-gray-400 px-6 py-4">Status</th>
+                <th className="text-left text-xs text-gray-400 px-6 py-4">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              {filtered.map((u) => {
+                const role = roleConfig[u.role];
+                const company = allAdminCompanies.find((c) => c.id === u.companyId);
+                return (
+                  <tr key={u.id} className="hover:bg-gray-750 group">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-9 h-9 rounded-full bg-violet-600/30 flex items-center justify-center text-violet-400 text-sm"
+                          style={{ fontWeight: 700 }}
+                        >
+                          {u.name.charAt(0)}
                         </div>
-                        <span className="text-xs text-gray-300">{company.name}</span>
+                        <div>
+                          <p className="text-sm text-white">{u.name}</p>
+                          <p className="text-xs text-gray-400">{u.email}</p>
+                        </div>
                       </div>
-                    ) : (
-                      <span className="text-xs text-gray-500">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1.5 text-emerald-400">
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span className="text-xs">Ativo</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1">
-                      <button className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors">
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
-                      <button className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-red-400 transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs px-2.5 py-1 rounded-full flex items-center gap-1 ${role?.color || "bg-gray-700 text-gray-300"}`}>
+                          {role && <role.icon className="w-3 h-3" />}
+                          {role?.label || u.role}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {company ? (
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-5 h-5 rounded flex items-center justify-center text-white text-xs"
+                            style={{ background: company.color || "#7C3AED", fontWeight: 700 }}
+                          >
+                            {(company.logo || company.name).charAt(0)}
+                          </div>
+                          <span className="text-xs text-gray-300">{company.name}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-500">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1.5 text-emerald-400">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span className="text-xs">{u.status === "active" ? "Ativo" : "Inativo"}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1">
+                        <button className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors">
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-red-400 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Modal */}
@@ -170,7 +211,7 @@ export default function AdminUsers() {
                 <label className="block text-sm text-gray-400 mb-1">Empresa</label>
                 <select className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
                   <option value="">Nenhuma (Super Admin)</option>
-                  {companies.map((c) => (
+                  {allAdminCompanies.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>

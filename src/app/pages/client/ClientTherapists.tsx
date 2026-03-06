@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Star, Clock, Search, ChevronRight, Calendar, Sparkles } from "lucide-react";
-import { therapists, therapies, companies } from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
+import { usePageData } from "../../hooks/usePageData";
 
 export default function ClientTherapists() {
   const { user } = useAuth();
-  const company = companies.find((c) => c.id === user?.companyId);
+  const { company, therapists, therapies } = usePageData();
   const primaryColor = company?.color || "#7C3AED";
 
   const [search, setSearch] = useState("");

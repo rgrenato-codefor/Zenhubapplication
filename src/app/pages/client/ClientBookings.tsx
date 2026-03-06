@@ -1,8 +1,8 @@
 import { useState } from "react";
 import React from "react";
 import { Calendar, Clock, CheckCircle, AlertCircle, XCircle, Star } from "lucide-react";
-import { appointments, therapists, therapies, companies } from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
+import { usePageData } from "../../hooks/usePageData";
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   confirmed: { label: "Confirmado", color: "#059669", bg: "#ECFDF5", icon: CheckCircle },
@@ -13,11 +13,11 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; i
 
 export default function ClientBookings() {
   const { user } = useAuth();
-  const company = companies.find((c) => c.id === user?.companyId);
+  const { company, appointments: allAppointments, therapists, therapies } = usePageData();
   const primaryColor = company?.color || "#7C3AED";
   const [tab, setTab] = useState<"upcoming" | "history">("upcoming");
 
-  const myAppointments = appointments.filter((a) => a.clientId === user?.clientId);
+  const myAppointments = allAppointments.filter((a) => a.clientId === user?.clientId);
   const upcoming = myAppointments.filter((a) => a.status !== "completed" && a.status !== "cancelled");
   const history = myAppointments.filter((a) => a.status === "completed" || a.status === "cancelled");
 

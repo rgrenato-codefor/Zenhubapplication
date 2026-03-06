@@ -3,15 +3,10 @@ import { useNavigate, Link } from "react-router";
 import {
   Sparkles, User, Mail, Phone, Lock, Eye, EyeOff,
   ArrowRight, CheckCircle, Loader2, AtSign, KeyRound,
-  Briefcase, ChevronRight, ChevronLeft, Search, MapPin, X,
+  Briefcase, ChevronRight, ChevronLeft, Search, MapPin, X, AlertCircle,
 } from "lucide-react";
-import { companies, units } from "../../data/mockData";
-
-// Simula codes válidos
-const VALID_CODES = companies.reduce<Record<string, string>>((acc, c) => {
-  acc[c.inviteCode] = c.id;
-  return acc;
-}, {});
+import { useAuth } from "../../context/AuthContext";
+import { useData } from "../../context/DataContext";
 
 type Step = 1 | 2 | 3;
 
@@ -41,6 +36,9 @@ const STEPS = [
 
 export default function TherapistRegister() {
   const navigate = useNavigate();
+  const { registerTherapist } = useAuth();
+  const { searchCompaniesByName, fetchCompanyByInviteCode, fetchUnitsByCompany } = useData();
+
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState<Form>({
     name: "", email: "", phone: "", specialty: "",
@@ -51,16 +49,20 @@ export default function TherapistRegister() {
   const [errors, setErrors] = useState<Partial<Form>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
-  const [linkedCompany, setLinkedCompany] = useState<typeof companies[0] | null>(null);
-  const [linkedUnit, setLinkedUnit] = useState<typeof units[0] | null>(null);
+  const [linkedCompany, setLinkedCompany] = useState<any | null>(null);
+  const [linkedUnit, setLinkedUnit] = useState<any | null>(null);
   const [codeError, setCodeError] = useState("");
+  const [submitError, setSubmitError] = useState("");
 
   // Company search state
   const [searchMode, setSearchMode] = useState<"code" | "name">("code");
   const [nameSearch, setNameSearch] = useState("");
-  const [candidateCompany, setCandidateCompany] = useState<typeof companies[0] | null>(null);
+  const [candidateCompany, setCandidateCompany] = useState<any | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [companyStep, setCompanyStep] = useState<"search" | "pick-unit">("search");
+  const [candidateUnits, setCandidateUnits] = useState<any[]>([]);
+  const [nameResults, setNameResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const set = (field: keyof Form, value: string) => {
     setForm((p) => ({ ...p, [field]: value }));
@@ -102,15 +104,18 @@ export default function TherapistRegister() {
     if (step === 2 && validateStep2()) setStep(3);
   };
 
-  const handleVerifyCode = () => {
+  const handleVerifyCode = async () => {
     const code = form.inviteCode.trim().toUpperCase();
     if (!code) return;
-    const companyId = VALID_CODES[code];
-    if (companyId) {
-      const company = companies.find((c) => c.id === companyId) ?? null;
+    setSearching(true);
+    const company = await fetchCompanyByInviteCode(code);
+    setSearching(false);
+    if (company) {
       setCandidateCompany(company);
       setCodeError("");
       setSelectedUnitId(null);
+      const units = await fetchUnitsByCompany(company.id);
+      setCandidateUnits(units);
       setCompanyStep("pick-unit");
     } else {
       setCodeError("Código inválido. Verifique com o responsável da empresa.");
@@ -118,34 +123,67 @@ export default function TherapistRegister() {
     }
   };
 
-  const handleSelectByName = (company: typeof companies[0]) => {
+  const handleNameSearch = async (q: string) => {
+    setNameSearch(q);
+    if (q.trim().length < 2) { setNameResults([]); return; }
+    setSearching(true);
+    const results = await searchCompaniesByName(q);
+    setNameResults(results);
+    setSearching(false);
+  };
+
+  const handleSelectByName = async (company: any) => {
     setCandidateCompany(company);
     setSelectedUnitId(null);
+    const units = await fetchUnitsByCompany(company.id);
+    setCandidateUnits(units);
     setCompanyStep("pick-unit");
     setNameSearch("");
+    setNameResults([]);
   };
 
   const handleConfirmCompany = () => {
     if (!candidateCompany) return;
     setLinkedCompany(candidateCompany);
-    const unit = units.find((u) => u.id === selectedUnitId) ?? null;
+    const unit = candidateUnits.find((u) => u.id === selectedUnitId) ?? null;
     setLinkedUnit(unit);
     setCompanyStep("search");
   };
 
-  const nameResults = nameSearch.trim().length >= 2
-    ? companies.filter((c) => c.name.toLowerCase().includes(nameSearch.toLowerCase()) && c.status === "active")
-    : [];
-
-  const candidateUnits = candidateCompany
-    ? units.filter((u) => u.companyId === candidateCompany.id && u.status === "active")
-    : [];
-
   const handleSubmit = async () => {
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setSubmitting(false);
-    setDone(true);
+    setSubmitError("");
+    try {
+      await registerTherapist({
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        specialty: form.specialty,
+        username: form.username,
+        password: form.password,
+        companyId: linkedCompany?.id,
+        unitId: linkedUnit?.id,
+        commission: linkedCompany ? 50 : 100,
+      });
+      setDone(true);
+      setTimeout(() => navigate("/terapeuta"), 2500);
+    } catch (err: any) {
+      console.error("[TherapistRegister] Erro ao criar perfil:", err);
+      const code = err?.code ?? "";
+      const msg = err?.message ?? "";
+      if (code === "auth/email-already-in-use") {
+        setSubmitError("Este e-mail já está cadastrado. Faça login ou use outro e-mail.");
+      } else if (code === "auth/weak-password") {
+        setSubmitError("Senha muito fraca. Use no mínimo 6 caracteres.");
+      } else if (code === "permission-denied" || msg.includes("permission")) {
+        setSubmitError("Sem permissão para salvar dados. Verifique as regras do Firestore no Firebase Console.");
+      } else if (msg.includes("undefined") || msg.includes("invalid data")) {
+        setSubmitError("Dados inválidos ao salvar perfil. Contate o suporte.");
+      } else {
+        setSubmitError(`Erro ao criar conta: ${msg || code || "Verifique sua conexão e tente novamente."}`);
+      }
+      setSubmitting(false);
+    }
   };
 
   if (done) {
@@ -548,7 +586,7 @@ export default function TherapistRegister() {
                             style={{ paddingLeft: "2.5rem" }}
                             placeholder="Digite o nome da empresa..."
                             value={nameSearch}
-                            onChange={(e) => setNameSearch(e.target.value)}
+                            onChange={(e) => handleNameSearch(e.target.value)}
                           />
                           {nameSearch && (
                             <button onClick={() => setNameSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -684,6 +722,13 @@ export default function TherapistRegister() {
                     )}
                   </button>
                 </div>
+
+                {submitError && (
+                  <p className="text-red-400 text-xs mt-1">
+                    <AlertCircle className="w-3.5 h-3.5 inline-block mr-1" />
+                    {submitError}
+                  </p>
+                )}
 
                 <p className="text-center text-gray-500 text-xs">
                   Sem empresa? Clique em "Criar perfil" assim mesmo. Você pode se vincular depois.

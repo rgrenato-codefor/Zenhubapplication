@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { unitStore, type Unit } from "../store/unitStore";
+import { useData, type Unit } from "./DataContext";
 
-export type { Unit as CompanyUnit };
+export type CompanyUnit = Unit;
 
 interface CompanyContextType {
   selectedUnitId: string | null;       // null = todas as unidades
@@ -19,20 +19,16 @@ const CompanyContext = createContext<CompanyContextType>({
 
 export function CompanyProvider({
   children,
-  companyId,
+  companyId: _companyId,
 }: {
   children: ReactNode;
   companyId: string;
 }) {
+  const { units } = useData();
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
-  const [, forceRender] = useState(0);
 
-  useEffect(() => {
-    const unsub = unitStore.subscribe(() => forceRender((n) => n + 1));
-    return unsub;
-  }, []);
-
-  const companyUnits = unitStore.getUnits(companyId);
+  // companyUnits comes from DataContext (already filtered for current company)
+  const companyUnits = units;
   const selectedUnit = companyUnits.find((u) => u.id === selectedUnitId) ?? null;
 
   // Reset selected unit if it no longer exists (e.g. deleted)

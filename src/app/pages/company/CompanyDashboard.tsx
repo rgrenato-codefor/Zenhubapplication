@@ -1,4 +1,4 @@
-import React from "react";
+import { useState, useMemo } from "react";
 import {
   Users, CalendarDays, DollarSign, TrendingUp, Star,
   ArrowUpRight, CheckCircle, AlertCircle, MoreHorizontal, MapPin,
@@ -9,12 +9,8 @@ import {
   Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { useAuth } from "../../context/AuthContext";
-import {
-  revenueData, weeklyData, therapists, clients, appointments,
-  companies, unitRevenueData, unitWeeklyData,
-} from "../../data/mockData";
+import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
-import { unitStore } from "../../store/unitStore";
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   confirmed: { label: "Confirmado", color: "text-emerald-600 bg-emerald-50", icon: CheckCircle },
@@ -27,53 +23,121 @@ const UNIT_COLORS = ["#7C3AED", "#0D9488", "#D97706", "#DC2626", "#059669", "#3B
 
 export default function CompanyDashboard() {
   const { user } = useAuth();
+  const {
+    company, therapists: allTherapists, clients: allClients, appointments,
+    revenueData, weeklyData, unitRevenueData, unitWeeklyData,
+  } = usePageData();
   const { selectedUnitId, selectedUnit, companyUnits, setSelectedUnitId } = useCompanyUnit();
-  const company = companies.find((c) => c.id === user?.companyId);
   const primaryColor = company?.color || "#0D9488";
 
   const isAllUnits = !selectedUnitId;
   const hasMultipleUnits = companyUnits.length > 1;
-
-  // ── All company data (unfiltered) ────────────────────────────────────────
-  const allTherapists = therapists.filter((t) => t.companyId === user?.companyId);
-  const allClients = clients.filter((c) => c.companyId === user?.companyId);
-  const allAppointments = appointments.filter((a) => a.companyId === user?.companyId);
 
   // ── Filtered by selected unit ─────────────────────────────────────────────
   const companyTherapists = isAllUnits
     ? allTherapists
     : allTherapists.filter((t) => (t as any).unitId === selectedUnitId);
 
+  /**
+   * Resolve which unit an appointment belongs to:
+   *   1. Use appointment.unitId if present
+   *   2. Fallback: infer from the therapist's unitId
+   * This handles appointments saved before the unitId field was added.
+   */
+  const getAppointmentUnitId = (a: typeof appointments[number]) => {
+    if ((a as any).unitId) return (a as any).unitId as string;
+    const t = allTherapists.find((t) => t.id === a.therapistId);
+    return (t as any)?.unitId as string | undefined;
+  };
+
   const companyAppointments = isAllUnits
-    ? allAppointments
-    : allAppointments.filter((a) => (a as any).unitId === selectedUnitId);
+    ? appointments
+    : appointments.filter((a) => getAppointmentUnitId(a) === selectedUnitId);
 
-  const todayAppointments = companyAppointments.filter((a) => a.date === "2026-03-05");
-
-  // ── Chart data based on selection ─────────────────────────────────────────
-  const activeRevenueData =
-    selectedUnitId && unitRevenueData[selectedUnitId]
-      ? unitRevenueData[selectedUnitId]
-      : revenueData;
-
-  const activeWeeklyData =
-    selectedUnitId && unitWeeklyData[selectedUnitId]
-      ? unitWeeklyData[selectedUnitId]
-      : weeklyData;
+  const todayAppointments = companyAppointments.filter((a) => a.date === new Date().toISOString().split("T")[0]);
 
   // ── Revenue from appointments (derived) ───────────────────────────────────
   const monthRevenue = companyAppointments
     .filter((a) => a.status === "completed" || a.status === "confirmed")
     .reduce((sum, a) => sum + a.price, 0);
 
+  // ── Chart data: derive from real appointments when no static data ─────────
+  /**
+   * Build last-7-months labels (e.g. ["Set", "Out", "Nov", "Dez", "Jan", "Fev", "Mar"])
+   * using a fixed reference date so the list is always stable.
+   */
+  const last7Months = useMemo(() => {
+    const result: { month: string; year: number; monthNum: number }[] = [];
+    const ref = new Date(2026, 2, 1); // March 2026
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(ref.getFullYear(), ref.getMonth() - i, 1);
+      const abbr = d
+        .toLocaleDateString("pt-BR", { month: "short" })
+        .replace(".", "")
+        .trim();
+      result.push({
+        month: abbr.charAt(0).toUpperCase() + abbr.slice(1),
+        year: d.getFullYear(),
+        monthNum: d.getMonth() + 1, // 1-based
+      });
+    }
+    return result;
+  }, []);
+
+  const activeRevenueData = useMemo(() => {
+    // 1. Demo mode with pre-built mock data → prefer unit-specific then general
+    if (revenueData.length > 0) {
+      if (selectedUnitId && unitRevenueData[selectedUnitId]?.length)
+        return unitRevenueData[selectedUnitId];
+      return revenueData;
+    }
+    // 2. Real user → derive from filtered appointments
+    const byKey: Record<string, number> = {};
+    last7Months.forEach(({ month }) => (byKey[month] = 0));
+    companyAppointments
+      .filter((a) => a.status === "completed" || a.status === "confirmed")
+      .forEach((a) => {
+        if (!a.date) return;
+        const [y, m] = a.date.split("-").map(Number);
+        const entry = last7Months.find((lm) => lm.year === y && lm.monthNum === m);
+        if (entry) byKey[entry.month] = (byKey[entry.month] ?? 0) + (a.price || 0);
+      });
+    return last7Months.map(({ month }) => ({ month, revenue: byKey[month] }));
+  }, [revenueData, unitRevenueData, selectedUnitId, companyAppointments, last7Months]);
+
+  const WEEK_DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const activeWeeklyData = useMemo(() => {
+    // 1. Demo mode
+    if (weeklyData.length > 0) {
+      if (selectedUnitId && unitWeeklyData[selectedUnitId]?.length)
+        return unitWeeklyData[selectedUnitId];
+      return weeklyData;
+    }
+    // 2. Real user → count sessions per weekday from filtered appointments
+    const byDay: Record<string, number> = {};
+    WEEK_DAYS.forEach((d) => (byDay[d] = 0));
+    companyAppointments.forEach((a) => {
+      if (!a.date) return;
+      const [y, m, d] = a.date.split("-").map(Number);
+      const label = WEEK_DAYS[new Date(y, m - 1, d).getDay()];
+      byDay[label] = (byDay[label] ?? 0) + 1;
+    });
+    return WEEK_DAYS.map((day) => ({ day, sessions: byDay[day] }));
+  }, [weeklyData, unitWeeklyData, selectedUnitId, companyAppointments]);
+
   // ── Per-unit stats for comparison section ─────────────────────────────────
   const unitStats = companyUnits.map((unit, idx) => {
     const unitTherapists = allTherapists.filter((t) => (t as any).unitId === unit.id);
-    const unitAppointments = allAppointments.filter((a) => (a as any).unitId === unit.id);
+    // Use same therapist-fallback logic for unit appointment resolution
+    const unitAppointments = appointments.filter((a) => {
+      if ((a as any).unitId) return (a as any).unitId === unit.id;
+      const t = allTherapists.find((th) => th.id === a.therapistId);
+      return (t as any)?.unitId === unit.id;
+    });
     const unitRevenue = unitAppointments
       .filter((a) => a.status === "completed" || a.status === "confirmed")
       .reduce((sum, a) => sum + a.price, 0);
-    const totalRevenue = allAppointments
+    const totalRevenue = appointments
       .filter((a) => a.status === "completed" || a.status === "confirmed")
       .reduce((sum, a) => sum + a.price, 0);
     return {
@@ -316,12 +380,6 @@ export default function CompanyDashboard() {
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={activeRevenueData}>
-              <defs>
-                <linearGradient id="compRevGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={primaryColor} stopOpacity={0.3} />
-                  <stop offset="95%" stopColor={primaryColor} stopOpacity={0} />
-                </linearGradient>
-              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
               <XAxis dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
               <YAxis stroke="#9CA3AF" tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
@@ -329,7 +387,7 @@ export default function CompanyDashboard() {
                 contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }}
                 formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, "Receita"]}
               />
-              <Area key="revenue-area" type="monotone" dataKey="revenue" stroke={primaryColor} strokeWidth={2} fill="url(#compRevGrad)" isAnimationActive={false} />
+              <Area type="monotone" dataKey="revenue" stroke={primaryColor} strokeWidth={2} fill={primaryColor} fillOpacity={0.12} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -349,7 +407,7 @@ export default function CompanyDashboard() {
               <XAxis dataKey="day" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
               <YAxis stroke="#9CA3AF" tick={{ fontSize: 12 }} />
               <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }} />
-              <Bar key="sessions-bar" dataKey="sessions" fill={primaryColor} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="sessions" fill={primaryColor} radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>

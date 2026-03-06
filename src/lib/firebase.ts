@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, getFirestore, persistentLocalCache } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCj-rjgRt3319Fm4OjwkibBK_kr8JxlPrA",
@@ -23,5 +23,18 @@ export const GOOGLE_CLIENT_ID = "155346459725-muobno2n5068phih47gkfnopsanlg3mc.a
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// ignoreUndefinedProperties: true — evita erro "Unsupported field value: undefined"
+// quando campos opcionais (companyId, unitId, etc.) não são informados.
+export const db = (() => {
+  try {
+    return initializeFirestore(app, {
+      ignoreUndefinedProperties: true,
+    });
+  } catch {
+    // Já inicializado (hot-reload) — usa a instância existente
+    return getFirestore(app);
+  }
+})();
+
 export default app;

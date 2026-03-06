@@ -4,16 +4,28 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
 } from "react";
 import {
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   type User as FirebaseUser,
 } from "firebase/auth";
 import { auth } from "../../lib/firebase";
 import { signInWithGoogleGIS } from "../../lib/googleGIS";
-import { getUserProfile, createUserProfile, type UserRole } from "../../lib/firestore";
+import {
+  getUserProfile,
+  createUserProfile,
+  createCompany,
+  createUnit,
+  createTherapist,
+  createClient,
+  getTherapistByUserId,
+  getClientByUserId,
+  type UserRole,
+} from "../../lib/firestore";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -59,10 +71,58 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ route: string }>;
   signInGoogle: () => Promise<{ route: string }>;
   signOut: () => Promise<void>;
+  registerCompany: (params: RegisterCompanyParams) => Promise<void>;
+  registerTherapist: (params: RegisterTherapistParams) => Promise<void>;
+  registerClient: (params: RegisterClientParams) => Promise<void>;
   /** @deprecated use signIn() – kept for backwards compat with old pages */
   login: (user: AuthUser) => void;
   /** @deprecated use signOut() */
   logout: () => void;
+}
+
+// ─── registerCompany param type ───────────────────────────────────────────────
+
+export interface RegisterCompanyParams {
+  companyName: string;
+  cnpj: string;
+  phone: string;
+  segment: string;
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood?: string;
+  city: string;
+  state: string;
+  cep: string;
+  responsibleName: string;
+  responsibleEmail: string;
+  responsiblePhone: string;
+  role?: string;
+  password: string;
+  plan: string;
+}
+
+export interface RegisterTherapistParams {
+  name: string;
+  email: string;
+  phone: string;
+  specialty: string;
+  username: string;
+  password: string;
+  // optional company link
+  companyId?: string;
+  unitId?: string;
+  commission?: number;
+}
+
+export interface RegisterClientParams {
+  name: string;
+  email: string;
+  phone: string;
+  birthdate?: string;
+  password: string;
+  companyId?: string;
+  slug?: string;
 }
 
 // ─── Mock DEMO users (used only when isDemoMode === true) ─────────────────────
@@ -127,6 +187,9 @@ const AuthContext = createContext<AuthContextType>({
   signIn: async () => ({ route: "/" }),
   signInGoogle: async () => ({ route: "/" }),
   signOut: async () => {},
+  registerCompany: async () => {},
+  registerTherapist: async () => {},
+  registerClient: async () => {},
   login: () => {},
   logout: () => {},
 });
@@ -137,6 +200,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [demoViewAs, setDemoViewAs] = useState<DemoViewAs>("company_admin");
+  // When true, the next onAuthStateChanged event is swallowed so that
+  // registerCompany can set the user state itself without a race condition.
+  const skipNextAuthEvent = useRef(false);
 
   const isDemoMode = user?.email === DEMO_EMAIL;
 
@@ -155,6 +221,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [demoViewAs]
   );
 
+  /**
+   * When a real user logs in but has no profile in Firestore (e.g. incomplete
+   * registration where Auth succeeded but Firestore writes failed), we try to
+   * recover by looking up existing sub-collection documents (therapists / clients).
+   * If found, we recreate the missing profile with the correct role.
+   * Returns the recovered UserProfile, or null if nothing was found.
+   */
+  const recoverProfileFromSubCollections = useCallback(
+    async (uid: string, email: string): Promise<import("../../lib/firestore").UserProfile | null> => {
+      try {
+        const [therapist, client] = await Promise.all([
+          getTherapistByUserId(uid),
+          getClientByUserId(uid),
+        ]);
+
+        if (therapist) {
+          const recovered = {
+            uid,
+            name: therapist.name,
+            email: therapist.email || email,
+            role: "therapist" as UserRole,
+            therapistId: therapist.id,
+            companyId: therapist.companyId,
+          };
+          await createUserProfile(uid, recovered);
+          console.info("[AuthContext] Recovered missing profile as therapist for uid:", uid);
+          return recovered;
+        }
+
+        if (client) {
+          const recovered = {
+            uid,
+            name: client.name,
+            email: client.email || email,
+            role: "client" as UserRole,
+            clientId: client.id,
+            companyId: client.companyId,
+          };
+          await createUserProfile(uid, recovered);
+          console.info("[AuthContext] Recovered missing profile as client for uid:", uid);
+          return recovered;
+        }
+      } catch (err) {
+        console.warn("[AuthContext] recoverProfileFromSubCollections failed:", err);
+      }
+      return null;
+    },
+    []
+  );
+
   // Re-compute effective user whenever demoViewAs changes
   useEffect(() => {
     if (!user) return;
@@ -167,6 +283,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Firebase Auth listener — runs once on mount
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
+      // Let register* functions manage their own user state update
+      if (skipNextAuthEvent.current) {
+        skipNextAuthEvent.current = false;
+        return;
+      }
+
       if (!fbUser) {
         setUser(null);
         setLoading(false);
@@ -176,16 +298,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         let profile = await getUserProfile(fbUser.uid);
 
-        // If no profile exists yet, create a basic one (e.g. first-time demo user)
+        // If no profile exists yet:
         if (!profile) {
           const isDemo = fbUser.email === DEMO_EMAIL;
-          const baseProfile = {
-            name: fbUser.displayName || fbUser.email?.split("@")[0] || "Usuário",
-            email: fbUser.email || "",
-            role: (isDemo ? "demo" : "client") as UserRole,
-          };
-          await createUserProfile(fbUser.uid, baseProfile);
-          profile = { uid: fbUser.uid, ...baseProfile };
+          if (!isDemo) {
+            // Try to recover from sub-collections (handles incomplete registration)
+            const recovered = await recoverProfileFromSubCollections(fbUser.uid, fbUser.email || "");
+            if (recovered) {
+              profile = recovered;
+            } else {
+              // Truly no data — user is mid-registration or something went wrong.
+              // Don't create a wrong profile; just wait.
+              setLoading(false);
+              return;
+            }
+          } else {
+            // Demo user: auto-create demo profile
+            const baseProfile = {
+              name: fbUser.displayName || fbUser.email?.split("@")[0] || "Usuário",
+              email: fbUser.email || "",
+              role: "demo" as UserRole,
+            };
+            await createUserProfile(fbUser.uid, baseProfile);
+            profile = { uid: fbUser.uid, ...baseProfile };
+          }
         }
 
         const baseUser: AuthUser = {
@@ -210,7 +346,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return unsub;
-  }, [buildEffectiveUser]);
+  }, [buildEffectiveUser, recoverProfileFromSubCollections]);
 
   // ─── signIn ──────────────────────────────────────────────────────────────
 
@@ -223,13 +359,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!profile) {
         const isDemo = fbUser.email === DEMO_EMAIL;
-        const baseProfile = {
-          name: fbUser.displayName || email.split("@")[0],
-          email: fbUser.email || email,
-          role: (isDemo ? "demo" : "client") as UserRole,
-        };
-        await createUserProfile(fbUser.uid, baseProfile);
-        profile = { uid: fbUser.uid, ...baseProfile };
+        if (isDemo) {
+          const baseProfile = {
+            name: fbUser.displayName || email.split("@")[0],
+            email: fbUser.email || email,
+            role: "demo" as UserRole,
+          };
+          await createUserProfile(fbUser.uid, baseProfile);
+          profile = { uid: fbUser.uid, ...baseProfile };
+        } else {
+          // Real user with no profile: try to recover from sub-collections.
+          // This handles the case where registration failed mid-way (Auth created
+          // but Firestore writes didn't complete).
+          const recovered = await recoverProfileFromSubCollections(fbUser.uid, fbUser.email || email);
+          if (recovered) {
+            profile = recovered;
+          } else {
+            // No sub-collection documents either — this is a fresh unregistered user.
+            // Throw so the UI can show a meaningful message instead of silently
+            // creating a wrong role.
+            await firebaseSignOut(auth);
+            throw Object.assign(
+              new Error("Nenhum cadastro encontrado para este e-mail. Por favor, faça o registro."),
+              { code: "auth/user-not-registered" }
+            );
+          }
+        }
       }
 
       const baseUser: AuthUser = {
@@ -252,7 +407,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { route };
     },
-    [demoViewAs, buildEffectiveUser]
+    [demoViewAs, buildEffectiveUser, recoverProfileFromSubCollections]
   );
 
   // ─── signInGoogle ────────────────────────────────────────────────────────
@@ -264,14 +419,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let profile = await getUserProfile(fbUser.uid);
 
     if (!profile) {
-      const baseProfile = {
-        name: fbUser.displayName || fbUser.email?.split("@")[0] || "Usuário",
-        email: fbUser.email || "",
-        role: "client" as UserRole,
-        avatar: fbUser.photoURL ?? undefined,
-      };
-      await createUserProfile(fbUser.uid, baseProfile);
-      profile = { uid: fbUser.uid, ...baseProfile };
+      // For Google sign-in, new users default to client (correct behaviour).
+      // Try sub-collections first in case they registered elsewhere.
+      const recovered = await recoverProfileFromSubCollections(fbUser.uid, fbUser.email || "");
+      if (recovered) {
+        profile = recovered;
+      } else {
+        const baseProfile = {
+          name: fbUser.displayName || fbUser.email?.split("@")[0] || "Usuário",
+          email: fbUser.email || "",
+          role: "client" as UserRole,
+          avatar: fbUser.photoURL ?? undefined,
+        };
+        await createUserProfile(fbUser.uid, baseProfile);
+        profile = { uid: fbUser.uid, ...baseProfile };
+      }
     }
 
     const baseUser: AuthUser = {
@@ -290,7 +452,213 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(effective);
 
     return { route };
-  }, [buildEffectiveUser]);
+  }, [buildEffectiveUser, recoverProfileFromSubCollections]);
+
+  // ─── registerCompany ──────────────────────────────────────────────────────
+
+  const registerCompany = useCallback(async (params: RegisterCompanyParams): Promise<void> => {
+    const PLAN_MAP: Record<string, "Starter" | "Business" | "Premium"> = {
+      basic: "Starter",
+      pro: "Business",
+      enterprise: "Premium",
+    };
+    const plan = PLAN_MAP[params.plan] ?? "Business";
+
+    // Tell the onAuthStateChanged listener to skip the next event so we can
+    // set the user ourselves after all Firestore writes complete.
+    skipNextAuthEvent.current = true;
+
+    // 1. Create Firebase Auth user
+    const cred = await createUserWithEmailAndPassword(auth, params.responsibleEmail, params.password);
+    const uid = cred.user.uid;
+
+    // 2. Build invite code
+    const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    // 3. Create company document
+    const address = [
+      params.street,
+      params.number,
+      params.complement,
+      params.neighborhood ? `- ${params.neighborhood}` : "",
+      `${params.city} - ${params.state}`,
+      params.cep,
+    ].filter(Boolean).join(", ");
+
+    const companyId = await createCompany({
+      name: params.companyName,
+      logo: "",
+      color: "#0D9488",
+      email: params.responsibleEmail,
+      phone: params.phone,
+      address,
+      cnpj: params.cnpj,
+      segment: params.segment,
+      plan,
+      status: "active",
+      inviteCode,
+      therapistsCount: 0,
+      clientsCount: 0,
+      totalRevenue: 0,
+      monthRevenue: 0,
+    });
+
+    // 4. Create default unit (first location = the address provided)
+    await createUnit({
+      companyId,
+      name: params.city,
+      fullName: `Unidade ${params.city}`,
+      address,
+      phone: params.phone,
+      email: params.responsibleEmail,
+      status: "active",
+      isMain: true,
+    });
+
+    // 5. Create user profile
+    await createUserProfile(uid, {
+      name: params.responsibleName,
+      email: params.responsibleEmail,
+      role: "company_admin",
+      companyId,
+    });
+
+    // 6. Set user state directly — no round-trip needed
+    const newUser: AuthUser = {
+      uid,
+      name: params.responsibleName,
+      email: params.responsibleEmail,
+      role: "company_admin",
+      companyId,
+    };
+    setUser(newUser);
+    setLoading(false);
+  }, []);
+
+  // ─── registerTherapist ────────────────────────────────────────────────────
+
+  const registerTherapist = useCallback(async (params: RegisterTherapistParams): Promise<void> => {
+    skipNextAuthEvent.current = true;
+
+    // 1. Create Firebase Auth user
+    const cred = await createUserWithEmailAndPassword(auth, params.email, params.password);
+    const uid = cred.user.uid;
+
+    try {
+      // 2. Create therapist document — strip undefined to avoid Firestore rejection
+      const therapistData: Record<string, unknown> = {
+        userId: uid,
+        name: params.name,
+        email: params.email,
+        phone: params.phone,
+        specialty: params.specialty,
+        username: params.username,
+        commission: params.commission ?? 100,
+        rating: 5.0,
+        status: "active",
+        therapies: [],
+        schedule: {},
+        monthSessions: 0,
+        monthEarnings: 0,
+        totalSessions: 0,
+        totalEarnings: 0,
+      };
+      if (params.companyId) therapistData.companyId = params.companyId;
+      if (params.unitId) therapistData.unitId = params.unitId;
+
+      const therapistId = await createTherapist(therapistData as Parameters<typeof createTherapist>[0]);
+
+      // 3. Create user profile — also strip undefined
+      const profileData: Parameters<typeof createUserProfile>[1] = {
+        name: params.name,
+        email: params.email,
+        role: "therapist",
+        therapistId,
+      };
+      if (params.companyId) profileData.companyId = params.companyId;
+      await createUserProfile(uid, profileData);
+
+      // 4. Set user state
+      const newUser: AuthUser = {
+        uid,
+        name: params.name,
+        email: params.email,
+        role: "therapist",
+        therapistId,
+        companyId: params.companyId,
+      };
+      setUser(newUser);
+      setLoading(false);
+    } catch (err) {
+      // Firestore write(s) failed — delete the Auth user to avoid orphaned account
+      // that would be mistakenly assigned role "client" on next login attempt.
+      try {
+        await cred.user.delete();
+      } catch (deleteErr) {
+        console.warn("[registerTherapist] Could not delete orphaned Auth user:", deleteErr);
+      }
+      // Reset the skip flag so onAuthStateChanged works normally again
+      skipNextAuthEvent.current = false;
+      throw err;
+    }
+  }, []);
+
+  // ─── registerClient ───────────────────────────────────────────────────────
+
+  const registerClient = useCallback(async (params: RegisterClientParams): Promise<void> => {
+    skipNextAuthEvent.current = true;
+
+    // 1. Create Firebase Auth user
+    const cred = await createUserWithEmailAndPassword(auth, params.email, params.password);
+    const uid = cred.user.uid;
+
+    try {
+      // 2. Create client document
+      const clientId = await createClient({
+        userId: uid,
+        name: params.name,
+        email: params.email,
+        phone: params.phone,
+        birthdate: params.birthdate,
+        ...(params.companyId ? { companyId: params.companyId } : {}),
+        totalSessions: 0,
+        totalSpent: 0,
+        status: "active",
+        registeredBy: "self",
+        registeredAt: new Date().toISOString().split("T")[0],
+      });
+
+      // 3. Create user profile
+      await createUserProfile(uid, {
+        name: params.name,
+        email: params.email,
+        role: "client",
+        clientId,
+        ...(params.companyId ? { companyId: params.companyId } : {}),
+      });
+
+      // 4. Set user state
+      const newUser: AuthUser = {
+        uid,
+        name: params.name,
+        email: params.email,
+        role: "client",
+        clientId,
+        companyId: params.companyId,
+      };
+      setUser(newUser);
+      setLoading(false);
+    } catch (err) {
+      // Firestore write(s) failed — rollback Auth user
+      try {
+        await cred.user.delete();
+      } catch (deleteErr) {
+        console.warn("[registerClient] Could not delete orphaned Auth user:", deleteErr);
+      }
+      skipNextAuthEvent.current = false;
+      throw err;
+    }
+  }, []);
 
   // ─── signOut ─────────────────────────────────────────────────────────────
 
@@ -319,6 +687,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signInGoogle,
         signOut,
+        registerCompany,
+        registerTherapist,
+        registerClient,
         login,
         logout,
       }}

@@ -1,11 +1,44 @@
+import { useMemo } from "react";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, LineChart, Line,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer,
 } from "recharts";
-import { adminRevenueData, companies } from "../../data/mockData";
-import { TrendingUp, Download } from "lucide-react";
+import { TrendingUp, Download, Building2 } from "lucide-react";
+import { useData } from "../../context/DataContext";
 
 export default function AdminReports() {
+  const { allAdminCompanies, loading } = useData();
+
+  // ── Revenue ranking ───────────────────────────────────────────────────────
+  const ranked = useMemo(
+    () =>
+      [...allAdminCompanies]
+        .filter((c) => (c.monthRevenue || 0) > 0)
+        .sort((a, b) => (b.monthRevenue || 0) - (a.monthRevenue || 0)),
+    [allAdminCompanies]
+  );
+
+  const maxRevenue = ranked.length > 0 ? ranked[0].monthRevenue || 1 : 1;
+
+  // ── Plan breakdown bar chart ──────────────────────────────────────────────
+  const planBreakdown = useMemo(() => {
+    const counts: Record<string, number> = { Starter: 0, Business: 0, Premium: 0 };
+    allAdminCompanies.forEach((c) => {
+      if (counts[c.plan] !== undefined) counts[c.plan]++;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [allAdminCompanies]);
+
+  // ── Status breakdown ──────────────────────────────────────────────────────
+  const statusData = useMemo(() => {
+    const active = allAdminCompanies.filter((c) => c.status === "active").length;
+    const inactive = allAdminCompanies.filter((c) => c.status !== "active").length;
+    return [
+      { name: "Ativas", value: active },
+      { name: "Inativas", value: inactive },
+    ];
+  }, [allAdminCompanies]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -19,72 +52,134 @@ export default function AdminReports() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Plan breakdown */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
-          <h3 className="text-white mb-1">Receita Total por Mês</h3>
-          <p className="text-gray-400 text-xs mb-4">Soma de todas as empresas</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={adminRevenueData}>
-              <defs>
-                <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#7C3AED" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="month" stroke="#6B7280" tick={{ fontSize: 12 }} />
-              <YAxis stroke="#6B7280" tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${(v/1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }} formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, "Receita"]} />
-              <Area type="monotone" dataKey="revenue" stroke="#7C3AED" strokeWidth={2} fill="url(#revGrad)" />
-            </AreaChart>
-          </ResponsiveContainer>
+          <h3 className="text-white mb-1">Empresas por Plano</h3>
+          <p className="text-gray-400 text-xs mb-4">Distribuição de assinaturas</p>
+          {loading ? (
+            <div className="flex items-center justify-center h-[220px] text-gray-500 text-sm">Carregando...</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={planBreakdown} barSize={40}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="name" stroke="#6B7280" tick={{ fontSize: 12 }} />
+                <YAxis stroke="#6B7280" tick={{ fontSize: 12 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }}
+                  formatter={(v: number) => [v, "Empresas"]}
+                />
+                <Bar dataKey="value" fill="#7C3AED" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
+        {/* Status breakdown */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
-          <h3 className="text-white mb-1">Empresas Ativas</h3>
-          <p className="text-gray-400 text-xs mb-4">Crescimento da base de empresas</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={adminRevenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="month" stroke="#6B7280" tick={{ fontSize: 12 }} />
-              <YAxis stroke="#6B7280" tick={{ fontSize: 12 }} />
-              <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }} />
-              <Line type="monotone" dataKey="companies" stroke="#0D9488" strokeWidth={2} dot={{ fill: "#0D9488", r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          <h3 className="text-white mb-1">Status das Empresas</h3>
+          <p className="text-gray-400 text-xs mb-4">Ativas vs. inativas</p>
+          {loading ? (
+            <div className="flex items-center justify-center h-[220px] text-gray-500 text-sm">Carregando...</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={statusData} barSize={60}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="name" stroke="#6B7280" tick={{ fontSize: 12 }} />
+                <YAxis stroke="#6B7280" tick={{ fontSize: 12 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }}
+                  formatter={(v: number) => [v, "Empresas"]}
+                />
+                <Bar dataKey="value" fill="#0D9488" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
+      {/* Revenue ranking */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
-        <h3 className="text-white mb-4">Ranking de Empresas por Receita</h3>
-        <div className="space-y-3">
-          {companies
-            .filter((c) => c.monthRevenue > 0)
-            .sort((a, b) => b.monthRevenue - a.monthRevenue)
-            .map((company, idx) => {
-              const maxRevenue = Math.max(...companies.map((c) => c.monthRevenue));
-              const percentage = (company.monthRevenue / maxRevenue) * 100;
+        <h3 className="text-white mb-4">Ranking de Empresas por Receita do Mês</h3>
+        {loading ? (
+          <p className="text-center text-gray-500 text-sm py-8">Carregando dados...</p>
+        ) : ranked.length === 0 ? (
+          <div className="text-center py-8">
+            <Building2 className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">Nenhuma receita registrada este mês</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {ranked.map((company, idx) => {
+              const pct = ((company.monthRevenue || 0) / maxRevenue) * 100;
               return (
                 <div key={company.id} className="flex items-center gap-4">
                   <span className="text-gray-500 text-sm w-5">{idx + 1}</span>
                   <div className="flex items-center gap-2 w-48 shrink-0">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs" style={{ background: company.color, fontWeight: 700 }}>
-                      {company.logo.charAt(0)}
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs"
+                      style={{ background: company.color || "#7C3AED", fontWeight: 700 }}
+                    >
+                      {(company.logo || company.name).charAt(0)}
                     </div>
                     <span className="text-sm text-gray-300 truncate">{company.name}</span>
                   </div>
                   <div className="flex-1 bg-gray-700 rounded-full h-2">
                     <div
-                      className="h-2 rounded-full"
-                      style={{ width: `${percentage}%`, background: company.color }}
+                      className="h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%`, background: company.color || "#7C3AED" }}
                     />
                   </div>
-                  <span className="text-sm text-white w-28 text-right" style={{ fontWeight: 600 }}>
-                    R$ {company.monthRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  <span className="text-sm text-white w-32 text-right" style={{ fontWeight: 600 }}>
+                    R$ {(company.monthRevenue || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               );
             })}
-        </div>
+          </div>
+        )}
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          {
+            label: "Total de Empresas",
+            value: allAdminCompanies.length,
+            icon: Building2,
+            color: "#7C3AED",
+          },
+          {
+            label: "Empresas Ativas",
+            value: allAdminCompanies.filter((c) => c.status === "active").length,
+            icon: TrendingUp,
+            color: "#0D9488",
+          },
+          {
+            label: "Receita Total do Mês",
+            value: `R$ ${allAdminCompanies.reduce((s, c) => s + (c.monthRevenue || 0), 0).toLocaleString("pt-BR")}`,
+            icon: TrendingUp,
+            color: "#F59E0B",
+          },
+          {
+            label: "Receita Total Acumulada",
+            value: `R$ ${(allAdminCompanies.reduce((s, c) => s + (c.totalRevenue || 0), 0) / 1000).toFixed(0)}k`,
+            icon: TrendingUp,
+            color: "#3B82F6",
+          },
+        ].map((card) => (
+          <div key={card.label} className="bg-gray-800 rounded-xl border border-gray-700 p-5">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center mb-3"
+              style={{ background: `${card.color}20` }}
+            >
+              <card.icon className="w-4 h-4" style={{ color: card.color }} />
+            </div>
+            <p className="text-gray-400 text-xs">{card.label}</p>
+            <p className="text-xl text-white mt-1" style={{ fontWeight: 700 }}>
+              {loading ? "—" : card.value}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );

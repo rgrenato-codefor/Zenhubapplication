@@ -2,16 +2,17 @@ import { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router";
 import {
   LayoutDashboard, Building2, Users, BarChart3, Settings,
-  LogOut, Menu, X, Bell, ChevronDown, Shield,
+  LogOut, Menu, X, Bell, ChevronDown, Shield, CreditCard,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 const navItems = [
-  { path: "/admin", icon: LayoutDashboard, label: "Dashboard", end: true },
-  { path: "/admin/empresas", icon: Building2, label: "Empresas" },
-  { path: "/admin/usuarios", icon: Users, label: "Usuários" },
-  { path: "/admin/relatorios", icon: BarChart3, label: "Relatórios" },
-  { path: "/admin/configuracoes", icon: Settings, label: "Configurações" },
+  { path: "/admin",            icon: LayoutDashboard, label: "Dashboard",   end: true },
+  { path: "/admin/empresas",   icon: Building2,       label: "Empresas"             },
+  { path: "/admin/usuarios",   icon: Users,           label: "Usuários"             },
+  { path: "/admin/planos",     icon: CreditCard,      label: "Planos"               },
+  { path: "/admin/relatorios", icon: BarChart3,        label: "Relatórios"           },
+  { path: "/admin/configuracoes", icon: Settings,     label: "Configurações"        },
 ];
 
 export default function AdminLayout() {

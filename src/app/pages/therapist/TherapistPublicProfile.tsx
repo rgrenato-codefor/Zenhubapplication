@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router";
 import {
   Star, MapPin, Clock, CheckCircle, ArrowLeft, Share2,
@@ -5,8 +6,8 @@ import {
   Image, ChevronLeft, ChevronRight, User, Building2,
   Send,
 } from "lucide-react";
-import { useState } from "react";
-import { therapists, therapies as allTherapies, companies } from "../../data/mockData";
+import { getTherapistByUsername, getTherapiesByCompany, getCompany } from "../../../lib/firestore";
+import { therapists as mockTherapists, therapies as mockTherapies, companies as mockCompanies } from "../../data/mockData";
 import { therapistStore } from "../../store/therapistStore";
 
 const DAYS_MAP: Record<string, string> = {
@@ -23,8 +24,38 @@ export default function TherapistPublicProfile() {
   const [bookingModal, setBookingModal] = useState(false);
   const [bookingStep, setBookingStep] = useState<"form" | "success">("form");
   const [bookingForm, setBookingForm] = useState({ name: "", phone: "", therapyId: "", date: "", time: "" });
+  const [therapist, setTherapist] = useState<any>(null);
+  const [allTherapies, setAllTherapies] = useState<any[]>([]);
+  const [company, setCompany] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
-  const therapist = therapists.find((t) => t.username === username);
+  useEffect(() => {
+    if (!username) return;
+    const load = async () => {
+      setLoadingProfile(true);
+      // Try Firestore first
+      let t = await getTherapistByUsername(username);
+      if (t) {
+        setTherapist(t);
+        if (t.companyId) {
+          const [co, ths] = await Promise.all([getCompany(t.companyId), getTherapiesByCompany(t.companyId)]);
+          setCompany(co);
+          setAllTherapies(ths);
+        }
+      } else {
+        // Fall back to mockData
+        const mockT = mockTherapists.find((m) => m.username === username);
+        if (mockT) {
+          setTherapist(mockT);
+          setAllTherapies(mockTherapies.filter((th) => mockT.therapies?.includes(th.id)));
+          const co = mockCompanies.find((c) => c.id === mockT.companyId);
+          setCompany(co ?? null);
+        }
+      }
+      setLoadingProfile(false);
+    };
+    load();
+  }, [username]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -55,7 +86,6 @@ export default function TherapistPublicProfile() {
 
   // Use store association to get real-time company link
   const assoc = therapistStore.getAssociation(therapist.id);
-  const company = companies.find((c) => c.id === assoc.companyId);
   const isAutonomous = !company;
   const commissionPct = assoc.commission;
 

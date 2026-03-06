@@ -3,11 +3,12 @@ import { useNavigate, Link } from "react-router";
 import {
   Sparkles, Building2, MapPin, User, Lock, CheckCircle,
   ArrowRight, ArrowLeft, Eye, EyeOff, Loader2, Star, Zap, Crown,
-  Phone, Mail, FileText, ChevronRight,
+  Phone, Mail, FileText, ChevronRight, AlertCircle,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { GoogleButton } from "../../components/shared/GoogleButton";
-import { signInWithGoogleGIS } from "../../../lib/googleGIS";
+// Google sign-in temporariamente desativado:
+// import { GoogleButton } from "../../components/shared/GoogleButton";
+// import { signInWithGoogleGIS } from "../../../lib/googleGIS";
 
 const STEPS = [
   { id: 1, label: "Empresa", icon: Building2 },
@@ -130,7 +131,7 @@ const BG_IMAGE = "https://images.unsplash.com/photo-1770573319051-c7e63d956d8c?c
 
 export default function CompanyRegister() {
   const navigate = useNavigate();
-  const { signInGoogle } = useAuth();
+  const { registerCompany } = useAuth();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormData>(initialForm);
   const [showPass, setShowPass] = useState(false);
@@ -138,7 +139,7 @@ export default function CompanyRegister() {
   const [errors, setErrors] = useState<Partial<FormData>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
-  const [googleLinked, setGoogleLinked] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const set = (field: keyof FormData, value: string) => {
     setForm((p) => ({ ...p, [field]: value }));
@@ -181,22 +182,57 @@ export default function CompanyRegister() {
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setSubmitting(false);
-    setDone(true);
-  };
-
-  const handleGoogleLink = async () => {
+    setSubmitError("");
     try {
-      const cred = await signInWithGoogleGIS();
-      const fbUser = cred.user;
-      set("responsibleName", fbUser.displayName || form.responsibleName);
-      set("responsibleEmail", fbUser.email || form.responsibleEmail);
-      setGoogleLinked(true);
-    } catch {
-      // user cancelled or error — silently ignore
+      await registerCompany({
+        companyName: form.companyName,
+        cnpj: form.cnpj,
+        phone: form.phone,
+        segment: form.segment,
+        street: form.street,
+        number: form.number,
+        complement: form.complement,
+        neighborhood: form.neighborhood,
+        city: form.city,
+        state: form.state,
+        cep: form.cep,
+        responsibleName: form.responsibleName,
+        responsibleEmail: form.responsibleEmail,
+        responsiblePhone: form.responsiblePhone,
+        role: form.role,
+        password: form.password,
+        plan: form.plan,
+      });
+      setDone(true);
+      // Brief delay so the success screen is visible, then redirect
+      setTimeout(() => navigate("/empresa"), 2000);
+    } catch (err: any) {
+      const code = err?.code ?? "";
+      if (code === "auth/email-already-in-use") {
+        setSubmitError("Este e-mail já está cadastrado. Faça login ou use outro e-mail.");
+      } else if (code === "auth/weak-password") {
+        setSubmitError("Senha muito fraca. Use no mínimo 6 caracteres.");
+      } else if (code === "auth/invalid-email") {
+        setSubmitError("E-mail inválido.");
+      } else {
+        setSubmitError("Erro ao criar conta. Verifique sua conexão e tente novamente.");
+      }
+      setSubmitting(false);
     }
   };
+
+  // Google sign-in temporariamente desativado:
+  // const handleGoogleLink = async () => {
+  //   try {
+  //     const cred = await signInWithGoogleGIS();
+  //     const fbUser = cred.user;
+  //     set("responsibleName", fbUser.displayName || form.responsibleName);
+  //     set("responsibleEmail", fbUser.email || form.responsibleEmail);
+  //     setGoogleLinked(true);
+  //   } catch {
+  //     // user cancelled or error — silently ignore
+  //   }
+  // };
 
   const inputCls = (field: keyof FormData) =>
     `w-full px-4 py-3 rounded-xl border text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 transition-all ${
@@ -528,21 +564,21 @@ export default function CompanyRegister() {
                 </div>
                 <div className="space-y-4">
                   {/* Google link - temporariamente oculto */}
-                  {!googleLinked ? (
+                  {/* {!googleLinked ? (
                     <>
-                      {/* <GoogleButton onClick={handleGoogleLink} label="Preencher com Google" variant="dark" /> */}
-                      {/* <div className="flex items-center gap-3">
+                      <GoogleButton onClick={handleGoogleLink} label="Preencher com Google" variant="dark" />
+                      <div className="flex items-center gap-3">
                         <div className="flex-1 h-px bg-white/10" />
                         <span className="text-gray-500 text-xs">ou preencha manualmente</span>
                         <div className="flex-1 h-px bg-white/10" />
-                      </div> */}
+                      </div>
                     </>
                   ) : (
                     <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
                       <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
                       <p className="text-emerald-300 text-sm">Conta Google vinculada — dados preenchidos automaticamente</p>
                     </div>
-                  )}
+                  )} */}
                   <div>
                     <label className={labelCls} style={{ fontWeight: 600, color: "#D1D5DB" }}>Nome completo *</label>
                     <input
@@ -790,6 +826,13 @@ export default function CompanyRegister() {
                 Fazer login
               </Link>
             </p>
+
+            {/* Error message */}
+            {submitError && (
+              <p className="text-center text-red-400 text-sm mt-4">
+                <AlertCircle className="w-4 h-4 inline-block mr-1" /> {submitError}
+              </p>
+            )}
           </div>
         </div>
       </div>

@@ -2,10 +2,9 @@ import { useState } from "react";
 import { useNavigate, useParams, Link } from "react-router";
 import {
   Sparkles, User, Mail, Phone, Lock, Eye, EyeOff,
-  ArrowRight, CheckCircle, Loader2, Heart, Calendar, Star,
+  ArrowRight, CheckCircle, Loader2, Heart, Calendar, Star, AlertCircle,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { GoogleButton } from "../../components/shared/GoogleButton";
 
 const BG_IMAGE = "https://images.unsplash.com/photo-1633526543913-d30e3c230d1f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtYXNzYWdlJTIwdGhlcmFweSUyMHJlbGF4YXRpb24lMjBoYW5kc3xlbnwxfHx8fDE3NzI2Nzg2NjF8MA&ixlib=rb-4.1.0&q=80&w=1080";
 
@@ -39,7 +38,7 @@ const BENEFITS = [
 export default function ClientRegister() {
   const { slug } = useParams<{ slug?: string }>();
   const navigate = useNavigate();
-  const { signInGoogle } = useAuth();
+  const { registerClient } = useAuth();
 
   const [form, setForm] = useState<Form>({
     name: "", email: "", phone: "", birthdate: "", password: "", confirmPassword: "",
@@ -50,6 +49,7 @@ export default function ClientRegister() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const set = (field: keyof Form, value: string) => {
     setForm((p) => ({ ...p, [field]: value }));
@@ -75,9 +75,29 @@ export default function ClientRegister() {
     if (!validate()) return;
     if (!agreed) { alert("Aceite os termos para continuar."); return; }
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setSubmitting(false);
-    setDone(true);
+    setSubmitError("");
+    try {
+      await registerClient({
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        birthdate: form.birthdate,
+        password: form.password,
+        slug,
+      });
+      setDone(true);
+      setTimeout(() => navigate("/cliente"), 2500);
+    } catch (err: any) {
+      const code = err?.code ?? "";
+      if (code === "auth/email-already-in-use") {
+        setSubmitError("Este e-mail já está cadastrado. Faça login ou use outro e-mail.");
+      } else if (code === "auth/weak-password") {
+        setSubmitError("Senha muito fraca. Use no mínimo 6 caracteres.");
+      } else {
+        setSubmitError("Erro ao criar conta. Tente novamente.");
+      }
+      setSubmitting(false);
+    }
   };
 
   const handleGoogle = async () => {
@@ -330,6 +350,13 @@ export default function ClientRegister() {
                 </div>
                 {errors.confirmPassword && <p className="text-red-400 text-xs mt-1">{errors.confirmPassword}</p>}
               </div>
+
+              {submitError && (
+                <div className="flex items-center gap-2 bg-red-900/30 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {submitError}
+                </div>
+              )}
 
               {/* Terms */}
               <label className="flex items-start gap-3 cursor-pointer group">

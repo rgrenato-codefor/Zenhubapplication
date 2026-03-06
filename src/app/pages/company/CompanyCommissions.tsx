@@ -10,11 +10,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,
 } from "recharts";
-import {
-  therapists, therapies, commissions as mockCommissions,
-  companies, appointments,
-} from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
+import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
 
 type Tab = "earnings" | "settings";
@@ -22,13 +19,13 @@ type PayStatus = "pending" | "paid";
 
 // ── Months (mock navigation) ──────────────────────────────────────────────────
 const MONTHS = [
-  { label: "Set 2025", key: "Set" },
-  { label: "Out 2025", key: "Out" },
-  { label: "Nov 2025", key: "Nov" },
-  { label: "Dez 2025", key: "Dez" },
-  { label: "Jan 2026", key: "Jan" },
-  { label: "Fev 2026", key: "Fev" },
-  { label: "Mar 2026", key: "Mar" },
+  { label: "Set 2025", key: "Set", year: 2025, month: 9 },
+  { label: "Out 2025", key: "Out", year: 2025, month: 10 },
+  { label: "Nov 2025", key: "Nov", year: 2025, month: 11 },
+  { label: "Dez 2025", key: "Dez", year: 2025, month: 12 },
+  { label: "Jan 2026", key: "Jan", year: 2026, month: 1 },
+  { label: "Fev 2026", key: "Fev", year: 2026, month: 2 },
+  { label: "Mar 2026", key: "Mar", year: 2026, month: 3 },
 ];
 
 // ── Mock earnings history per therapist (last 6 months before current) ────────
@@ -71,83 +68,115 @@ const STATUS_CONFIG = {
 
 export default function CompanyCommissions() {
   const { user } = useAuth();
+  const { company, therapists: allTherapists, sessionRecords,
+    therapistStore: store, mutateUpdateTherapistCommission,
+    mutateMarkCommissionPaid } = usePageData();
   const { selectedUnitId } = useCompanyUnit();
-  const company = companies.find((c) => c.id === user?.companyId);
-  const primaryColor = company?.color || "#0D9488";
   const navigate = useNavigate();
+  const primaryColor = company?.color || "#0D9488";
+  const companyId = user?.companyId ?? "";
 
   const [tab, setTab] = useState<Tab>("earnings");
   const [monthIdx, setMonthIdx] = useState(MONTHS.length - 1); // Mar 2026
-  const [paymentStatus, setPaymentStatus] = useState<Record<string, PayStatus>>(
-    Object.fromEntries(therapists.map((t) => [t.id, "pending"]))
-  );
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [paying, setPaying] = useState<string | null>(null); // therapist id being processed
 
   // ── Settings tab state ──────────────────────────────────────────────────────
   const [globalRate, setGlobalRate] = useState(50);
   const [rates, setRates] = useState<Record<string, number>>(
-    Object.fromEntries(therapists.map((t) => [t.id, t.commission]))
+    Object.fromEntries(allTherapists.map((t) => [t.id, t.commission]))
   );
   const [editing, setEditing] = useState<string | null>(null);
   const [tempRate, setTempRate] = useState(0);
 
-  const companyTherapists = therapists
+  const companyTherapists = allTherapists
     .filter((t) => t.companyId === user?.companyId)
     .filter((t) => !selectedUnitId || (t as any).unitId === selectedUnitId);
-  const companyTherapies = therapies.filter((t) => t.companyId === user?.companyId);
   const currentMonth = MONTHS[monthIdx];
 
   // ── Earnings calculation per therapist ────────────────────────────────────
   const therapistEarnings = useMemo(() => {
     return companyTherapists.map((therapist) => {
       const rate = rates[therapist.id] ?? therapist.commission;
-      // Use monthSessions / monthEarnings from mock (for current month)
-      // For previous months, use HISTORY_DATA
-      const isCurrentMonth = currentMonth.key === "Mar";
-      let sessions: number, gross: number, net: number;
 
-      if (isCurrentMonth) {
-        sessions = therapist.monthSessions;
-        net = therapist.monthEarnings;
-        gross = net > 0 ? net / (rate / 100) : therapist.monthSessions * 160;
+      // All session records for this therapist + company + current month
+      const monthRecords = (sessionRecords as any[]).filter((r) => {
+        if (r.therapistId !== therapist.id) return false;
+        if (r.companyId && r.companyId !== companyId) return false;
+        try {
+          const d = new Date(r.date ?? r.completedAt ?? "");
+          return (
+            d.getFullYear() === currentMonth.year &&
+            d.getMonth() + 1 === currentMonth.month
+          );
+        } catch {
+          return false;
+        }
+      });
+
+      // Split paid vs unpaid records
+      const paidRecords   = monthRecords.filter((r: any) => r.paidByCompany === true);
+      const unpaidRecords = monthRecords.filter((r: any) => r.paidByCompany !== true);
+
+      let sessions: number, gross: number, net: number, alreadyPaid: number;
+
+      if (monthRecords.length > 0) {
+        sessions    = monthRecords.length;
+        gross       = monthRecords.reduce((s: number, r: any) => s + (r.totalCharged ?? 0), 0);
+        net         = monthRecords.reduce((s: number, r: any) => s + (r.therapistEarned ?? 0), 0);
+        alreadyPaid = paidRecords.reduce((s: number, r: any) => s + (r.therapistEarned ?? 0), 0);
       } else {
+        // Fallback to history data for months with no real records
         const hist = HISTORY_DATA[therapist.id]?.find((h) => h.month === currentMonth.key);
-        sessions = hist?.sessions ?? 0;
-        gross = hist?.gross ?? 0;
-        net = hist?.net ?? 0;
+        sessions    = hist?.sessions ?? 0;
+        gross       = hist?.gross ?? 0;
+        net         = hist?.net ?? 0;
+        alreadyPaid = 0; // historic data always shows as pending
       }
 
-      const companyShare = gross - net;
-      return { therapist, rate, sessions, gross, net, companyShare };
-    });
-  }, [companyTherapists, rates, currentMonth]);
+      const companyShare  = gross - net;
+      const pendingAmount = net - alreadyPaid;
+      const isPaid        = monthRecords.length > 0
+        ? unpaidRecords.length === 0
+        : false;
+      const unpaidIds     = unpaidRecords.map((r: any) => r.id as string);
 
-  const totalNet = therapistEarnings.reduce((s, e) => s + e.net, 0);
-  const totalGross = therapistEarnings.reduce((s, e) => s + e.gross, 0);
+      return {
+        therapist, rate, sessions, gross, net,
+        companyShare, alreadyPaid, pendingAmount, isPaid, unpaidIds,
+      };
+    });
+  }, [companyTherapists, rates, currentMonth, sessionRecords, companyId]);
+
+  const totalNet     = therapistEarnings.reduce((s, e) => s + e.net, 0);
+  const totalGross   = therapistEarnings.reduce((s, e) => s + e.gross, 0);
   const totalSessions = therapistEarnings.reduce((s, e) => s + e.sessions, 0);
-  const totalPending = therapistEarnings
-    .filter((e) => paymentStatus[e.therapist.id] === "pending")
-    .reduce((s, e) => s + e.net, 0);
-  const pendingCount = therapistEarnings.filter((e) => paymentStatus[e.therapist.id] === "pending").length;
+  const totalPending  = therapistEarnings.reduce((s, e) => s + e.pendingAmount, 0);
+  const pendingCount  = therapistEarnings.filter((e) => !e.isPaid && e.net > 0).length;
 
-  const markAllPaid = () => {
-    setPaymentStatus((prev) => {
-      const updated = { ...prev };
-      companyTherapists.forEach((t) => { updated[t.id] = "paid"; });
-      return updated;
-    });
+  // ── Pay handler ─────────────────────────────────────────────────────────────
+  const handlePayTherapist = async (e: React.MouseEvent, entry: typeof therapistEarnings[0]) => {
+    e.stopPropagation();
+    if (entry.isPaid || entry.unpaidIds.length === 0) return;
+    setPaying(entry.therapist.id);
+    await mutateMarkCommissionPaid(entry.unpaidIds);
+    setPaying(null);
   };
 
-  const togglePayment = (id: string) => {
-    setPaymentStatus((prev) => ({
-      ...prev,
-      [id]: prev[id] === "paid" ? "pending" : "paid",
-    }));
+  const handlePayAll = async () => {
+    const allUnpaidIds = therapistEarnings.flatMap((e) => e.unpaidIds);
+    if (allUnpaidIds.length === 0) return;
+    setPaying("all");
+    await mutateMarkCommissionPaid(allUnpaidIds);
+    setPaying(null);
   };
 
   // ── Settings helpers ────────────────────────────────────────────────────────
   const startEdit = (id: string, currentRate: number) => { setEditing(id); setTempRate(currentRate); };
-  const saveEdit = (id: string) => { setRates((prev) => ({ ...prev, [id]: tempRate })); setEditing(null); };
+  const saveEdit = (id: string) => {
+    setRates((prev) => ({ ...prev, [id]: tempRate }));
+    setEditing(null);
+    mutateUpdateTherapistCommission(id, tempRate);
+  };
 
   return (
     <div className="space-y-6">
@@ -210,12 +239,13 @@ export default function CompanyCommissions() {
 
             {pendingCount > 0 && (
               <button
-                onClick={markAllPaid}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm transition-opacity hover:opacity-90"
+                onClick={handlePayAll}
+                disabled={paying === "all"}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm transition-opacity hover:opacity-90 disabled:opacity-60"
                 style={{ background: primaryColor, fontWeight: 600 }}
               >
                 <CheckCircle className="w-4 h-4" />
-                Pagar todos ({pendingCount})
+                {paying === "all" ? "Pagando..." : `Pagar todos (${pendingCount})`}
               </button>
             )}
           </div>
@@ -300,7 +330,7 @@ export default function CompanyCommissions() {
                   {therapistEarnings.map((e) => (
                     <Cell
                       key={e.therapist.id}
-                      fill={paymentStatus[e.therapist.id] === "paid" ? "#10B981" : primaryColor}
+                      fill={e.isPaid ? "#10B981" : primaryColor}
                     />
                   ))}
                 </Bar>
@@ -332,10 +362,11 @@ export default function CompanyCommissions() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {therapistEarnings.map(({ therapist, rate, sessions, gross, net, companyShare }) => {
-                const status = paymentStatus[therapist.id];
+              {therapistEarnings.map(({ therapist, rate, sessions, gross, net,
+                companyShare, alreadyPaid, pendingAmount, isPaid, unpaidIds }) => {
+                const status: PayStatus = isPaid ? "paid" : "pending";
                 const cfg = STATUS_CONFIG[status];
-                const isPaid = status === "paid";
+                const isProcessing = paying === therapist.id;
 
                 return (
                   <div
@@ -372,16 +403,24 @@ export default function CompanyCommissions() {
                       {/* Specialty */}
                       <p className="text-xs text-gray-500 mb-4 truncate">{therapist.specialty}</p>
 
-                      {/* Big amount */}
+                      {/* Amount breakdown */}
                       <div className="mb-4">
-                        <p className="text-xs text-gray-400 mb-0.5">A receber — {currentMonth.label}</p>
-                        <p className="text-2xl text-emerald-600" style={{ fontWeight: 700 }}>
-                          R$ {net.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs text-gray-400">A receber — {currentMonth.label}</p>
                           <span className={`text-xs px-2 py-0.5 rounded-full ${cfg.badge}`} style={{ fontWeight: 600 }}>
                             {cfg.label}
                           </span>
+                        </div>
+                        <p className={`text-2xl ${isPaid ? "text-emerald-500" : "text-emerald-600"}`} style={{ fontWeight: 700 }}>
+                          R$ {pendingAmount.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
+                        </p>
+                        {alreadyPaid > 0 && (
+                          <p className="text-xs text-emerald-500 mt-0.5 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            R$ {alreadyPaid.toLocaleString("pt-BR", { minimumFractionDigits: 0 })} já pagos
+                          </p>
+                        )}
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                           <span className="flex items-center gap-0.5 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600" style={{ fontWeight: 600 }}>
                             <Percent className="w-2.5 h-2.5" />{rate}%
                           </span>
@@ -407,17 +446,20 @@ export default function CompanyCommissions() {
                         ))}
                       </div>
 
-                      {/* Pay button — stopPropagation so click doesn't navigate */}
+                      {/* Pay button */}
                       <button
-                        onClick={(e) => { e.stopPropagation(); togglePayment(therapist.id); }}
-                        className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
+                        onClick={(e) => handlePayTherapist(e, { therapist, rate, sessions, gross, net, companyShare, alreadyPaid, pendingAmount, isPaid, unpaidIds })}
+                        disabled={isPaid || isProcessing || unpaidIds.length === 0}
+                        className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60"
                         style={
-                          !isPaid
+                          !isPaid && unpaidIds.length > 0
                             ? { background: primaryColor, color: "#fff", fontWeight: 600 }
                             : { background: "#F0FDF4", color: "#059669", border: "1px solid #BBF7D0", fontWeight: 600 }
                         }
                       >
-                        {!isPaid ? (
+                        {isProcessing ? (
+                          <><span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Pagando...</>
+                        ) : !isPaid && unpaidIds.length > 0 ? (
                           <><Banknote className="w-4 h-4" /> Pagar comissão</>
                         ) : (
                           <><CheckCircle className="w-4 h-4" /> Pago ✓</>
@@ -437,7 +479,7 @@ export default function CompanyCommissions() {
               {[
                 { label: "Total de sessões", value: totalSessions, color: "#8B5CF6" },
                 { label: "Receita bruta total", value: `R$ ${totalGross.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`, color: primaryColor },
-                { label: "Total a pagar (comissões)", value: `R$ ${totalNet.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`, color: "#059669" },
+                { label: "A pagar (pendente)", value: `R$ ${totalPending.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`, color: "#F59E0B" },
                 { label: "Receita líquida empresa", value: `R$ ${(totalGross - totalNet).toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`, color: "#374151" },
               ].map((s) => (
                 <div key={s.label}>
