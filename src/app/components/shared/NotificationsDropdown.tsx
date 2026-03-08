@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import {
   Bell, X, CheckCheck, CalendarDays, DollarSign,
   Users, Building2, AlertTriangle, Sparkles, CheckCircle, Clock,
@@ -115,6 +116,12 @@ const THEME: Record<
   },
 };
 
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+const ALL_ROUTES: Partial<Record<NotifVariant, string>> = {
+  therapist: "/terapeuta/notificacoes",
+};
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -130,6 +137,7 @@ export function NotificationsDropdown({
 }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const { notifications, unreadCount, dismiss, markAllRead } = useNotifications(variant);
   const th = THEME[variant];
 
@@ -257,7 +265,12 @@ export function NotificationsDropdown({
             className={`px-4 py-2.5 border-t ${th.footerBg} ${th.footerBorder}`}
           >
             <button
-              onClick={() => { handleMarkAll(); setOpen(false); }}
+              onClick={() => {
+                handleMarkAll();
+                setOpen(false);
+                const route = ALL_ROUTES[variant];
+                if (route) navigate(route);
+              }}
               className={`w-full py-2 rounded-xl text-xs transition-colors ${th.btnClass}`}
               style={{ fontWeight: 600 }}
             >

@@ -7,13 +7,15 @@ import {
   LogOut, Menu, X, Bell, Sparkles, Layers,
 } from "../shared/icons";
 import { NotificationsDropdown } from "../shared/NotificationsDropdown";
+import { useNotifications } from "../../hooks/useNotifications";
 
 const navItems = [
-  { path: "/terapeuta",          icon: LayoutDashboard, label: "Dashboard",  end: true },
-  { path: "/terapeuta/agenda",   icon: CalendarDays,    label: "Agenda" },
-  { path: "/terapeuta/terapias", icon: Layers,          label: "Terapias" },
-  { path: "/terapeuta/ganhos",   icon: DollarSign,      label: "Ganhos" },
-  { path: "/terapeuta/perfil",   icon: UserCircle,      label: "Perfil" },
+  { path: "/terapeuta",               icon: LayoutDashboard, label: "Dashboard",      end: true },
+  { path: "/terapeuta/agenda",        icon: CalendarDays,    label: "Agenda" },
+  { path: "/terapeuta/terapias",      icon: Layers,          label: "Terapias" },
+  { path: "/terapeuta/ganhos",        icon: DollarSign,      label: "Ganhos" },
+  { path: "/terapeuta/notificacoes",  icon: Bell,            label: "Notificações" },
+  { path: "/terapeuta/perfil",        icon: UserCircle,      label: "Perfil" },
 ];
 
 export default function TherapistLayout() {
@@ -22,6 +24,7 @@ export default function TherapistLayout() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { unreadCount } = useNotifications("therapist");
 
   // One-time refresh when entering the therapist area so stale company state
   // (e.g. dissociation done in another session) is reflected immediately.
@@ -100,7 +103,17 @@ export default function TherapistLayout() {
                 }`
               }
             >
-              <item.icon className="w-5 h-5 shrink-0" />
+              <span className="relative shrink-0">
+                <item.icon className="w-5 h-5" />
+                {item.label === "Notificações" && unreadCount > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-0.5 flex items-center justify-center rounded-full bg-violet-600 text-white"
+                    style={{ fontSize: 9, fontWeight: 700 }}
+                  >
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </span>
               {sidebarOpen && <span className="text-sm">{item.label}</span>}
             </NavLink>
           ))}
@@ -188,8 +201,16 @@ export default function TherapistLayout() {
               >
                 {({ isActive }) => (
                   <>
-                    <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors ${isActive ? "bg-violet-100" : ""}`}>
+                    <div className={`relative w-8 h-8 flex items-center justify-center rounded-xl transition-colors ${isActive ? "bg-violet-100" : ""}`}>
                       <item.icon className="w-5 h-5" />
+                      {item.label === "Notificações" && unreadCount > 0 && (
+                        <span
+                          className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 flex items-center justify-center rounded-full bg-violet-600 text-white"
+                          style={{ fontSize: 9, fontWeight: 700 }}
+                        >
+                          {unreadCount > 9 ? "9+" : unreadCount}
+                        </span>
+                      )}
                     </div>
                     <span className="text-[10px]" style={{ fontWeight: isActive ? 600 : 400 }}>{item.label}</span>
                   </>

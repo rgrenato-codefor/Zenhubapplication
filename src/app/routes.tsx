@@ -40,6 +40,7 @@ import TherapistSchedule from "./pages/therapist/TherapistSchedule";
 import TherapistEarnings from "./pages/therapist/TherapistEarnings";
 import TherapistProfile from "./pages/therapist/TherapistProfile";
 import TherapistTherapies from "./pages/therapist/TherapistTherapies";
+import TherapistNotifications from "./pages/therapist/TherapistNotifications";
 
 // Client Pages
 import ClientHome from "./pages/client/ClientHome";
@@ -113,10 +114,11 @@ export const router = createBrowserRouter([
             Component: TherapistLayout,
             children: [
               { index: true, Component: TherapistDashboard },
-              { path: "agenda", Component: TherapistSchedule },
-              { path: "terapias", Component: TherapistTherapies },
-              { path: "ganhos", Component: TherapistEarnings },
-              { path: "perfil", Component: TherapistProfile },
+              { path: "agenda",         Component: TherapistSchedule },
+              { path: "terapias",       Component: TherapistTherapies },
+              { path: "ganhos",         Component: TherapistEarnings },
+              { path: "perfil",         Component: TherapistProfile },
+              { path: "notificacoes",   Component: TherapistNotifications },
             ],
           },
         ],
