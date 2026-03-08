@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import {
   CalendarDays, Clock, CheckCircle, AlertCircle, XCircle, CalendarCheck,
   DollarSign, Building2, X, DoorOpen, Search, UserPlus, Loader2, Plus,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, RefreshCw,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
@@ -17,6 +17,13 @@ type ClosureModal = {
   therapyName: string;
   therapistName: string;
   commissionPct: number;
+} | null;
+
+type CancelModal = {
+  apt: any;
+  clientName: string;
+  therapistName: string;
+  therapyName: string;
 } | null;
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -63,6 +70,8 @@ export default function CompanySchedule() {
     therapistStore: tStore,
     sessionRecords, completedSessionIds, roomAssignments,
     mutateCompleteSession, mutateAddAppointment, mutateAddClient,
+    mutateUpdateAppointment,
+    refresh, loading,
   } = usePageData();
   const { selectedUnitId } = useCompanyUnit();
   const primaryColor = company?.color || "#0D9488";
@@ -75,6 +84,8 @@ export default function CompanySchedule() {
   const [extraNotes, setExtraNotes] = useState("");
   const [closureNotes, setClosureNotes] = useState("");
   const [closureSuccess, setClosureSuccess] = useState(false);
+  const [cancelModal, setCancelModal]     = useState<CancelModal>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   // ── Week navigation ────────────────────────────────────────────────────────
   const [weekOffset, setWeekOffset] = useState(0); // in days (shifts center)
@@ -334,9 +345,35 @@ export default function CompanySchedule() {
     setTimeout(() => setClosureSuccess(false), 3000);
   };
 
+  // ── Cancel ───────────────────────────────────────────────────────────────
+  const openCancel = (apt: any) => {
+    const cl        = clients.find((c) => c.id === apt.clientId);
+    const therapy   = therapies.find((t) => t.id === apt.therapyId);
+    const therapist = therapists.find((t) => t.id === apt.therapistId);
+    setCancelModal({
+      apt,
+      clientName:    cl?.name        ?? apt.clientName   ?? "Cliente",
+      therapistName: therapist?.name ?? "Terapeuta",
+      therapyName:   therapy?.name   ?? apt.therapyName  ?? "Terapia",
+    });
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancelModal) return;
+    setCancelLoading(true);
+    try {
+      await mutateUpdateAppointment(cancelModal.apt.id, { status: "cancelled" } as any);
+      setCancelModal(null);
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   // ── Summary ───────────────────────────────────────────────────────────────
+  // Cancelados não contam em nenhum total financeiro nem de sessões
+  const activeAppointments = companyAppointments.filter((a) => a.status !== "cancelled");
   const totalGross = companyRecords.reduce((acc, r) => acc + r.totalCharged, 0);
-  const totalNet = companyRecords.reduce((acc, r) => acc + r.companyNet, 0);
+  const totalNet   = companyRecords.reduce((acc, r) => acc + r.companyNet, 0);
 
   return (
     <div className="space-y-5">
@@ -353,6 +390,15 @@ export default function CompanySchedule() {
               <span style={{ fontWeight: 600 }}>Encerrado!</span>
             </div>
           )}
+          {/* Refresh button */}
+          <button
+            onClick={refresh}
+            disabled={loading}
+            title="Atualizar dados"
+            className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
           {/* Week nav */}
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
             <button
@@ -401,8 +447,8 @@ export default function CompanySchedule() {
       {/* Summary stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Sessões hoje", value: dayAppointments(TODAY_STR).length.toString(), color: primaryColor },
-          { label: "Total semana", value: companyAppointments.length.toString(), color: "#8B5CF6" },
+          { label: "Sessões hoje",  value: activeAppointments.filter((a) => a.date === TODAY_STR).length.toString(), color: primaryColor },
+          { label: "Total semana",  value: activeAppointments.length.toString(), color: "#8B5CF6" },
           { label: "Receita bruta", value: `R$ ${totalGross.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, color: "#059669" },
           { label: "Receita líquida", value: `R$ ${totalNet.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, color: "#D97706" },
         ].map((s) => (
@@ -543,9 +589,11 @@ export default function CompanySchedule() {
                 const therapy = therapies.find((th) => th.id === apt.therapyId);
                 const effectiveStatus = getEffectiveStatus(apt);
                 const st = statusConfig[effectiveStatus] ?? statusConfig.confirmed;
-                const isCompleted = completedSessionIds.has(apt.id);
-                const canClose = !isCompleted && (apt.status === "confirmed" || apt.status === "pending");
-                const rec = companyRecords.find((r) => r.appointmentId === apt.id);
+                const isCompleted  = completedSessionIds.has(apt.id);
+                const isCancelled = apt.status === "cancelled";
+                const canClose    = !isCompleted && !isCancelled && (apt.status === "confirmed" || apt.status === "pending");
+                const canCancel   = !isCompleted && !isCancelled;
+                const rec         = companyRecords.find((r) => r.appointmentId === apt.id);
                 const roomId = roomAssignments[apt.id];
                 const room = roomId ? storeRooms.find((r) => r.id === roomId) : null;
                 return (
@@ -572,10 +620,10 @@ export default function CompanySchedule() {
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <div className="text-right">
-                        <p className="text-sm text-gray-900" style={{ fontWeight: 700 }}>
+                        <p className={`text-sm ${isCancelled ? "text-red-300 line-through" : "text-gray-900"}`} style={{ fontWeight: 700 }}>
                           R$ {rec ? rec.totalCharged.toFixed(2) : apt.price.toFixed(2)}
                         </p>
-                        {rec && <p className="text-xs text-emerald-600">Empresa: R$ {rec.companyNet.toFixed(2)}</p>}
+                        {rec && !isCancelled && <p className="text-xs text-emerald-600">Empresa: R$ {rec.companyNet.toFixed(2)}</p>}
                       </div>
                       <span className="text-xs px-2 py-1 rounded-full" style={{ background: st.bg, color: st.color, fontWeight: 600 }}>
                         {st.label}
@@ -587,6 +635,15 @@ export default function CompanySchedule() {
                           style={{ background: primaryColor, fontWeight: 600 }}
                         >
                           <CalendarCheck className="w-3.5 h-3.5" /> Encerrar
+                        </button>
+                      )}
+                      {canCancel && (
+                        <button
+                          onClick={() => openCancel(apt)}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                          style={{ fontWeight: 600 }}
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Cancelar
                         </button>
                       )}
                     </div>
@@ -618,11 +675,14 @@ export default function CompanySchedule() {
                 const therapy = therapies.find((th) => th.id === apt.therapyId);
                 const st = statusConfig[getEffectiveStatus(apt)] ?? statusConfig.confirmed;
                 const rec = companyRecords.find((r) => r.appointmentId === apt.id);
-                const canClose = !completedSessionIds.has(apt.id) && (apt.status === "confirmed" || apt.status === "pending");
+                const isCompletedL = completedSessionIds.has(apt.id);
+                const isCancelledL = apt.status === "cancelled";
+                const canClose     = !isCompletedL && !isCancelledL && (apt.status === "confirmed" || apt.status === "pending");
+                const canCancelL   = !isCompletedL && !isCancelledL;
                 const roomId = roomAssignments[apt.id];
                 const room = roomId ? storeRooms.find((r) => r.id === roomId) : null;
                 return (
-                  <tr key={apt.id} className="hover:bg-gray-50">
+                  <tr key={apt.id} className={`hover:bg-gray-50 ${isCancelledL ? "opacity-60 bg-red-50/30" : ""}`}>
                     <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{apt.date.split("-").reverse().join("/")} {apt.time}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{cl?.name}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{therapist?.name.split(" ")[0]}</td>
@@ -641,10 +701,13 @@ export default function CompanySchedule() {
                     <td className="px-4 py-3 text-sm text-orange-600 whitespace-nowrap">{rec ? `R$ ${rec.therapistEarned.toFixed(2)}` : "—"}</td>
                     <td className="px-4 py-3 text-sm text-emerald-600 whitespace-nowrap" style={{ fontWeight: 600 }}>{rec ? `R$ ${rec.companyNet.toFixed(2)}` : "—"}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: st.bg, color: st.color }}>{st.label}</span>
                         {canClose && (
                           <button onClick={() => openClosure(apt)} className="text-xs px-2 py-1 rounded-lg text-white whitespace-nowrap" style={{ background: primaryColor, fontWeight: 600 }}>Encerrar</button>
+                        )}
+                        {canCancelL && (
+                          <button onClick={() => openCancel(apt)} className="text-xs px-2 py-1 rounded-lg whitespace-nowrap border border-red-200 text-red-500 hover:bg-red-50 transition-colors" style={{ fontWeight: 600 }}>Cancelar</button>
                         )}
                       </div>
                     </td>
@@ -653,6 +716,76 @@ export default function CompanySchedule() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Cancel Confirmation Modal ─────────────────────────────────────── */}
+      {cancelModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
+                  <XCircle className="w-5 h-5 text-red-500" />
+                </div>
+                <div>
+                  <p className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>Cancelar Atendimento</p>
+                  <p className="text-gray-400 text-xs">{cancelModal.apt.time} · {cancelModal.apt.date.split("-").reverse().join("/")}</p>
+                </div>
+              </div>
+              <button onClick={() => setCancelModal(null)}>
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "Cliente",   value: cancelModal.clientName },
+                  { label: "Terapia",   value: cancelModal.therapyName },
+                  { label: "Terapeuta", value: cancelModal.therapistName.split(" ")[0] },
+                ].map((item) => (
+                  <div key={item.label} className="p-3 rounded-xl bg-gray-50">
+                    <p className="text-xs text-gray-400">{item.label}</p>
+                    <p className="text-sm text-gray-900 truncate" style={{ fontWeight: 600 }}>{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-100">
+                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-red-700" style={{ fontWeight: 600 }}>Esta ação não pode ser desfeita.</p>
+                  <p className="text-xs text-red-500 mt-1">
+                    O atendimento será marcado como cancelado e <strong>não contabilizará</strong> como ganho para nenhuma parte.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+              <button
+                onClick={() => setCancelModal(null)}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={handleConfirmCancel}
+                disabled={cancelLoading}
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-60 transition-colors"
+                style={{ fontWeight: 700 }}
+              >
+                {cancelLoading
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Cancelando...</>
+                  : <><XCircle className="w-4 h-4" /> Confirmar cancelamento</>
+                }
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

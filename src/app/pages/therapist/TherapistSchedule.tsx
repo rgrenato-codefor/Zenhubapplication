@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import {
   CalendarDays, Clock, CheckCircle, AlertCircle, User, X,
-  CalendarCheck, Plus, Loader2, Zap, Building2, ChevronLeft, ChevronRight,
+  CalendarCheck, Plus, Loader2, Zap, Building2, ChevronLeft, ChevronRight, RefreshCw,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
@@ -98,6 +98,8 @@ export default function TherapistSchedule() {
     therapistStore: store, mutateCompleteSession,
     mutateAddAppointment,
     mutateMyAvailability,
+    refresh, loading,
+    sessionRecords,
   } = usePageData();
 
   const myAppointments = allAppointments.filter((a) => a.therapistId === (user?.therapistId ?? therapist?.id));
@@ -422,6 +424,15 @@ export default function TherapistSchedule() {
               <span style={{ fontWeight: 600 }}>Salvo com sucesso!</span>
             </div>
           )}
+          {/* Refresh button */}
+          <button
+            onClick={refresh}
+            disabled={loading}
+            title="Atualizar dados"
+            className="w-9 h-9 flex items-center justify-center rounded-xl border border-violet-200 bg-white text-violet-400 hover:text-violet-600 hover:border-violet-400 hover:shadow-sm transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
           {tab === "agenda" && (
             <button
               onClick={() => openBooking()}
@@ -544,7 +555,17 @@ export default function TherapistSchedule() {
                 const catalog = apt ? myCatalog.find((c) => c.id === apt.catalogItemId) : null;
                 const isCompleted = apt ? store.isCompleted(apt.id) : false;
                 const canClose = apt && !isCompleted && (apt.status === "confirmed" || apt.status === "pending");
-                const earned = apt ? (isAutonomous ? apt.price : apt.price * commissionPct / 100) : 0;
+
+                // Para atendimentos encerrados, usar o valor CONGELADO do SessionRecord.
+                // Para atendimentos em aberto, usar a comissão atual (prévia).
+                const rec = apt ? sessionRecords.find((r) => r.appointmentId === apt.id) : null;
+                const earned = apt
+                  ? (isCompleted && rec != null
+                      ? rec.therapistEarned
+                      : (isAutonomous ? apt.price : apt.price * commissionPct / 100))
+                  : 0;
+                // Percentual real registrado no encerramento (para exibir no label)
+                const frozenPct = isCompleted && rec ? rec.commissionPct : commissionPct;
 
                 // Resolve display names (works for both autonomous and company-linked)
                 const clientDisplayName = cl?.name ?? apt?.clientName ?? "—";
@@ -570,7 +591,11 @@ export default function TherapistSchedule() {
                             <StatusBadge status={getAptStatus(apt)} />
                           </div>
                           <p className="text-xs text-gray-500">{therapyDisplayName} · {apt.duration}min</p>
-                          {isCompleted && <p className="text-xs text-emerald-600 mt-0.5" style={{ fontWeight: 600 }}>✓ +R$ {earned.toFixed(2)} registrado</p>}
+                          {isCompleted && (
+                            <p className="text-xs text-emerald-600 mt-0.5" style={{ fontWeight: 600 }}>
+                              ✓ +R$ {earned.toFixed(2)} registrado ({frozenPct}%)
+                            </p>
+                          )}
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <p className="text-sm text-emerald-600" style={{ fontWeight: 700 }}>+R$ {earned.toFixed(0)}</p>
@@ -608,7 +633,13 @@ export default function TherapistSchedule() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <p className="text-white/70 text-xs">Previsto do dia</p>
-                  <p className="text-xl" style={{ fontWeight: 700 }}>R$ {dayAppointments.reduce((acc, a) => acc + (isAutonomous ? a.price : a.price * commissionPct / 100), 0).toFixed(2)}</p>
+                  <p className="text-xl" style={{ fontWeight: 700 }}>R$ {dayAppointments.reduce((acc, a) => {
+                    // Encerrado → valor congelado; em aberto → comissão atual
+                    const r = sessionRecords.find((sr) => sr.appointmentId === a.id);
+                    const completed = store.isCompleted(a.id);
+                    const amt = completed && r ? r.therapistEarned : (isAutonomous ? a.price : a.price * commissionPct / 100);
+                    return acc + amt;
+                  }, 0).toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-white/70 text-xs">Encerrados</p>
