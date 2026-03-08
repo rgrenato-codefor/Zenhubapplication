@@ -7,6 +7,8 @@ import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import type { SessionRecord, CatalogItem } from "../../context/DataContext";
 import { checkAppointmentConflicts } from "../../lib/appointmentConflicts";
+import { BookingWizard } from "../../components/therapist/BookingWizard";
+import type { BookingForm } from "../../components/therapist/BookingWizard";
 
 type ClosureModal = {
   apt: any;
@@ -14,18 +16,6 @@ type ClosureModal = {
   therapyName: string;
   price: number;
 } | null;
-
-type BookingForm = {
-  date: string;
-  time: string;
-  clientName: string;
-  clientId: string;
-  catalogItemId: string;
-  therapyId: string;
-  duration: string;
-  price: string;
-  notes: string;
-};
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -218,6 +208,9 @@ export default function TherapistSchedule() {
   });
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState("");
+  // Ref síncrono para evitar double-submit (o state do React não é síncrono,
+  // então dois cliques rápidos podem passar pelo disabled antes do re-render)
+  const savingRef = useRef(false);
 
   // ── 181 datas para o seletor do modal (hoje + 180 dias futuros) ───────────
   const BOOKING_DATES = useMemo(() =>
@@ -305,11 +298,15 @@ export default function TherapistSchedule() {
       notes: "",
     });
     setBookingError("");
+    savingRef.current = false; // garante reset do guard ao abrir novo modal
     setShowBooking(true);
   };
 
   const setBookingField = (field: keyof BookingForm, value: string) => {
     setBookingForm((p) => ({ ...p, [field]: value }));
+    // Ao alterar qualquer campo, limpa o aviso de disponibilidade
+    // para que o próximo Confirmar avalie conflitos do zero
+    setBookingError((prev) => prev.startsWith("⚠️") ? "" : prev);
   };
 
   const handleCatalogSelect = (item: CatalogItem) => {
@@ -353,6 +350,9 @@ export default function TherapistSchedule() {
   };
 
   const handleSaveBooking = async () => {
+    // ── Guard síncrono contra double-submit ──────────────────────────────────
+    if (savingRef.current) return;
+
     const err = validateBooking();
     if (err) { setBookingError(err); return; }
     if (!therapist) return;
@@ -367,12 +367,16 @@ export default function TherapistSchedule() {
       duration: Number(bookingForm.duration),
     });
     if (blocked) { setBookingError(message); return; }
-    if (warn && bookingError !== message) {
-      setBookingError("⚠️ " + message + " Clique em Salvar novamente para agendar mesmo assim.");
+
+    // Bypass correto: na primeira vez com aviso mostra a mensagem e retorna;
+    // na segunda vez (bookingError já começa com "⚠️") deixa passar.
+    if (warn && !bookingError.startsWith("⚠️")) {
+      setBookingError("⚠️ " + message + " Clique em Confirmar novamente para agendar mesmo assim.");
       return;
     }
     // ─────────────────────────────────────────────────────────────────────
 
+    savingRef.current = true; // trava síncrona ANTES do primeiro await
     setBookingLoading(true);
     setBookingError("");
     try {
@@ -409,6 +413,7 @@ export default function TherapistSchedule() {
     } catch (e: any) {
       setBookingError(e?.message ?? "Erro ao salvar atendimento.");
     } finally {
+      savingRef.current = false; // libera após conclusão (sucesso ou erro)
       setBookingLoading(false);
     }
   };
@@ -727,226 +732,27 @@ export default function TherapistSchedule() {
         </div>
       )}
 
-      {/* ── Booking Modal ─────────────────────────────────────────────────────── */}
+      {/* ── Booking Wizard ────────────────────────────────────────────────────── */}
       {showBooking && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
-                  <Plus className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>Novo Atendimento</p>
-                  <p className="text-gray-400 text-xs">
-                    {isAutonomous ? (
-                      <span className="inline-flex items-center gap-1">
-                        <Zap className="w-3 h-3" /> Autônomo — 100% seu
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1">
-                        <Building2 className="w-3 h-3" /> {company?.name}
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setShowBooking(false)}><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-
-            <div className="px-6 py-5 space-y-4">
-              {/* Date + Time */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Data *</label>
-                  <select
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    value={bookingForm.date}
-                    onChange={(e) => setBookingField("date", e.target.value)}
-                  >
-                    {BOOKING_DATES.map((d) => (
-                      <option key={d.date} value={d.date}>{d.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Horário *</label>
-                  <select
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    value={bookingForm.time}
-                    onChange={(e) => setBookingField("time", e.target.value)}
-                  >
-                    {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {/* Client */}
-              <div>
-                <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>
-                  Cliente *
-                </label>
-                {isAutonomous ? (
-                  <input
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    placeholder="Nome do cliente"
-                    value={bookingForm.clientName}
-                    onChange={(e) => setBookingField("clientName", e.target.value)}
-                  />
-                ) : (
-                  <select
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    value={bookingForm.clientId}
-                    onChange={(e) => handleClientSelect(e.target.value)}
-                  >
-                    <option value="">Selecione o cliente...</option>
-                    {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                )}
-              </div>
-
-              {/* Service */}
-              <div>
-                <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>
-                  Serviço / Terapia *
-                </label>
-                {isAutonomous ? (
-                  myCatalog.length > 0 ? (
-                    <div className="space-y-1.5">
-                      {myCatalog.filter((c) => c.active !== false).map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => handleCatalogSelect(item)}
-                          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-left transition-all"
-                          style={
-                            bookingForm.catalogItemId === item.id
-                              ? { borderColor: item.color, background: `${item.color}12` }
-                              : { borderColor: "#E5E7EB", background: "#FAFAFA" }
-                          }
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full shrink-0" style={{ background: item.color }} />
-                            <span className="text-sm text-gray-800" style={{ fontWeight: bookingForm.catalogItemId === item.id ? 600 : 400 }}>
-                              {item.name}
-                            </span>
-                            <span className="text-xs text-gray-400">{item.duration}min</span>
-                          </div>
-                          <span className="text-sm text-emerald-600" style={{ fontWeight: 600 }}>R$ {item.myPrice}</span>
-                        </button>
-                      ))}
-                      <p className="text-xs text-gray-400 pt-1">Ou preencha duração e valor manualmente abaixo.</p>
-                    </div>
-                  ) : (
-                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
-                      <p className="text-amber-700 text-xs">
-                        Você ainda não tem serviços no catálogo. Preencha duração e valor manualmente.{" "}
-                        <a href="/terapeuta/terapias" className="underline" style={{ fontWeight: 600 }}>Criar catálogo</a>
-                      </p>
-                    </div>
-                  )
-                ) : (
-                  <select
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    value={bookingForm.therapyId}
-                    onChange={(e) => handleTherapySelect(e.target.value)}
-                  >
-                    <option value="">Selecione a terapia...</option>
-                    {therapies.map((t) => <option key={t.id} value={t.id}>{t.name} — R$ {t.price}</option>)}
-                  </select>
-                )}
-              </div>
-
-              {/* Duration + Price */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Duração (min) *</label>
-                  <input
-                    type="number"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    placeholder="60"
-                    value={bookingForm.duration}
-                    onChange={(e) => setBookingField("duration", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Valor (R$) *</label>
-                  <input
-                    type="number"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    placeholder="150"
-                    value={bookingForm.price}
-                    onChange={(e) => setBookingField("price", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Earnings preview */}
-              {bookingForm.price && (
-                <div className={`rounded-xl p-3 border ${isAutonomous ? "bg-violet-50 border-violet-100" : "bg-emerald-50 border-emerald-100"}`}>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">
-                      {isAutonomous ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Zap className="w-3 h-3" /> Você recebe (100%)
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1">
-                          <Building2 className="w-3 h-3" /> Sua comissão ({commissionPct}%)
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-base" style={{ fontWeight: 700, color: isAutonomous ? "#7C3AED" : "#059669" }}>
-                      R$ {(isAutonomous ? Number(bookingForm.price) : Number(bookingForm.price) * commissionPct / 100).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Notes */}
-              <div>
-                <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>Observações (opcional)</label>
-                <textarea
-                  rows={2}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"
-                  placeholder="Informações adicionais..."
-                  value={bookingForm.notes}
-                  onChange={(e) => setBookingField("notes", e.target.value)}
-                />
-              </div>
-
-              {bookingError && (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{bookingError}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex gap-3 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white rounded-b-2xl">
-              <button
-                onClick={() => setShowBooking(false)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveBooking}
-                disabled={bookingLoading}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm flex items-center justify-center gap-2 disabled:opacity-60"
-                style={{ fontWeight: 700 }}
-              >
-                {bookingLoading ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
-                ) : (
-                  <><CalendarCheck className="w-4 h-4" /> Confirmar</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+        <BookingWizard
+          isAutonomous={isAutonomous}
+          companyName={company?.name}
+          commissionPct={commissionPct}
+          myCatalog={myCatalog}
+          therapies={isAutonomous ? [] : therapies}
+          clients={clients}
+          bookingDates={BOOKING_DATES}
+          hours={HOURS}
+          form={bookingForm}
+          loading={bookingLoading}
+          error={bookingError}
+          onChange={setBookingField}
+          onCatalogSelect={handleCatalogSelect}
+          onTherapySelect={handleTherapySelect}
+          onClientSelect={handleClientSelect}
+          onSave={handleSaveBooking}
+          onClose={() => setShowBooking(false)}
+        />
       )}
 
       {/* ── Closure Modal ─────────────────────────────────────────────────────── */}

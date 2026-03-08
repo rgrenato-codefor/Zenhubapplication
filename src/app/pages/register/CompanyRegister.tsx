@@ -11,6 +11,8 @@ import { useCepLookup } from "../../hooks/useCepLookup";
 import { DEFAULT_COMPANY_PLANS, COMPANY_MODULES, type CompanyPlan } from "../../lib/planConfig";
 import { getCompanyPlans } from "../../../lib/firestore";
 
+import { ZenHubLogo } from "../../components/shared/ZenHubLogo";
+
 const STEPS = [
   { id: 1, label: "Empresa", icon: Building2 },
   { id: 2, label: "Endereço", icon: MapPin },
@@ -264,10 +266,7 @@ export default function CompanyRegister() {
         <div className="relative z-10 flex flex-col h-full p-10">
           {/* Logo */}
           <div className="flex items-center gap-3 mb-auto">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-white" style={{ fontWeight: 700, fontSize: "1.25rem" }}>ZEN HUB</span>
+            <ZenHubLogo variant="full" textColor="#ffffff" height={36} />
           </div>
 
           {/* Steps progress */}
@@ -325,12 +324,7 @@ export default function CompanyRegister() {
       <div className="flex-1 flex flex-col overflow-y-auto">
         {/* Mobile header */}
         <div className="lg:hidden flex items-center justify-between px-6 pt-6 pb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-white" style={{ fontWeight: 700 }}>ZEN HUB</span>
-          </div>
+          <ZenHubLogo variant="full" textColor="#ffffff" height={28} />
           {/* Mobile step dots */}
           <div className="flex items-center gap-1.5">
             {STEPS.map((s) => (

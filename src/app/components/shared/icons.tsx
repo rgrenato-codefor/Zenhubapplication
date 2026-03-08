@@ -91,6 +91,7 @@ import {
   DocumentDuplicateIcon,
   DocumentTextIcon,
   ClipboardDocumentCheckIcon,
+  ClipboardDocumentListIcon,
   BookmarkIcon,
   // Misc
   SparklesIcon,
@@ -272,8 +273,9 @@ export const ToggleLeft  = ChevronDoubleLeftIcon;
 export const ToggleRight = ChevronDoubleRightIcon;
 
 // Data / files
-export const Database = CircleStackIcon;
-export const FileText = DocumentTextIcon;
+export const Database      = CircleStackIcon;
+export const FileText      = DocumentTextIcon;
+export const ClipboardList = ClipboardDocumentListIcon;
 
 // Media
 export const Image        = PhotoIcon;
@@ -373,6 +375,7 @@ export {
   DocumentDuplicateIcon,
   DocumentTextIcon,
   ClipboardDocumentCheckIcon,
+  ClipboardDocumentListIcon,
   BookmarkIcon,
   CloudArrowUpIcon,
   ExclamationCircleIcon,

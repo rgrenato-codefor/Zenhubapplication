@@ -2,14 +2,10 @@ import { useState, useEffect } from "react";
 import {
   Save, Star, AtSign, Check, Copy, ExternalLink, Clock,
   CheckCircle, LogOut, Sparkles, AlertTriangle, X, Edit2,
-  Building2, Link2,
+  Building2, Link2, Camera, ChevronRightIcon,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
-import { useTherapistStore } from "../../store/therapistStore";
-import { MediaGallery } from "../../components/shared/MediaGallery";
-import type { MediaItem } from "../../../lib/imagekit";
-import { uploadMedia, deleteMedia } from "../../../lib/imagekit";
 
 const DAYS_MAP: Record<string, string> = {
   monday: "Seg", tuesday: "Ter", wednesday: "Qua",
@@ -17,52 +13,44 @@ const DAYS_MAP: Record<string, string> = {
 };
 
 export default function TherapistProfile() {
-  const { user } = useAuth();
+  const { user }    = useAuth();
   const {
     myTherapist: therapist, company,
     myGallery,
     mutateMyTherapistProfile,
     mutateLinkToCompany, mutateUnlinkFromCompany,
-    mutateAddMyGalleryItem, mutateRemoveMyGalleryItem,
   } = usePageData();
 
-  const [editing, setEditing] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [showLinkModal, setShowLinkModal] = useState(false);
-  const [codeInput, setCodeInput] = useState("");
-  const [codeError, setCodeError] = useState("");
-  const [linking, setLinking] = useState(false);
+  const [editing,           setEditing]           = useState(false);
+  const [copiedLink,        setCopiedLink]        = useState(false);
+  const [showLinkModal,     setShowLinkModal]     = useState(false);
+  const [codeInput,         setCodeInput]         = useState("");
+  const [codeError,         setCodeError]         = useState("");
+  const [linking,           setLinking]           = useState(false);
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [galleryUploading, setGalleryUploading] = useState(false);
+  const [saving,            setSaving]            = useState(false);
 
   const [form, setForm] = useState({
-    bio: therapist?.bio ?? "",
+    bio:       therapist?.bio       ?? "",
     specialty: therapist?.specialty ?? "",
-    phone: therapist?.phone ?? "",
+    phone:     therapist?.phone     ?? "",
   });
 
   // Sync form whenever therapist loads or changes
   useEffect(() => {
     if (therapist) {
       setForm({
-        bio: therapist.bio ?? "",
+        bio:       therapist.bio       ?? "",
         specialty: therapist.specialty ?? "",
-        phone: therapist.phone ?? "",
+        phone:     therapist.phone     ?? "",
       });
     }
   }, [therapist]);
 
-  // ── Association status ────────────────────────────────────────────────────────
-  // SOURCE OF TRUTH: DataContext `company` (loaded from Firestore, always fresh
-  // since TherapistLayout calls refresh() on mount).
-  const isPending  = false; // real pending state: therapist.companyId set but not approved
+  const isPending  = false;
   const isActive   = !!company;
   const isLinked   = isPending || isActive;
-
-  // Company data for display
-  const linkedCompany = company ?? null;
-  // Commission from therapist record (set by company)
+  const linkedCompany     = company ?? null;
   const companyCommission = therapist?.commission ?? null;
 
   if (!therapist) return (
@@ -106,30 +94,15 @@ export default function TherapistProfile() {
 
   const publicUrl = `zenhub.com.br/${therapist.username ?? user?.therapistId}`;
 
-  const handleGalleryUpload = async (file: File, onProgress: (p: number) => void): Promise<MediaItem> => {
-    const item = await uploadMedia(file, "/zen-hub/therapists", onProgress);
-    await mutateAddMyGalleryItem(item);
-    return item;
-  };
-
-  const handleGalleryRemove = async (itemId: string) => {
-    const item = myGallery.find((m) => m.id === itemId);
-    await deleteMedia(item?.fileId);
-    await mutateRemoveMyGalleryItem(itemId);
-  };
-
   return (
     <div className="space-y-4">
 
-      {/* ── Profile Card ─────────────────────────────────────────────────────── */}
+      {/* ── Profile Card ──────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-violet-100 shadow-sm">
-        {/* Cover gradient */}
         <div className="h-24 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-t-2xl" />
 
-        {/* Avatar + Info */}
         <div className="px-4 md:px-6 pb-5">
           <div className="flex items-end justify-between gap-3 -mt-10 mb-4">
-            {/* Avatar */}
             {therapist.avatar ? (
               <img
                 src={therapist.avatar}
@@ -145,7 +118,6 @@ export default function TherapistProfile() {
               </div>
             )}
 
-            {/* Edit / Save button */}
             {editing ? (
               <div className="flex gap-2 mb-1">
                 <button
@@ -175,7 +147,6 @@ export default function TherapistProfile() {
             )}
           </div>
 
-          {/* Name, specialty, rating */}
           <div className="space-y-1 mb-4">
             <h2 className="text-gray-900 text-lg" style={{ fontWeight: 700 }}>{therapist.name}</h2>
             {editing ? (
@@ -200,7 +171,6 @@ export default function TherapistProfile() {
             </div>
           </div>
 
-          {/* Phone (editing) */}
           {editing && (
             <div className="mb-4">
               <label className="text-xs text-gray-400 mb-1 block">Telefone</label>
@@ -213,7 +183,6 @@ export default function TherapistProfile() {
             </div>
           )}
 
-          {/* Bio */}
           <div>
             <label className="text-xs text-gray-400 mb-1.5 block">Bio</label>
             {editing ? (
@@ -233,12 +202,12 @@ export default function TherapistProfile() {
         </div>
       </div>
 
-      {/* ── Stats row ─────────────────────────────────────────────────────────── */}
+      {/* ── Stats row ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Avaliação", value: therapist.rating.toString(), suffix: "★" },
+          { label: "Avaliação",     value: therapist.rating.toString(),        suffix: "★" },
           { label: "Total sessões", value: therapist.totalSessions.toString() },
-          { label: "Este mês", value: therapist.monthSessions.toString() },
+          { label: "Este mês",      value: therapist.monthSessions.toString() },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-xl border border-violet-100 p-3 text-center shadow-sm">
             <p className="text-lg text-violet-600" style={{ fontWeight: 700 }}>{s.value}{s.suffix}</p>
@@ -247,7 +216,7 @@ export default function TherapistProfile() {
         ))}
       </div>
 
-      {/* ── Public link ───────────────────────────────────────────────────────── */}
+      {/* ── Public link ───────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-violet-100 p-4 md:p-5 shadow-sm">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
@@ -277,7 +246,7 @@ export default function TherapistProfile() {
         </div>
       </div>
 
-      {/* ── Company link ──────────────────────────────────────────────────────── */}
+      {/* ── Company link ──────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-violet-100 p-4 md:p-5 shadow-sm">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
@@ -293,13 +262,13 @@ export default function TherapistProfile() {
 
         {isLinked ? (
           <div className="space-y-3">
-            {/* Active or Pending state */}
             {isPending ? (
-              /* ── Awaiting approval ── */
               <div className="rounded-xl border-2 border-amber-200 overflow-hidden">
                 <div className="flex items-center gap-3 p-3 bg-amber-50">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs shrink-0"
-                    style={{ background: linkedCompany?.color, fontWeight: 700 }}>
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs shrink-0"
+                    style={{ background: linkedCompany?.color, fontWeight: 700 }}
+                  >
                     {linkedCompany?.logo}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -321,7 +290,6 @@ export default function TherapistProfile() {
                 </div>
               </div>
             ) : (
-              /* ── Active link ── */
               <div
                 className="flex items-center gap-3 p-3 rounded-xl"
                 style={{ background: `${linkedCompany?.color}12` }}
@@ -375,20 +343,28 @@ export default function TherapistProfile() {
         )}
       </div>
 
-      {/* ── Gallery ───────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-violet-100 p-4 md:p-5 shadow-sm">
-        <MediaGallery
-          items={myGallery}
-          onUpload={handleGalleryUpload}
-          onRemove={handleGalleryRemove}
-          canEdit
-          accentColor="#7C3AED"
-          title="Galeria de fotos & vídeos"
-          maxItems={30}
-        />
-      </div>
+      {/* ── Gallery shortcut ──────────────────────────────────────────────── */}
+      <a
+        href="/terapeuta/galeria"
+        className="flex items-center justify-between bg-white rounded-2xl border border-violet-100 p-4 md:p-5 shadow-sm hover:shadow-md hover:border-violet-200 transition-all group"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
+            <Camera className="w-4 h-4 text-violet-500" />
+          </div>
+          <div>
+            <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Galeria de fotos</p>
+            <p className="text-xs text-gray-400">
+              {myGallery.length > 0
+                ? `${myGallery.length} ${myGallery.length === 1 ? "foto publicada" : "fotos publicadas"}`
+                : "Nenhuma foto ainda · adicione agora"}
+            </p>
+          </div>
+        </div>
+        <ChevronRightIcon className="w-4 h-4 text-violet-400 group-hover:text-violet-600 transition-colors" />
+      </a>
 
-      {/* ── Availability ──────────────────────────────────────────────────────── */}
+      {/* ── Availability ──────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-violet-100 p-4 md:p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Disponibilidade</p>
@@ -424,7 +400,7 @@ export default function TherapistProfile() {
         )}
       </div>
 
-      {/* ── Link company modal ────────────────────────────────────────────────── */}
+      {/* ── Modal: entrar em empresa ──────────────────────────────────────── */}
       {showLinkModal && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl">
@@ -469,7 +445,7 @@ export default function TherapistProfile() {
         </div>
       )}
 
-      {/* ── Unlink confirm ────────────────────────────────────────────────────── */}
+      {/* ── Modal: desvincular empresa ────────────────────────────────────── */}
       {showUnlinkConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-sm shadow-2xl">

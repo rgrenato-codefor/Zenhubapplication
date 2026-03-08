@@ -163,10 +163,7 @@ export default function ClientRegister() {
         <div className="relative z-10 flex flex-col h-full p-10">
           {/* Logo */}
           <div className="flex items-center gap-3 mb-auto">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-lg">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-white" style={{ fontWeight: 700, fontSize: "1.25rem" }}>ZEN HUB</span>
+            <ZenHubLogo variant="full" textColor="#ffffff" height={36} />
           </div>
 
           {/* Content */}
@@ -209,10 +206,7 @@ export default function ClientRegister() {
         {/* Mobile header */}
         <div className="lg:hidden flex items-center justify-between px-6 pt-6 pb-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-white" style={{ fontWeight: 700 }}>ZEN HUB</span>
+            <ZenHubLogo variant="full" textColor="#ffffff" height={28} />
           </div>
         </div>
 

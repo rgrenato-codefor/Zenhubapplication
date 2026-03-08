@@ -6,9 +6,10 @@ import {
   Image, ChevronLeft, ChevronRight, User, Building2,
   Send,
 } from "../../components/shared/icons";
-import { getTherapistByUsername, getTherapiesByCompany, getCompany } from "../../../lib/firestore";
+import { getTherapistByUsername, getTherapiesByCompany, getCompany, getCatalogByTherapist } from "../../../lib/firestore";
 import { therapists as mockTherapists, therapies as mockTherapies, companies as mockCompanies } from "../../data/mockData";
 import { therapistStore } from "../../store/therapistStore";
+import { ZenHubLogo } from "../../components/shared/ZenHubLogo";
 
 const DAYS_MAP: Record<string, string> = {
   monday: "Seg", tuesday: "Ter", wednesday: "Qua",
@@ -28,6 +29,8 @@ export default function TherapistPublicProfile() {
   const [allTherapies, setAllTherapies] = useState<any[]>([]);
   const [company, setCompany] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  // Catalog carregado do Firestore (para visitantes anônimos que não têm o store hidratado)
+  const [firestoreCatalog, setFirestoreCatalog] = useState<any[]>([]);
 
   useEffect(() => {
     if (!username) return;
@@ -37,11 +40,37 @@ export default function TherapistPublicProfile() {
       let t = await getTherapistByUsername(username);
       if (t) {
         setTherapist(t);
+
+        // Sempre carrega o catálogo real do terapeuta (coleção therapistCatalog)
+        const catalogItems = await getCatalogByTherapist(t.id);
+        setFirestoreCatalog(catalogItems);
+
         if (t.companyId) {
-          const [co, ths] = await Promise.all([getCompany(t.companyId), getTherapiesByCompany(t.companyId)]);
+          const [co, ths] = await Promise.all([
+            getCompany(t.companyId),
+            getTherapiesByCompany(t.companyId),
+          ]);
           setCompany(co);
-          setAllTherapies(ths);
+
+          // ─── CORREÇÃO: exibe apenas as terapias que o terapeuta
+          // explicitamente optou em oferecer (presentes no therapistCatalog).
+          // Matching por nome (case-insensitive) — o mesmo critério usado
+          // em TherapistTherapies.tsx (selectedCompanyIds).
+          const catalogActiveNames = new Set(
+            catalogItems
+              .filter((c: any) => c.active !== false)
+              .map((c: any) => c.name.trim().toLowerCase())
+          );
+
+          if (catalogActiveNames.size > 0) {
+            setAllTherapies(ths.filter((th) => catalogActiveNames.has(th.name.trim().toLowerCase())));
+          } else {
+            // Terapeuta ainda não selecionou nenhuma terapia → não exibe nada
+            setAllTherapies([]);
+          }
         }
+        // Para terapeuta autônomo: allTherapies fica vazio;
+        // displayTherapies usará firestoreCatalog abaixo.
       } else {
         // Fall back to mockData
         const mockT = mockTherapists.find((m) => m.username === username);
@@ -97,11 +126,21 @@ export default function TherapistPublicProfile() {
   // Therapies to display: if linked to company → company therapies with company prices
   //                       if autonomous → therapist's catalog with own prices
   const companyTherapies = isAutonomous ? [] : allTherapies.filter((t) => t.companyId === assoc.companyId);
+
+  // Para o perfil público (visitado por clientes anônimos), usamos firestoreCatalog
+  // pois o therapistStore não está hidratado para visitantes externos.
+  // Para terapeuta autônomo: usa firestoreCatalog (Firestore); só cai no store se estiver vazio (mock/dev)
+  const autonomousCatalogSource = firestoreCatalog.length > 0
+    ? firestoreCatalog
+    : catalog; // fallback: store em memória (apenas para dados mock em dev)
+
   const displayTherapies = isAutonomous
-    ? catalog.filter((c) => c.active).map((c) => ({
-        id: c.id, name: c.name, duration: c.duration,
-        price: c.myPrice, category: c.category, color: c.color,
-      }))
+    ? autonomousCatalogSource
+        .filter((c: any) => c.active !== false)
+        .map((c: any) => ({
+          id: c.id, name: c.name, duration: c.duration,
+          price: c.myPrice, category: c.category, color: c.color,
+        }))
     : companyTherapies.map((t) => ({
         id: t.id, name: t.name, duration: t.duration,
         price: t.price, category: t.category, color: t.color,
@@ -127,7 +166,7 @@ export default function TherapistPublicProfile() {
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors">
             <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm" style={{ fontWeight: 500 }}>ZEN HUB</span>
+            <ZenHubLogo variant="full" textColor="#6B7280" height={18} />
           </Link>
           <div className="flex items-center gap-2">
             <button
@@ -368,7 +407,7 @@ export default function TherapistPublicProfile() {
         </div>
 
         <p className="text-center text-gray-400 text-xs pb-4">
-          Powered by <span className="text-violet-600" style={{ fontWeight: 600 }}>ZEN HUB</span>
+          Powered by <ZenHubLogo variant="full" textColor="#7C3AED" height={14} className="inline-block align-middle ml-1" />
         </p>
       </div>
 

@@ -50,7 +50,7 @@ import {
   type Therapy, type Room, type Appointment, type TherapistAssociation,
 } from "../../lib/firestore";
 
-// ─── Re-export types so pages can import from DataContext ─────────────────────
+// ─── Re-export types so pages can import from DataContext ─���───────────────────
 export type { Company, Unit, Therapist, Client, Therapy, Room, Appointment, SessionRecord, CatalogItem, MediaItem };
 
 // ─── Context type ─────────────────────────────────────────────────────────────
@@ -384,7 +384,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const chartUnitWeeklyData: Record<string, any> = {};
   const chartTherapistEarningsData: any[] = [];
 
-  // ── Mutations ───────────────────────────────────────��────────────────────
+  // ── Mutations ───────────────────────────────────────────────────────────
 
   // Company
   const mutateCompany = useCallback(async (data: Partial<Company>) => {
@@ -682,8 +682,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     roomStoreBridge: roomStore,
     roomAssignments,
     completedSessionIds,
-    myGallery: [],
-    companyGallery: [],
+    myGallery: (myTherapist as any)?.gallery ?? [],
+    companyGallery: (company as any)?.gallery ?? [],
     loading,
     mutateCompany,
     mutateAddUnit, mutateUpdateUnit, mutateDeleteUnit,

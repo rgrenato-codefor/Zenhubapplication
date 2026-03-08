@@ -7,6 +7,7 @@ import {
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { useData } from "../../context/DataContext";
+import { ZenHubLogo } from "../../components/shared/ZenHubLogo";
 
 type Step = 1 | 2 | 3;
 
@@ -240,10 +241,7 @@ export default function TherapistRegister() {
         </div>
         <div className="relative z-10 flex flex-col h-full p-10">
           <div className="flex items-center gap-3 mb-auto">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-lg">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-white" style={{ fontWeight: 700, fontSize: "1.25rem" }}>ZEN HUB</span>
+            <ZenHubLogo variant="full" textColor="#ffffff" height={36} />
           </div>
 
           <div className="flex-1 flex flex-col justify-center py-10">

@@ -10,6 +10,7 @@ import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { CompanyProvider, useCompanyUnit } from "../../context/CompanyContext";
+import { ZenHubLogo } from "../shared/ZenHubLogo";
 
 // ── Dashboard sub-items ──────────────────────────────────────────────────────
 
@@ -154,22 +155,16 @@ function CompanyLayoutInner() {
         className={`${sidebarOpen ? "w-64" : "w-16"} flex flex-col bg-white border-r border-gray-200 transition-all duration-300 shrink-0 shadow-sm`}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 p-4 border-b border-gray-100 h-16">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white text-xs"
-            style={{ background: primaryColor, fontWeight: 700 }}
-          >
-            {company?.logo ?? "EM"}
-          </div>
-          {sidebarOpen && (
-            <div className="min-w-0">
-              <p className="text-sm text-gray-900 truncate" style={{ fontWeight: 700 }}>
-                {company?.name}
-              </p>
-              <p className="text-xs text-gray-400 capitalize">
+        <div className="flex items-center gap-3 px-5 border-b border-gray-100 h-16 shrink-0">
+          {sidebarOpen ? (
+            <div className="flex flex-col justify-center">
+              <ZenHubLogo variant="full" textColor="#111827" height={34} />
+              <p className="text-xs text-gray-400 mt-0.5 capitalize">
                 {user?.role === "company_admin" ? "Admin da Empresa" : "Vendas"}
               </p>
             </div>
+          ) : (
+            <ZenHubLogo variant="icon" height={34} />
           )}
         </div>
 

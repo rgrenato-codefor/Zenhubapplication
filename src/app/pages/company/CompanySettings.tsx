@@ -10,7 +10,7 @@ import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { type Unit } from "../../context/DataContext";
 import { MediaGallery } from "../../components/shared/MediaGallery";
-import { uploadMedia, deleteMedia } from "../../../lib/imagekit";
+import { uploadMedia, deleteMedia, ikFolders } from "../../../lib/imagekit";
 import type { MediaItem } from "../../../lib/imagekit";
 
 type UnitStatus = "active" | "inactive";
@@ -328,7 +328,7 @@ export default function CompanySettings() {
   };
 
   const handleCompanyGalleryUpload = async (file: File, onProgress: (p: number) => void): Promise<MediaItem> => {
-    const item = await uploadMedia(file, "/zen-hub/companies", onProgress);
+    const item = await uploadMedia(file, ikFolders.companyGallery(companyId), onProgress);
     await mutateAddCompanyGalleryItem(item);
     return item;
   };

@@ -6,6 +6,7 @@ import {
 } from "../shared/icons";
 import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useAuth } from "../../context/AuthContext";
+import { ZenHubLogo } from "../shared/ZenHubLogo";
 
 const navItems = [
   { path: "/admin",            icon: LayoutDashboard, label: "Dashboard",   end: true },
@@ -33,15 +34,14 @@ export default function AdminLayout() {
         className={`${sidebarOpen ? "w-64" : "w-16"} flex flex-col bg-gray-900 border-r border-gray-800 transition-all duration-300 shrink-0`}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 p-4 border-b border-gray-800 h-16">
-          <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center shrink-0">
-            <Shield className="w-4 h-4 text-white" />
-          </div>
-          {sidebarOpen && (
-            <div>
-              <p className="text-sm text-white" style={{ fontWeight: 700 }}>ZEN HUB</p>
-              <p className="text-xs text-gray-400">Super Admin</p>
+        <div className="flex items-center gap-3 px-5 border-b border-gray-800 h-16 shrink-0">
+          {sidebarOpen ? (
+            <div className="flex flex-col justify-center">
+              <ZenHubLogo variant="full" textColor="#ffffff" height={34} />
+              <p className="text-xs text-gray-400 mt-0.5">Super Admin</p>
             </div>
+          ) : (
+            <ZenHubLogo variant="icon" height={34} />
           )}
         </div>
 

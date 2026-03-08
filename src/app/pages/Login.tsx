@@ -5,6 +5,7 @@ import {
 } from "../components/shared/icons";
 import { useAuth, ROLE_ROUTES } from "../context/AuthContext";
 import { GoogleButton } from "../components/shared/GoogleButton";
+import { ZenHubLogo } from "../components/shared/ZenHubLogo";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -73,16 +74,9 @@ export default function Login() {
 
       <div className="w-full max-w-md relative z-10">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg">
-            <Sparkles className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-white" style={{ fontWeight: 700, fontSize: "1.5rem" }}>
-              ZEN HUB
-            </h1>
-            <p className="text-gray-400 text-sm">Plataforma de gestão de terapias</p>
-          </div>
+        <div className="flex flex-col items-center justify-center gap-2 mb-8">
+          <ZenHubLogo variant="full" textColor="#ffffff" height={40} />
+          <p className="text-gray-400 text-sm">Plataforma de gestão de terapias</p>
         </div>
 
         {/* Card */}

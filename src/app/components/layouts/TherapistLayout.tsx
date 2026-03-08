@@ -4,18 +4,23 @@ import { usePageData } from "../../hooks/usePageData";
 import { Outlet, NavLink, useNavigate } from "react-router";
 import {
   LayoutDashboard, CalendarDays, DollarSign, UserCircle,
-  LogOut, Menu, X, Bell, Sparkles, Layers,
+  LogOut, Menu, X, Bell, Sparkles, Layers, Camera, Image,
 } from "../shared/icons";
 import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useNotifications } from "../../hooks/useNotifications";
+import { ZenHubLogo } from "../shared/ZenHubLogo";
 
 const navItems = [
   { path: "/terapeuta",          icon: LayoutDashboard, label: "Início",   end: true },
   { path: "/terapeuta/agenda",   icon: CalendarDays,    label: "Agenda" },
   { path: "/terapeuta/terapias", icon: Layers,          label: "Terapias" },
+  { path: "/terapeuta/galeria",  icon: Image,           label: "Galeria" },
   { path: "/terapeuta/ganhos",   icon: DollarSign,      label: "Ganhos" },
   { path: "/terapeuta/perfil",   icon: UserCircle,      label: "Perfil" },
 ];
+
+// Itens exibidos no menu inferior mobile (sem Galeria)
+const mobileNavItems = navItems.filter((item) => item.label !== "Galeria");
 
 export default function TherapistLayout() {
   const { user, signOut } = useAuth();
@@ -48,15 +53,14 @@ export default function TherapistLayout() {
         className={`hidden md:flex ${sidebarOpen ? "w-64" : "w-16"} flex-col bg-white border-r border-violet-100 transition-all duration-300 shrink-0 shadow-sm`}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 p-4 border-b border-violet-100 h-16">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shrink-0">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
-          {sidebarOpen && (
-            <div>
-              <p className="text-sm text-gray-900" style={{ fontWeight: 700 }}>ZEN HUB</p>
-              <p className="text-xs text-violet-500">Portal do Terapeuta</p>
+        <div className="flex items-center gap-3 px-5 border-b border-violet-100 h-16 shrink-0">
+          {sidebarOpen ? (
+            <div className="flex flex-col justify-center">
+              <ZenHubLogo variant="full" textColor="#111827" height={34} />
+              <p className="text-xs text-violet-500 mt-0.5">Portal do Terapeuta</p>
             </div>
+          ) : (
+            <ZenHubLogo variant="icon" height={34} />
           )}
         </div>
 
@@ -146,14 +150,20 @@ export default function TherapistLayout() {
 
             {/* Mobile logo */}
             <div className="flex md:hidden items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
-                <Sparkles className="w-3.5 h-3.5 text-white" />
-              </div>
-              <span className="text-sm text-gray-900" style={{ fontWeight: 700 }}>ZEN HUB</span>
+              <ZenHubLogo variant="full" textColor="#111827" height={24} />
             </div>
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
+            {/* Mobile: câmera → galeria */}
+            <button
+              onClick={() => navigate("/terapeuta/galeria")}
+              className="relative md:hidden w-8 h-8 flex items-center justify-center text-violet-500 hover:text-violet-700 transition-colors"
+              aria-label="Galeria de fotos"
+            >
+              <Camera className="w-4 h-4" />
+            </button>
+
             {/* Mobile: bell navega direto para a página de notificações */}
             <button
               onClick={() => navigate("/terapeuta/notificacoes")}
@@ -207,7 +217,7 @@ export default function TherapistLayout() {
         {/* ── Mobile bottom nav ──────────────────────────────────────────────── */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-violet-100 z-40 safe-area-pb">
           <div className="flex items-stretch h-16">
-            {navItems.map((item) => (
+            {mobileNavItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
