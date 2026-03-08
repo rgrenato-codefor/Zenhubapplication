@@ -1,3 +1,9 @@
+import { useState, useEffect } from "react";
+import {
+  Save, Star, AtSign, Check, Copy, ExternalLink, Clock,
+  CheckCircle, LogOut, Sparkles, AlertTriangle, X, Edit2,
+  Building2, Link2,
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useTherapistStore } from "../../store/therapistStore";
