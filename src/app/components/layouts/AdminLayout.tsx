@@ -3,7 +3,7 @@ import { Outlet, NavLink, useNavigate } from "react-router";
 import {
   LayoutDashboard, Building2, Users, BarChart3, Settings,
   LogOut, Menu, X, Bell, ChevronDown, Shield, CreditCard,
-} from "lucide-react";
+} from "../shared/icons";
 import { useAuth } from "../../context/AuthContext";
 
 const navItems = [

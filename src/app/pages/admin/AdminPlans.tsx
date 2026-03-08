@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  Plus, Edit2, Trash2, CheckCircle, XCircle, Zap,
-  Building2, Star, Shield, Lock, Unlock, ChevronDown,
-  ChevronUp, X, RefreshCw, AlertTriangle, Database,
-  Loader2, CheckCheck, ArrowRight,
-} from "lucide-react";
+  Plus, Check, ChevronUp, ChevronDown, X, RefreshCw, AlertTriangle, Database,
+  Loader2, CheckCheck, ArrowRight, Shield, Building2, Star, Zap, CheckCircle, XCircle,
+  Lock, LockOpenIcon as Unlock,
+} from "../../components/shared/icons";
 import {
   DEFAULT_COMPANY_PLANS, DEFAULT_THERAPIST_PLANS,
   COMPANY_MODULES, type ModuleKey, type CompanyPlan, type TherapistPlan,
@@ -28,7 +27,7 @@ const PLAN_COLORS_OPTIONS = [
   "#10B981", "#EC4899", "#EF4444", "#0D9488",
 ];
 
-// ─── Company Plan Card ──────────────────────────────��─────────────────────────
+// ─── Company Plan Card ───────────────────────────────────────────────────────
 
 function CompanyPlanCard({
   plan, onEdit, onDelete,
@@ -80,7 +79,7 @@ function CompanyPlanCard({
             className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
             title="Editar"
           >
-            <Edit2 className="w-3.5 h-3.5" />
+            <Check className="w-3.5 h-3.5" />
           </button>
           {!plan.isDefault && (
             <button
@@ -88,7 +87,7 @@ function CompanyPlanCard({
               className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-gray-700 transition-colors"
               title="Excluir"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -192,14 +191,14 @@ function TherapistPlanCard({
             onClick={() => onEdit(plan)}
             className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
           >
-            <Edit2 className="w-3.5 h-3.5" />
+            <Check className="w-3.5 h-3.5" />
           </button>
           {!plan.isDefault && (
             <button
               onClick={() => onDelete(plan.id)}
               className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-gray-700 transition-colors"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>

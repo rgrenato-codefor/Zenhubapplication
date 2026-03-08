@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from "react-router";
 import {
   Home, Users, CalendarDays, UserCircle, LogOut, Bell, Sparkles,
-} from "lucide-react";
+} from "../shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 

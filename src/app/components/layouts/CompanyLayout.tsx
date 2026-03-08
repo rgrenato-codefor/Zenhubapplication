@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Sparkles, CalendarDays, UserCircle,
   DollarSign, BarChart3, Settings, LogOut, Menu, X, Bell,
   ChevronDown, ChevronRight, DoorOpen, MapPin, Check, Building2,
-} from "lucide-react";
+} from "../shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { CompanyProvider, useCompanyUnit } from "../../context/CompanyContext";

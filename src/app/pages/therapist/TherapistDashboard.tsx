@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import {
   CalendarDays, DollarSign, Star, TrendingUp, Clock, CheckCircle,
   AlertCircle, Building2, Sparkles, ArrowRight, CalendarCheck,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";

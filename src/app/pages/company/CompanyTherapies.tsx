@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Clock, DollarSign, BarChart3, Edit, Trash2, X, Save } from "lucide-react";
+import { Plus, Clock, DollarSign, BarChart3, Edit2, Trash2, X, Save } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 
@@ -107,7 +107,7 @@ export default function CompanyTherapies() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => openEdit(t)} className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center hover:bg-gray-100 transition-colors">
-                      <Edit className="w-3.5 h-3.5 text-gray-400" />
+                      <Edit2 className="w-3.5 h-3.5 text-gray-400" />
                     </button>
                     <button onClick={() => setDeleteConfirm(t.id)} className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors">
                       <Trash2 className="w-3.5 h-3.5 text-red-400" />

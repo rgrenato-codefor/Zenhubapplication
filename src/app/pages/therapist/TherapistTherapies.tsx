@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   Plus, Edit2, Trash2, Clock, DollarSign,
   Building2, CheckCircle, Info, Sparkles, X, Save, BadgeCheck,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 

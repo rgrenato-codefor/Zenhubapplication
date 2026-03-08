@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area,
 } from "recharts";
-import { DollarSign, TrendingUp, Calendar, Award, Building2, Sparkles, CheckCircle } from "lucide-react";
+import { DollarSign, TrendingUp, Calendar, Award, Building2, Sparkles, CheckCircle } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 

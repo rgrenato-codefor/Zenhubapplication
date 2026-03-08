@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
 import {
-  Search, Plus, Phone, Mail, Calendar, DollarSign, Star,
-  X, Edit3, User, MapPin, FileText, Heart, ArrowLeft,
+  Search, Plus, Edit2 as Edit3, Trash2, X, Users,
   Check, AlertCircle, ChevronRight, Copy, CheckCheck,
   Clock, Sparkles, MessageCircle,
-} from "lucide-react";
+  User, Phone, Mail, Calendar, MapPin, DollarSign, Star, Heart, FileText, ArrowLeft,
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 

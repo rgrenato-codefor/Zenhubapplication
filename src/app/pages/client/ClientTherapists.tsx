@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Star, Clock, Search, ChevronRight, Calendar, Sparkles } from "lucide-react";
+import { Star, Clock, Search, ChevronRight, Calendar, Sparkles } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 

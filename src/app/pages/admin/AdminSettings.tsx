@@ -5,7 +5,7 @@ import {
   Save, Loader2, CheckCheck, AlertTriangle,
   Eye, EyeOff, Lock, ChevronRight, RefreshCw,
   Mail, Clock, Languages,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import {
   getPlatformSettings, savePlatformSettings,

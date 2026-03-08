@@ -4,7 +4,7 @@ import {
   Sparkles, Building2, MapPin, User, Lock, CheckCircle,
   ArrowRight, ArrowLeft, Eye, EyeOff, Loader2, Star, Zap, Crown,
   Phone, Mail, FileText, ChevronRight, AlertCircle,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 // Google sign-in temporariamente desativado:
 // import { GoogleButton } from "../../components/shared/GoogleButton";

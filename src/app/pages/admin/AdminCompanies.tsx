@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   Plus, Search, MoreVertical, Building2, Users, DollarSign,
   Edit, Trash2, Eye, CheckCircle, XCircle, Filter, TrendingUp,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { useData } from "../../context/DataContext";
 
 const planColors: Record<string, string> = {

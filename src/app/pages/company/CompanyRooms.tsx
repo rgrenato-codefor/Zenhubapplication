@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
-  DoorOpen, Plus, Edit2, Trash2, X, CheckCircle,
+  Plus, Edit2, Trash2, X, CheckCircle,
   AlertCircle, WrenchIcon, Clock, User, LayoutGrid,
   CalendarDays, Search, ChevronDown, MapPin,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
@@ -112,7 +112,7 @@ export default function CompanyRooms() {
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${primaryColor}15` }}>
-                <DoorOpen className="w-4 h-4" style={{ color: primaryColor }} />
+                <Plus className="w-4 h-4" style={{ color: primaryColor }} />
               </div>
               <p className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>
                 {mode === "add" ? "Nova sala" : "Editar sala"}
@@ -372,7 +372,7 @@ export default function CompanyRooms() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: "Total de salas", value: companyRooms.length, color: "text-gray-900", bg: "bg-gray-50", icon: DoorOpen },
+          { label: "Total de salas", value: companyRooms.length, color: "text-gray-900", bg: "bg-gray-50", icon: Plus },
           { label: "Ativas", value: activeCount, color: "text-emerald-600", bg: "bg-emerald-50", icon: CheckCircle },
           { label: "Manutenção", value: maintenanceCount, color: "text-amber-600", bg: "bg-amber-50", icon: WrenchIcon },
           { label: "Disponíveis hoje", value: availableNow, color: "text-violet-600", bg: "bg-violet-50", icon: Clock },
@@ -423,7 +423,7 @@ export default function CompanyRooms() {
 
           {filteredRooms.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-              <DoorOpen className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+              <Plus className="w-10 h-10 text-gray-200 mx-auto mb-3" />
               <p className="text-gray-400 text-sm">
                 {companyRooms.length === 0
                   ? "Nenhuma sala cadastrada ainda."
@@ -467,7 +467,7 @@ export default function CompanyRooms() {
                             className="w-10 h-10 rounded-xl flex items-center justify-center text-white"
                             style={{ background: room.color }}
                           >
-                            <DoorOpen className="w-5 h-5" />
+                            <Plus className="w-5 h-5" />
                           </div>
                           <div>
                             <p className="text-gray-900" style={{ fontWeight: 700 }}>{room.name}</p>
@@ -593,7 +593,7 @@ export default function CompanyRooms() {
 
           {activeRooms.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
-              <DoorOpen className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+              <Plus className="w-8 h-8 text-gray-200 mx-auto mb-2" />
               <p className="text-gray-400 text-sm">Nenhuma sala ativa para exibir.</p>
             </div>
           ) : (

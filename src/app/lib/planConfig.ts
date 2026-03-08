@@ -112,7 +112,7 @@ export const DEFAULT_COMPANY_PLANS: CompanyPlan[] = [
     name: "Premium",
     price: 397,
     color: "#F59E0B",
-    badge: "⭐",
+    badge: "Premium",
     description: "Tudo liberado. Para redes e grandes operações.",
     modules: [
       "dashboard", "schedule", "clients", "services",

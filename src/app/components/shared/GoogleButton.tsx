@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2 } from "./icons";
 
 // Google "G" SVG official colors
 function GoogleIcon({ size = 18 }: { size?: number }) {

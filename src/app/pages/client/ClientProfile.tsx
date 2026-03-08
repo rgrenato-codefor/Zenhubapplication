@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import {
-  Star, Edit, Calendar, Bell, DollarSign, LogOut, Heart, User,
-} from "lucide-react";
+  Star, Edit2, Calendar, Bell, DollarSign, LogOut, Heart, User,
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 
@@ -50,7 +50,7 @@ export default function ClientProfile() {
             className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full text-white flex items-center justify-center shadow-md"
             style={{ background: primaryColor }}
           >
-            <Edit className="w-3 h-3" />
+            <Edit2 className="w-3 h-3" />
           </button>
         </div>
 

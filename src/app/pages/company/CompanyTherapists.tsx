@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
-  Plus, Search, Star, DollarSign, Phone, Mail, Edit2,
-  Trash2, X, CheckCircle, UserPlus, Link2, Link2Off,
+  Plus, Search, Edit2, Trash2, X, CheckCircle, UserPlus, Link2, Link2Off,
   AlertCircle, Sparkles, Building2, Percent, ArrowLeft, MapPin, Loader2,
-} from "lucide-react";
+  Star, Mail,
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";

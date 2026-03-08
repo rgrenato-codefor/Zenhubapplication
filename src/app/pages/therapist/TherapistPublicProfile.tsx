@@ -5,7 +5,7 @@ import {
   Calendar, Sparkles, Award, Copy, Check, Phone, X,
   Image, ChevronLeft, ChevronRight, User, Building2,
   Send,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { getTherapistByUsername, getTherapiesByCompany, getCompany } from "../../../lib/firestore";
 import { therapists as mockTherapists, therapies as mockTherapies, companies as mockCompanies } from "../../data/mockData";
 import { therapistStore } from "../../store/therapistStore";

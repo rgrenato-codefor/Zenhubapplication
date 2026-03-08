@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import {
   DollarSign, TrendingUp, ShoppingBag, Download, Calendar, MapPin,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
 

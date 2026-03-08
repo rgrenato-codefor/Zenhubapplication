@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, TrendingUp, Wallet,
   BarChart2, CircleDollarSign, AlertCircle,
   CalendarDays, Banknote, Star, ExternalLink,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,

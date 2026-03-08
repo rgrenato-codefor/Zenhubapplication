@@ -4,7 +4,7 @@ import {
   Sparkles, User, Mail, Phone, Lock, Eye, EyeOff,
   ArrowRight, CheckCircle, Loader2, AtSign, KeyRound,
   Briefcase, ChevronRight, ChevronLeft, Search, MapPin, X, AlertCircle,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { useData } from "../../context/DataContext";
 

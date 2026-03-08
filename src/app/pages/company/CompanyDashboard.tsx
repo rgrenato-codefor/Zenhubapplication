@@ -1,9 +1,8 @@
 import { useState, useMemo } from "react";
 import {
-  Users, CalendarDays, DollarSign, TrendingUp, Star,
   ArrowUpRight, CheckCircle, AlertCircle, MoreHorizontal, MapPin,
-  Building2, ChevronRight,
-} from "lucide-react";
+  Building2, ChevronRight, Star, Users, CalendarDays, DollarSign, TrendingUp,
+} from "../../components/shared/icons";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,

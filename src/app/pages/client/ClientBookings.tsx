@@ -1,6 +1,6 @@
 import { useState } from "react";
 import React from "react";
-import { Calendar, Clock, CheckCircle, AlertCircle, XCircle, Star } from "lucide-react";
+import { Calendar, Clock, CheckCircle, AlertCircle, XCircle, Star } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 

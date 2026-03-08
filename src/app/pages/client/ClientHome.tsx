@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Star, ArrowRight, Clock, Sparkles, CalendarDays } from "lucide-react";
+import { Star, ArrowRight, Clock, Sparkles, CalendarDays } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 
@@ -26,7 +26,7 @@ export default function ClientHome() {
       >
         <p className="text-white/80 text-sm">Bem-vinda,</p>
         <h1 className="text-white text-2xl mt-0.5" style={{ fontWeight: 700 }}>
-          {user?.name?.split(" ")[0]}! ✨
+          {user?.name?.split(" ")[0]}!
         </h1>
         <p className="text-white/70 text-sm mt-1">{company?.name}</p>
 

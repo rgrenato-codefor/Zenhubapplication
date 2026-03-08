@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import {
   Sparkles, ArrowRight, Eye, EyeOff, Loader2, AlertCircle,
-} from "lucide-react";
+} from "../components/shared/icons";
 import { useAuth, ROLE_ROUTES } from "../context/AuthContext";
 import { GoogleButton } from "../components/shared/GoogleButton";
 

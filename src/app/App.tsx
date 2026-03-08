@@ -1,7 +1,7 @@
 import { RouterProvider } from "react-router";
 import { router } from "./routes";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "./components/shared/icons";
 
 function AppLoadingScreen() {
   return (

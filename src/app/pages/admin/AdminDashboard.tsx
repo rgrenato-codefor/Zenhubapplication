@@ -6,7 +6,7 @@ import {
 import {
   Building2, Users, TrendingUp, DollarSign, Activity, Star,
   CheckCircle, XCircle, LayoutGrid, CreditCard, ChevronRight,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { useData } from "../../context/DataContext";
 import {
   DEFAULT_COMPANY_PLANS, DEFAULT_THERAPIST_PLANS,

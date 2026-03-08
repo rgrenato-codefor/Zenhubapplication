@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import {
-  ArrowLeft, Star, Mail, Phone, Percent, TrendingUp,
-  CalendarDays, Banknote, CheckCircle, MessageSquare,
-  Clock, BarChart2, CircleDollarSign, Wallet,
-} from "lucide-react";
+  ArrowLeft, Star, Users, CalendarDays, Banknote, CheckCircle, MessageSquare,
+  Clock, BarChart2, CircleDollarSign, Wallet, TrendingUp, Mail, Phone, Percent,
+} from "../../components/shared/icons";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,

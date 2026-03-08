@@ -3,7 +3,7 @@ import {
   Star, Edit2, Save, CheckCircle, X,
   Link2, Copy, Check, Building2, LogOut,
   AlertTriangle, Sparkles, AtSign, ExternalLink,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 

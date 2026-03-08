@@ -5,7 +5,7 @@ import { Outlet, NavLink, useNavigate } from "react-router";
 import {
   LayoutDashboard, CalendarDays, DollarSign, UserCircle,
   LogOut, Menu, X, Bell, Sparkles, Layers,
-} from "lucide-react";
+} from "../shared/icons";
 
 const navItems = [
   { path: "/terapeuta",          icon: LayoutDashboard, label: "Dashboard",  end: true },

@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  ChevronLeft, ChevronRight, Plus, Clock, User, Star,
-  CheckCircle, AlertCircle, XCircle, CalendarCheck,
+  CalendarDays, Clock, CheckCircle, AlertCircle, XCircle, CalendarCheck,
   DollarSign, Building2, X, DoorOpen, Search, UserPlus, Loader2,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";

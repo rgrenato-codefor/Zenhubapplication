@@ -4,13 +4,14 @@ import {
   MapPin, Plus, Edit2, Trash2, X, Phone, Mail, Star,
   CheckCircle, AlertCircle, ChevronRight, ToggleLeft, ToggleRight,
   Download, QrCode, Smartphone, Share2,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { type Unit } from "../../context/DataContext";
 
 type UnitStatus = "active" | "inactive";
+type ActiveTab = "company" | "units" | "notifications" | "invites";
 
 // ── Unit Form Modal ──────────────────────────────────────────────────────────
 

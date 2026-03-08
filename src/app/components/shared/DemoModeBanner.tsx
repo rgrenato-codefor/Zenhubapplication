@@ -7,7 +7,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Sparkles, ChevronUp, ChevronDown, Shield, Building2, Star, User, LogOut, X } from "lucide-react";
+import { Sparkles, ChevronUp, ChevronDown, Shield, Building2, Star, User, LogOut, X } from "./icons";
 import { useAuth, DEMO_VIEW_OPTIONS, type DemoViewAs } from "../../context/AuthContext";
 
 const ICONS: Record<DemoViewAs, React.ElementType> = {

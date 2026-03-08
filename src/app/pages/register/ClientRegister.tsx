@@ -3,8 +3,13 @@ import { useNavigate, useParams, Link } from "react-router";
 import {
   Sparkles, User, Mail, Phone, Lock, Eye, EyeOff,
   ArrowRight, CheckCircle, Loader2, Heart, Calendar, Star, AlertCircle,
-} from "lucide-react";
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
+
+// Google sign-in temporariamente desativado:
+// import { GoogleButton } from "../../components/shared/GoogleButton";
+// import { signInWithGoogleGIS } from "../../../lib/googleGIS";
+const signInGoogle = async () => ({ route: "/cliente" }); // stub
 
 const BG_IMAGE = "https://images.unsplash.com/photo-1633526543913-d30e3c230d1f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtYXNzYWdlJTIwdGhlcmFweSUyMHJlbGF4YXRpb24lMjBoYW5kc3xlbnwxfHx8fDE3NzI2Nzg2NjF8MA&ixlib=rb-4.1.0&q=80&w=1080";
 

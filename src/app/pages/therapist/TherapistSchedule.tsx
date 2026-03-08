@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import {
-  Clock, CheckCircle, AlertCircle, User, X,
-  CalendarCheck, Plus, Loader2,
-} from "lucide-react";
+  CalendarDays, Clock, CheckCircle, AlertCircle, User, X,
+  CalendarCheck, Plus, Loader2, Zap, Building2, ChevronLeft, ChevronRight,
+} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import type { SessionRecord, CatalogItem } from "../../context/DataContext";
@@ -26,13 +26,35 @@ type BookingForm = {
   notes: string;
 };
 
-const DAYS = [
-  { date: "2026-03-02", label: "Seg", num: "02", dayKey: "monday",    isToday: false },
-  { date: "2026-03-03", label: "Ter", num: "03", dayKey: "tuesday",   isToday: false },
-  { date: "2026-03-04", label: "Qua", num: "04", dayKey: "wednesday", isToday: true  },
-  { date: "2026-03-05", label: "Qui", num: "05", dayKey: "thursday",  isToday: false },
-  { date: "2026-03-06", label: "Sex", num: "06", dayKey: "friday",    isToday: false },
+// ── Date helpers ──────────────────────────────────────────────────────────────
+
+const TODAY = (() => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+})();
+
+const DAY_ABBR    = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const DAY_KEYS_WK = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const MONTH_PT    = [
+  "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+  "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro",
 ];
+
+function addDays(base: Date, n: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function toISO(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, "0");
+  const dd   = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// ── Initial state ─────────────────────────────────────────────────────────────
 
 const HOURS = [
   "08:00","09:00","10:00","11:00","12:00",
@@ -41,7 +63,7 @@ const HOURS = [
 
 const DAY_LABELS: Record<string, string> = {
   monday: "Segunda", tuesday: "Terça", wednesday: "Quarta",
-  thursday: "Quinta", friday: "Sexta",
+  thursday: "Quinta", friday: "Sexta", saturday: "Sábado", sunday: "Domingo",
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -69,10 +91,61 @@ export default function TherapistSchedule() {
   const isAutonomous = !company;
 
   const [tab, setTab] = useState<"agenda" | "disponibilidade">("agenda");
-  const [selectedDay, setSelectedDay] = useState("2026-03-04");
+  const [centerOffset, setCenterOffset] = useState(0); // offset em dias a partir de TODAY
+  const [selectedDay, setSelectedDay] = useState(toISO(TODAY));
   const [closureModal, setClosureModal] = useState<ClosureModal>(null);
   const [closureNotes, setClosureNotes] = useState("");
   const [closureSuccess, setClosureSuccess] = useState(false);
+
+  // ── Derived: 5 days visíveis centrados em TODAY + centerOffset ────────────
+  const visibleDays = useMemo(() => {
+    return [-2, -1, 0, 1, 2].map((rel) => {
+      const d    = addDays(TODAY, centerOffset + rel);
+      const iso  = toISO(d);
+      return {
+        date:    iso,
+        label:   DAY_ABBR[d.getDay()],
+        num:     String(d.getDate()).padStart(2, "0"),
+        dayKey:  DAY_KEYS_WK[d.getDay()],
+        isToday: iso === toISO(TODAY),
+      };
+    });
+  }, [centerOffset]);
+
+  // ── Header subtitle dinâmico ──────────────────────────────────────────────
+  const headerSubtitle = useMemo(() => {
+    const first = addDays(TODAY, centerOffset - 2);
+    const last  = addDays(TODAY, centerOffset + 2);
+    const fDay  = first.getDate();
+    const lDay  = last.getDate();
+    const fMon  = MONTH_PT[first.getMonth()];
+    const lMon  = MONTH_PT[last.getMonth()];
+    if (first.getMonth() === last.getMonth()) {
+      return `${fDay} a ${lDay} de ${fMon}, ${last.getFullYear()}`;
+    }
+    return `${fDay} de ${fMon} a ${lDay} de ${lMon}, ${last.getFullYear()}`;
+  }, [centerOffset]);
+
+  // navegar e manter selectedDay visível
+  const navigate = (dir: -1 | 1) => {
+    const newOffset = centerOffset + dir;
+    setCenterOffset(newOffset);
+    const centerISO = toISO(addDays(TODAY, newOffset));
+    const windowDates = [-2, -1, 0, 1, 2].map((r) => toISO(addDays(TODAY, newOffset + r)));
+    if (!windowDates.includes(selectedDay)) {
+      setSelectedDay(centerISO);
+    }
+  };
+
+  // ── Touch / swipe ─────────────────────────────────────────────────────────
+  const touchStartX = useRef<number>(0);
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(dx) > 40) navigate(dx < 0 ? 1 : -1);
+  };
 
   // ── Booking modal ────────────────────────────────────────────────────────
   const [showBooking, setShowBooking] = useState(false);
@@ -264,7 +337,7 @@ export default function TherapistSchedule() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-gray-900">Minha Agenda</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Semana de 02 a 06 de Março, 2026</p>
+          <p className="text-gray-500 text-sm mt-0.5">{headerSubtitle}</p>
         </div>
         <div className="flex items-center gap-3">
           {closureSuccess && (
@@ -302,38 +375,74 @@ export default function TherapistSchedule() {
       {/* ── Agenda ─────────────────────────────────────────────────────────── */}
       {tab === "agenda" && (
         <>
-          {/* Day selector */}
-          <div className="grid grid-cols-5 gap-2">
-            {DAYS.map((day) => {
-              const count = myAppointments.filter((a) => a.date === day.date).length;
-              const pending = myAppointments.filter(
-                (a) => a.date === day.date && !store.isCompleted(a.id) && (a.status === "confirmed" || a.status === "pending")
-              ).length;
-              return (
-                <button
-                  key={day.date}
-                  onClick={() => setSelectedDay(day.date)}
-                  className={`rounded-xl p-3 text-center transition-all ${selectedDay === day.date ? "text-white shadow-md" : day.isToday ? "bg-white border-2 border-violet-200" : "bg-white border border-violet-100"}`}
-                  style={selectedDay === day.date ? { background: "linear-gradient(135deg, #7C3AED, #4F46E5)" } : {}}
-                >
-                  <p className="text-xs opacity-70">{day.label}</p>
-                  <p className="text-lg" style={{ fontWeight: 700 }}>{day.num}</p>
-                  {count > 0 && (
-                    <div className="flex items-center justify-center gap-1 mt-1">
-                      <span className={`w-1.5 h-1.5 rounded-full ${selectedDay === day.date ? "bg-white/70" : "bg-violet-400"}`} />
-                      {pending > 0 && <span className={`w-1.5 h-1.5 rounded-full ${selectedDay === day.date ? "bg-amber-200" : "bg-amber-400"}`} />}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
+          {/* Day selector com navegação */}
+          <div className="flex items-center sm:gap-2">
+            {/* Seta esquerda — só desktop */}
+            <button
+              onClick={() => navigate(-1)}
+              className="hidden sm:flex shrink-0 w-9 h-9 items-center justify-center rounded-xl bg-white border border-violet-100 text-gray-500 hover:border-violet-400 hover:text-violet-600 transition-all"
+              aria-label="Dias anteriores"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            {/* 5 dias — swipe no mobile */}
+            <div
+              className="flex-1 grid grid-cols-5 gap-1.5 select-none"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
+              {visibleDays.map((day) => {
+                const count = myAppointments.filter((a) => a.date === day.date).length;
+                const pending = myAppointments.filter(
+                  (a) => a.date === day.date && !store.isCompleted(a.id) && (a.status === "confirmed" || a.status === "pending")
+                ).length;
+                return (
+                  <button
+                    key={day.date}
+                    onClick={() => setSelectedDay(day.date)}
+                    className={`rounded-xl py-2.5 px-1 text-center transition-all ${
+                      selectedDay === day.date
+                        ? "text-white shadow-md"
+                        : day.isToday
+                        ? "bg-white border-2 border-violet-300"
+                        : "bg-white border border-violet-100"
+                    }`}
+                    style={selectedDay === day.date ? { background: "linear-gradient(135deg, #7C3AED, #4F46E5)" } : {}}
+                  >
+                    <p className="text-xs opacity-70">{day.label}</p>
+                    <p className="text-base" style={{ fontWeight: 700 }}>{day.num}</p>
+                    {day.isToday && selectedDay !== day.date && (
+                      <div className="flex justify-center mt-0.5">
+                        <span className="w-1 h-1 rounded-full bg-violet-400" />
+                      </div>
+                    )}
+                    {count > 0 && (
+                      <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${selectedDay === day.date ? "bg-white/70" : "bg-violet-400"}`} />
+                        {pending > 0 && <span className={`w-1.5 h-1.5 rounded-full ${selectedDay === day.date ? "bg-amber-200" : "bg-amber-400"}`} />}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Seta direita — só desktop */}
+            <button
+              onClick={() => navigate(1)}
+              className="hidden sm:flex shrink-0 w-9 h-9 items-center justify-center rounded-xl bg-white border border-violet-100 text-gray-500 hover:border-violet-400 hover:text-violet-600 transition-all"
+              aria-label="Próximos dias"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
 
           {/* Timeline */}
           <div className="bg-white rounded-xl border border-violet-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-violet-50 flex items-center justify-between">
               <h3 className="text-gray-900">
-                {DAYS.find((d) => d.date === selectedDay)?.label},{" "}
+                {visibleDays.find((d) => d.date === selectedDay)?.label},{" "}
                 {new Date(selectedDay + "T12:00:00").toLocaleDateString("pt-BR", { day: "numeric", month: "long" })}
               </h3>
               <div className="flex items-center gap-3">
@@ -444,7 +553,7 @@ export default function TherapistSchedule() {
             <div className="flex items-center gap-2 mb-1"><Clock className="w-4 h-4 text-violet-500" /><h3 className="text-gray-900">Horários disponíveis</h3></div>
             <p className="text-gray-400 text-xs mb-5">Clique para marcar ou desmarcar sua disponibilidade.</p>
             <div className="grid grid-cols-5 gap-3">
-              {DAYS.map((day) => {
+              {visibleDays.map((day) => {
                 const slots = availability[day.dayKey] ?? [];
                 return (
                   <div key={day.dayKey}>
@@ -473,7 +582,7 @@ export default function TherapistSchedule() {
           <div className="bg-white rounded-xl border border-violet-100 p-5 shadow-sm">
             <h3 className="text-gray-900 mb-3">Resumo semanal</h3>
             <div className="space-y-2">
-              {DAYS.map((day) => {
+              {visibleDays.map((day) => {
                 const slots = availability[day.dayKey] ?? [];
                 if (slots.length === 0) return null;
                 return (
@@ -505,7 +614,15 @@ export default function TherapistSchedule() {
                 <div>
                   <p className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>Novo Atendimento</p>
                   <p className="text-gray-400 text-xs">
-                    {isAutonomous ? "⚡ Autônomo — 100% seu" : `🏢 ${company?.name}`}
+                    {isAutonomous ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> Autônomo — 100% seu
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        <Building2 className="w-3 h-3" /> {company?.name}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -522,11 +639,13 @@ export default function TherapistSchedule() {
                     value={bookingForm.date}
                     onChange={(e) => setBookingField("date", e.target.value)}
                   >
-                    {DAYS.map((d) => (
-                      <option key={d.date} value={d.date}>
-                        {d.label} {d.num}/03
-                      </option>
-                    ))}
+                    {visibleDays.map((d) => {
+                      const parts = d.date.split("-");
+                      const label = `${d.label}, ${parts[2]}/${parts[1]}`;
+                      return (
+                        <option key={d.date} value={d.date}>{label}</option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>
@@ -646,7 +765,15 @@ export default function TherapistSchedule() {
                 <div className={`rounded-xl p-3 border ${isAutonomous ? "bg-violet-50 border-violet-100" : "bg-emerald-50 border-emerald-100"}`}>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-gray-500">
-                      {isAutonomous ? "⚡ Você recebe (100%)" : `🏢 Sua comissão (${commissionPct}%)`}
+                      {isAutonomous ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Zap className="w-3 h-3" /> Você recebe (100%)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1">
+                          <Building2 className="w-3 h-3" /> Sua comissão ({commissionPct}%)
+                        </span>
+                      )}
                     </span>
                     <span className="text-base" style={{ fontWeight: 700, color: isAutonomous ? "#7C3AED" : "#059669" }}>
                       R$ {(isAutonomous ? Number(bookingForm.price) : Number(bookingForm.price) * commissionPct / 100).toFixed(2)}
@@ -727,7 +854,15 @@ export default function TherapistSchedule() {
               </div>
               <div className={`rounded-xl p-4 border ${isAutonomous ? "bg-violet-50 border-violet-100" : "bg-emerald-50 border-emerald-100"}`}>
                 <p className="text-xs mb-2" style={{ fontWeight: 700, color: isAutonomous ? "#7C3AED" : "#059669" }}>
-                  {isAutonomous ? "⚡ Autônomo — 100% seu" : `🏢 ${company?.name} · ${commissionPct}% comissão`}
+                  {isAutonomous ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> Autônomo — 100% seu
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <Building2 className="w-3 h-3" /> {company?.name} · {commissionPct}% comissão
+                    </span>
+                  )}
                 </p>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-500">Você recebe</span>

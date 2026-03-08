@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { TrendingUp, Download, Building2 } from "lucide-react";
+import { TrendingUp, Download, Building2 } from "../../components/shared/icons";
 import { useData } from "../../context/DataContext";
 
 export default function AdminReports() {

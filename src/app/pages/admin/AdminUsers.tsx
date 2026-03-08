@@ -1,6 +1,6 @@
 import { useState } from "react";
 import React from "react";
-import { Search, Plus, Shield, Building2, Star, UserCircle, Edit, Trash2, CheckCircle } from "lucide-react";
+import { Search, Plus, Shield, Building2, Star, UserCircle, Edit, Trash2, CheckCircle } from "../../components/shared/icons";
 import { useData } from "../../context/DataContext";
 
 const roleConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
