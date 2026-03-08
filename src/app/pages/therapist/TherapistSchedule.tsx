@@ -100,11 +100,17 @@ export default function TherapistSchedule() {
     mutateMyAvailability,
     refresh, loading,
     sessionRecords,
+    completedSessionIds,
   } = usePageData();
 
   const myAppointments = allAppointments.filter((a) => a.therapistId === (user?.therapistId ?? therapist?.id));
   const commissionPct = therapist?.commission ?? 100;
   const isAutonomous = !company;
+
+  /** True when a session record exists in Firestore for this appointment */
+  const isSessionCompleted = (aptId: string) =>
+    completedSessionIds.has(aptId) ||
+    sessionRecords.some((r) => r.appointmentId === aptId);
 
   const [tab, setTab] = useState<"agenda" | "disponibilidade">("agenda");
   const [centerOffset, setCenterOffset] = useState(0);
@@ -483,7 +489,7 @@ export default function TherapistSchedule() {
                 const isSelected = selectedDay === day.date;
                 const count   = myAppointments.filter((a) => a.date === day.date).length;
                 const pending = myAppointments.filter(
-                  (a) => a.date === day.date && !store.isCompleted(a.id) && (a.status === "confirmed" || a.status === "pending")
+                  (a) => a.date === day.date && !isSessionCompleted(a.id) && (a.status === "confirmed" || a.status === "pending")
                 ).length;
                 return (
                   <button
@@ -548,24 +554,31 @@ export default function TherapistSchedule() {
               </div>
             </div>
             <div className="divide-y divide-violet-50">
-              {HOURS.map((hour) => {
+              {(() => {
+                // Build slots: HOURS + any appointment time not already in HOURS, sorted
+                const aptTimes = dayAppointments.map((a) => a.time);
+                const extraTimes = aptTimes.filter((t) => !HOURS.includes(t));
+                const allSlots = [...new Set([...HOURS, ...extraTimes])].sort();
+
+                return allSlots.map((hour) => {
                 const apt = dayAppointments.find((a) => a.time === hour);
                 const cl = apt ? clients.find((c) => c.id === apt.clientId) : null;
                 const therapy = apt ? therapies.find((t) => t.id === apt.therapyId) : null;
                 const catalog = apt ? myCatalog.find((c) => c.id === apt.catalogItemId) : null;
-                const isCompleted = apt ? store.isCompleted(apt.id) : false;
+                const isCompleted = apt ? isSessionCompleted(apt.id) : false;
                 const canClose = apt && !isCompleted && (apt.status === "confirmed" || apt.status === "pending");
 
                 // Para atendimentos encerrados, usar o valor CONGELADO do SessionRecord.
-                // Para atendimentos em aberto, usar a comissão atual (prévia).
+                // Se o registro existe no Firestore, sempre usa o valor armazenado
+                // (independente do status do appointment), evitando recalcular com comissão atual.
                 const rec = apt ? sessionRecords.find((r) => r.appointmentId === apt.id) : null;
                 const earned = apt
-                  ? (isCompleted && rec != null
+                  ? (rec != null
                       ? rec.therapistEarned
                       : (isAutonomous ? apt.price : apt.price * commissionPct / 100))
                   : 0;
                 // Percentual real registrado no encerramento (para exibir no label)
-                const frozenPct = isCompleted && rec ? rec.commissionPct : commissionPct;
+                const frozenPct = rec ? rec.commissionPct : commissionPct;
 
                 // Resolve display names (works for both autonomous and company-linked)
                 const clientDisplayName = cl?.name ?? apt?.clientName ?? "—";
@@ -588,7 +601,7 @@ export default function TherapistSchedule() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm text-gray-900" style={{ fontWeight: 600 }}>{clientDisplayName}</p>
-                            <StatusBadge status={getAptStatus(apt)} />
+                            <StatusBadge status={isCompleted ? "completed" : apt.status} />
                           </div>
                           <p className="text-xs text-gray-500">{therapyDisplayName} · {apt.duration}min</p>
                           {isCompleted && (
@@ -623,7 +636,8 @@ export default function TherapistSchedule() {
                     )}
                   </div>
                 );
-              })}
+              });
+              })()}
             </div>
           </div>
 
@@ -634,16 +648,19 @@ export default function TherapistSchedule() {
                 <div>
                   <p className="text-white/70 text-xs">Previsto do dia</p>
                   <p className="text-xl" style={{ fontWeight: 700 }}>R$ {dayAppointments.reduce((acc, a) => {
-                    // Encerrado → valor congelado; em aberto → comissão atual
+                    // Sempre usa o valor congelado do SessionRecord se existir
                     const r = sessionRecords.find((sr) => sr.appointmentId === a.id);
-                    const completed = store.isCompleted(a.id);
-                    const amt = completed && r ? r.therapistEarned : (isAutonomous ? a.price : a.price * commissionPct / 100);
+                    const amt = r != null
+                      ? r.therapistEarned
+                      : (isAutonomous ? a.price : a.price * commissionPct / 100);
                     return acc + amt;
                   }, 0).toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-white/70 text-xs">Encerrados</p>
-                  <p className="text-xl" style={{ fontWeight: 700 }}>{dayAppointments.filter((a) => store.isCompleted(a.id)).length}/{dayAppointments.length}</p>
+                  <p className="text-xl" style={{ fontWeight: 700 }}>
+                    {dayAppointments.filter((a) => isSessionCompleted(a.id)).length}/{dayAppointments.length}
+                  </p>
                 </div>
                 <div>
                   <p className="text-white/70 text-xs">Tempo total</p>

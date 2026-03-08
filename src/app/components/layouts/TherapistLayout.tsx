@@ -157,7 +157,7 @@ export default function TherapistLayout() {
             {/* Mobile: bell navega direto para a página de notificações */}
             <button
               onClick={() => navigate("/terapeuta/notificacoes")}
-              className="relative md:hidden w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 hover:text-violet-700 transition-colors"
+              className="relative md:hidden w-8 h-8 flex items-center justify-center text-violet-500 hover:text-violet-700 transition-colors"
               aria-label="Notificações"
             >
               <Bell className="w-4 h-4" />
@@ -179,7 +179,7 @@ export default function TherapistLayout() {
                 bellClass="w-4 h-4"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2">
               {user?.avatar ? (
                 <img
                   src={user.avatar}

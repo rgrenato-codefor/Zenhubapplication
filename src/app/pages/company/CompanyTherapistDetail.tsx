@@ -35,7 +35,10 @@ export default function CompanyTherapistDetail() {
   }
 
   const assoc = store.getAssociation(therapist.id);
-  const rate = assoc.commission || therapist.commission;
+  // Use the real Firestore commission value from the therapist document.
+  // Fall back to the in-memory store only if the Firestore field is absent
+  // (legacy demo compatibility), but never let a stale mock override a real value.
+  const rate = therapist.commission ?? assoc.commission ?? 50;
 
   // Compute earnings split by paid status
   const paidRecords   = therapistRecords.filter((r: any) => r.paidByCompany === true);
@@ -192,8 +195,8 @@ export default function CompanyTherapistDetail() {
             <AreaChart data={history}>
               <defs>
                 <linearGradient id="gradNet" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                  <stop key="stop-top"    offset="5%"  stopColor="#10B981" stopOpacity={0.2} />
+                  <stop key="stop-bottom" offset="95%" stopColor="#10B981" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
