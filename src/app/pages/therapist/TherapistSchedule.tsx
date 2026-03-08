@@ -82,8 +82,10 @@ export default function TherapistSchedule() {
     myTherapist: therapist, appointments: allAppointments,
     clients, therapies, company,
     myCatalog,
+    myAvailability,
     therapistStore: store, mutateCompleteSession,
     mutateAddAppointment,
+    mutateMyAvailability,
   } = usePageData();
 
   const myAppointments = allAppointments.filter((a) => a.therapistId === (user?.therapistId ?? therapist?.id));
@@ -197,9 +199,21 @@ export default function TherapistSchedule() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState("");
 
-  const availability = therapist
-    ? store.getAvailability(therapist.id, therapist.schedule ?? {})
-    : {};
+  // ── 181 datas para o seletor do modal (hoje + 180 dias futuros) ───────────
+  const BOOKING_DATES = useMemo(() =>
+    Array.from({ length: 181 }, (_, i) => {
+      const d   = addDays(TODAY, i);
+      const iso = toISO(d);
+      const parts = iso.split("-");
+      const sameYear = d.getFullYear() === TODAY.getFullYear();
+      return {
+        date:  iso,
+        label: `${DAY_ABBR[d.getDay()]}, ${parts[2]}/${parts[1]}${sameYear ? "" : `/${String(d.getFullYear()).slice(2)}`}`,
+      };
+    }), []);
+
+  // ── Availability — usa React state (reativo) ──────────────────────────────
+  const availability = myAvailability;
 
   const toggleSlot = (dayKey: string, slot: string) => {
     if (!therapist) return;
@@ -207,7 +221,7 @@ export default function TherapistSchedule() {
     const updated = current.includes(slot)
       ? current.filter((s) => s !== slot)
       : [...current, slot].sort();
-    store.setAvailability(therapist.id, { ...availability, [dayKey]: updated });
+    mutateMyAvailability({ ...availability, [dayKey]: updated });
   };
 
   const dayAppointments = myAppointments.filter((a) => a.date === selectedDay);
@@ -675,13 +689,9 @@ export default function TherapistSchedule() {
                     value={bookingForm.date}
                     onChange={(e) => setBookingField("date", e.target.value)}
                   >
-                    {visibleDays.map((d) => {
-                      const parts = d.date.split("-");
-                      const label = `${d.label}, ${parts[2]}/${parts[1]}`;
-                      return (
-                        <option key={d.date} value={d.date}>{label}</option>
-                      );
-                    })}
+                    {BOOKING_DATES.map((d) => (
+                      <option key={d.date} value={d.date}>{d.label}</option>
+                    ))}
                   </select>
                 </div>
                 <div>

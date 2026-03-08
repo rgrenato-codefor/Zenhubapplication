@@ -93,9 +93,9 @@ export default function TherapistProfile() {
     <div className="space-y-4">
 
       {/* ── Profile Card ─────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-violet-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-violet-100 shadow-sm">
         {/* Cover gradient */}
-        <div className="h-24 bg-gradient-to-r from-violet-600 to-indigo-600 relative" />
+        <div className="h-24 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-t-2xl" />
 
         {/* Avatar + Info */}
         <div className="px-4 md:px-6 pb-5">
@@ -105,11 +105,11 @@ export default function TherapistProfile() {
               <img
                 src={therapist.avatar}
                 alt={therapist.name}
-                className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-md shrink-0"
+                className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-md shrink-0 relative z-10"
               />
             ) : (
               <div
-                className="w-20 h-20 rounded-2xl bg-violet-100 border-4 border-white shadow-md flex items-center justify-center text-violet-600 text-3xl shrink-0"
+                className="w-20 h-20 rounded-2xl bg-violet-100 border-4 border-white shadow-md flex items-center justify-center text-violet-600 text-3xl shrink-0 relative z-10"
                 style={{ fontWeight: 700 }}
               >
                 {therapist.name.charAt(0)}

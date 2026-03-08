@@ -675,7 +675,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [isDemoMode, user, myTherapist, myCatalog]);
 
   const mutateMyAvailability = useCallback(async (schedule: Record<string, string[]>) => {
-    if (isDemoMode) { therapistStore.setAvailability(user?.therapistId ?? "", schedule); return; }
+    if (isDemoMode) {
+      therapistStore.setAvailability(user?.therapistId ?? "", schedule);
+      setMyAvailability(schedule); // atualiza React state para re-render imediato
+      return;
+    }
     if (!myTherapist) return;
     await fsSetAvailability(myTherapist.id, schedule);
     setMyAvailability(schedule);
