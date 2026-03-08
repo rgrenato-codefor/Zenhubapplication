@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import {
   CalendarDays, Clock, CheckCircle, AlertCircle, User, X,
   CalendarCheck, Plus, Loader2, Zap, Building2, ChevronLeft, ChevronRight,
@@ -91,11 +91,25 @@ export default function TherapistSchedule() {
   const isAutonomous = !company;
 
   const [tab, setTab] = useState<"agenda" | "disponibilidade">("agenda");
-  const [centerOffset, setCenterOffset] = useState(0); // offset em dias a partir de TODAY
+  const [centerOffset, setCenterOffset] = useState(0);
   const [selectedDay, setSelectedDay] = useState(toISO(TODAY));
   const [closureModal, setClosureModal] = useState<ClosureModal>(null);
   const [closureNotes, setClosureNotes] = useState("");
   const [closureSuccess, setClosureSuccess] = useState(false);
+
+  // ── 91 dias para o carrossel (30 passados + hoje + 60 futuros) ────────────
+  const ALL_DAYS = useMemo(() =>
+    Array.from({ length: 91 }, (_, i) => {
+      const d   = addDays(TODAY, i - 30);
+      const iso = toISO(d);
+      return {
+        date:    iso,
+        label:   DAY_ABBR[d.getDay()],
+        num:     String(d.getDate()).padStart(2, "0"),
+        dayKey:  DAY_KEYS_WK[d.getDay()],
+        isToday: iso === toISO(TODAY),
+      };
+    }), []);
 
   // ── Derived: 5 days visíveis centrados em TODAY + centerOffset ────────────
   const visibleDays = useMemo(() => {
@@ -112,29 +126,49 @@ export default function TherapistSchedule() {
     });
   }, [centerOffset]);
 
-  // ── Header subtitle dinâmico ──────────────────────────────────────────────
+  // ── Header subtitle — baseado no dia selecionado ──────────────────────────
   const headerSubtitle = useMemo(() => {
-    const first = addDays(TODAY, centerOffset - 2);
-    const last  = addDays(TODAY, centerOffset + 2);
-    const fDay  = first.getDate();
-    const lDay  = last.getDate();
-    const fMon  = MONTH_PT[first.getMonth()];
-    const lMon  = MONTH_PT[last.getMonth()];
-    if (first.getMonth() === last.getMonth()) {
-      return `${fDay} a ${lDay} de ${fMon}, ${last.getFullYear()}`;
-    }
-    return `${fDay} de ${fMon} a ${lDay} de ${lMon}, ${last.getFullYear()}`;
-  }, [centerOffset]);
+    const d = new Date(selectedDay + "T12:00:00");
+    if (selectedDay === toISO(TODAY))
+      return `Hoje · ${d.getDate()} de ${MONTH_PT[d.getMonth()]}, ${d.getFullYear()}`;
+    const dayNames = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+    return `${dayNames[d.getDay()]}, ${d.getDate()} de ${MONTH_PT[d.getMonth()]} · ${d.getFullYear()}`;
+  }, [selectedDay]);
 
-  // navegar e manter selectedDay visível
+  // ── Carrossel ref + helpers ───────────────────────────────────────────────
+  const carouselRef = useRef<HTMLDivElement>(null);
+
+  const scrollToDate = useCallback((date: string, behavior: ScrollBehavior = "smooth") => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const item = el.querySelector(`[data-date="${date}"]`) as HTMLElement | null;
+    if (!item) return;
+    const left = item.offsetLeft - el.clientWidth / 2 + item.offsetWidth / 2;
+    el.scrollTo({ left, behavior });
+  }, []);
+
+  // Centraliza hoje na montagem
+  useEffect(() => { scrollToDate(toISO(TODAY), "instant"); }, [scrollToDate]);
+
+  const scrollCarousel = (dir: -1 | 1) => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const itemW = el.scrollWidth / ALL_DAYS.length;
+    el.scrollBy({ left: dir * itemW * 5, behavior: "smooth" });
+  };
+
+  const handleDaySelect = (date: string) => {
+    setSelectedDay(date);
+    scrollToDate(date);
+  };
+
+  // navegar (usado pela aba Disponibilidade)
   const navigate = (dir: -1 | 1) => {
     const newOffset = centerOffset + dir;
     setCenterOffset(newOffset);
     const centerISO = toISO(addDays(TODAY, newOffset));
     const windowDates = [-2, -1, 0, 1, 2].map((r) => toISO(addDays(TODAY, newOffset + r)));
-    if (!windowDates.includes(selectedDay)) {
-      setSelectedDay(centerISO);
-    }
+    if (!windowDates.includes(selectedDay)) setSelectedDay(centerISO);
   };
 
   // ── Touch / swipe ─────────────────────────────────────────────────────────
@@ -375,52 +409,54 @@ export default function TherapistSchedule() {
       {/* ── Agenda ─────────────────────────────────────────────────────────── */}
       {tab === "agenda" && (
         <>
-          {/* Day selector com navegação */}
+          {/* Day selector — Carrossel */}
           <div className="flex items-center sm:gap-2">
             {/* Seta esquerda — só desktop */}
             <button
-              onClick={() => navigate(-1)}
+              onClick={() => scrollCarousel(-1)}
               className="hidden sm:flex shrink-0 w-9 h-9 items-center justify-center rounded-xl bg-white border border-violet-100 text-gray-500 hover:border-violet-400 hover:text-violet-600 transition-all"
               aria-label="Dias anteriores"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
 
-            {/* 5 dias — swipe no mobile */}
+            {/* Carrossel horizontal */}
             <div
-              className="flex-1 grid grid-cols-5 gap-1.5 select-none"
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
+              ref={carouselRef}
+              className="flex-1 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              style={{ WebkitOverflowScrolling: "touch" }}
             >
-              {visibleDays.map((day) => {
-                const count = myAppointments.filter((a) => a.date === day.date).length;
+              {ALL_DAYS.map((day) => {
+                const isSelected = selectedDay === day.date;
+                const count   = myAppointments.filter((a) => a.date === day.date).length;
                 const pending = myAppointments.filter(
                   (a) => a.date === day.date && !store.isCompleted(a.id) && (a.status === "confirmed" || a.status === "pending")
                 ).length;
                 return (
                   <button
                     key={day.date}
-                    onClick={() => setSelectedDay(day.date)}
-                    className={`rounded-xl py-2.5 px-1 text-center transition-all ${
-                      selectedDay === day.date
+                    data-date={day.date}
+                    onClick={() => handleDaySelect(day.date)}
+                    className={`flex-none w-[calc((100%-24px)/5)] min-w-[52px] rounded-xl py-2.5 px-1 text-center transition-all ${
+                      isSelected
                         ? "text-white shadow-md"
                         : day.isToday
                         ? "bg-white border-2 border-violet-300"
                         : "bg-white border border-violet-100"
                     }`}
-                    style={selectedDay === day.date ? { background: "linear-gradient(135deg, #7C3AED, #4F46E5)" } : {}}
+                    style={isSelected ? { background: "linear-gradient(135deg, #7C3AED, #4F46E5)" } : {}}
                   >
                     <p className="text-xs opacity-70">{day.label}</p>
                     <p className="text-base" style={{ fontWeight: 700 }}>{day.num}</p>
-                    {day.isToday && selectedDay !== day.date && (
+                    {day.isToday && !isSelected && (
                       <div className="flex justify-center mt-0.5">
                         <span className="w-1 h-1 rounded-full bg-violet-400" />
                       </div>
                     )}
                     {count > 0 && (
                       <div className="flex items-center justify-center gap-0.5 mt-0.5">
-                        <span className={`w-1.5 h-1.5 rounded-full ${selectedDay === day.date ? "bg-white/70" : "bg-violet-400"}`} />
-                        {pending > 0 && <span className={`w-1.5 h-1.5 rounded-full ${selectedDay === day.date ? "bg-amber-200" : "bg-amber-400"}`} />}
+                        <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? "bg-white/70" : "bg-violet-400"}`} />
+                        {pending > 0 && <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? "bg-amber-200" : "bg-amber-400"}`} />}
                       </div>
                     )}
                   </button>
@@ -430,7 +466,7 @@ export default function TherapistSchedule() {
 
             {/* Seta direita — só desktop */}
             <button
-              onClick={() => navigate(1)}
+              onClick={() => scrollCarousel(1)}
               className="hidden sm:flex shrink-0 w-9 h-9 items-center justify-center rounded-xl bg-white border border-violet-100 text-gray-500 hover:border-violet-400 hover:text-violet-600 transition-all"
               aria-label="Próximos dias"
             >
