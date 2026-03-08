@@ -5,6 +5,7 @@ import {
   DollarSign, BarChart3, Settings, LogOut, Menu, X, Bell,
   ChevronDown, ChevronRight, DoorOpen, MapPin, Check, Building2,
 } from "../shared/icons";
+import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { CompanyProvider, useCompanyUnit } from "../../context/CompanyContext";
@@ -282,10 +283,11 @@ function CompanyLayoutInner() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors relative">
-              <Bell className="w-4 h-4" />
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
+            <NotificationsDropdown
+              variant="company"
+              triggerClass="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors"
+              bellClass="w-4 h-4"
+            />
             <div className="flex items-center gap-2 cursor-pointer">
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm"

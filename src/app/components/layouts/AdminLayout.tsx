@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Building2, Users, BarChart3, Settings,
   LogOut, Menu, X, Bell, ChevronDown, Shield, CreditCard,
 } from "../shared/icons";
+import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useAuth } from "../../context/AuthContext";
 
 const navItems = [
@@ -99,10 +100,11 @@ export default function AdminLayout() {
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <div className="flex items-center gap-3">
-            <button className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors relative">
-              <Bell className="w-4 h-4" />
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
+            <NotificationsDropdown
+              variant="admin"
+              triggerClass="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+              bellClass="w-4 h-4"
+            />
             <div className="flex items-center gap-2 cursor-pointer">
               <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-sm" style={{ fontWeight: 700 }}>
                 {user?.name?.charAt(0)}

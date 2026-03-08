@@ -2,6 +2,7 @@ import { Outlet, NavLink, useNavigate } from "react-router";
 import {
   Home, Users, CalendarDays, UserCircle, LogOut, Bell, Sparkles,
 } from "../shared/icons";
+import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 
@@ -41,9 +42,11 @@ export default function ClientLayout() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 relative">
-            <Bell className="w-4 h-4" />
-          </button>
+          <NotificationsDropdown
+            variant="client"
+            triggerClass="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"
+            bellClass="w-4 h-4"
+          />
           <button onClick={handleLogout} className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors">
             <LogOut className="w-4 h-4" />
           </button>

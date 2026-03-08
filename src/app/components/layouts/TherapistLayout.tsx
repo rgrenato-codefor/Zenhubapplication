@@ -6,6 +6,7 @@ import {
   LayoutDashboard, CalendarDays, DollarSign, UserCircle,
   LogOut, Menu, X, Bell, Sparkles, Layers,
 } from "../shared/icons";
+import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 
 const navItems = [
   { path: "/terapeuta",          icon: LayoutDashboard, label: "Dashboard",  end: true },
@@ -131,9 +132,11 @@ export default function TherapistLayout() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
-            <button className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 hover:text-violet-700 transition-colors relative">
-              <Bell className="w-4 h-4" />
-            </button>
+            <NotificationsDropdown
+              variant="therapist"
+              triggerClass="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 hover:text-violet-700 transition-colors"
+              bellClass="w-4 h-4"
+            />
             <div className="flex items-center gap-2">
               {user?.avatar ? (
                 <img
