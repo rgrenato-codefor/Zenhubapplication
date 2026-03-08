@@ -205,20 +205,20 @@ export function useNotifications(variant: NotifVariant) {
         });
       });
 
-      // 4. Unpaid commissions
-      const unpaid = data.sessionRecords.filter((r) => !r.paidByCompany);
-      if (unpaid.length > 0) {
-        const total = unpaid.reduce(
-          (s, r) => s + (r.therapistEarned ?? (r as any).therapistEarning ?? 0),
-          0
-        );
+      // 4. Comissões a receber — somente sessões de empresa deste terapeuta
+      //    ainda não pagas. Sessões autônomas não entram (não há empresa devedora).
+      const unpaidCompany = data.sessionRecords.filter(
+        (r) => r.therapistId === therapistId && !!r.companyId && !r.paidByCompany,
+      );
+      if (unpaidCompany.length > 0) {
+        const total = unpaidCompany.reduce((s, r) => s + (r.therapistEarned ?? 0), 0);
         notifs.push({
           id: "t_unpaid",
           icon: "dollar",
           iconBg: "bg-yellow-100",
           iconColor: "text-yellow-600",
           title: "Comissões a receber",
-          sub: `${unpaid.length} sessão(ões) · ${fmtBRL(total)}`,
+          sub: `${unpaidCompany.length} sessão(ões) · ${fmtBRL(total)}`,
           timeLabel: "hoje",
           read: false,
           sortKey: Date.now(),

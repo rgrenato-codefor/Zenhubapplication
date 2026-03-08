@@ -10,12 +10,11 @@ import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useNotifications } from "../../hooks/useNotifications";
 
 const navItems = [
-  { path: "/terapeuta",               icon: LayoutDashboard, label: "Dashboard",      end: true },
-  { path: "/terapeuta/agenda",        icon: CalendarDays,    label: "Agenda" },
-  { path: "/terapeuta/terapias",      icon: Layers,          label: "Terapias" },
-  { path: "/terapeuta/ganhos",        icon: DollarSign,      label: "Ganhos" },
-  { path: "/terapeuta/notificacoes",  icon: Bell,            label: "Notificações" },
-  { path: "/terapeuta/perfil",        icon: UserCircle,      label: "Perfil" },
+  { path: "/terapeuta",          icon: LayoutDashboard, label: "Início",   end: true },
+  { path: "/terapeuta/agenda",   icon: CalendarDays,    label: "Agenda" },
+  { path: "/terapeuta/terapias", icon: Layers,          label: "Terapias" },
+  { path: "/terapeuta/ganhos",   icon: DollarSign,      label: "Ganhos" },
+  { path: "/terapeuta/perfil",   icon: UserCircle,      label: "Perfil" },
 ];
 
 export default function TherapistLayout() {
@@ -155,11 +154,31 @@ export default function TherapistLayout() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
-            <NotificationsDropdown
-              variant="therapist"
-              triggerClass="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 hover:text-violet-700 transition-colors"
-              bellClass="w-4 h-4"
-            />
+            {/* Mobile: bell navega direto para a página de notificações */}
+            <button
+              onClick={() => navigate("/terapeuta/notificacoes")}
+              className="relative md:hidden w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 hover:text-violet-700 transition-colors"
+              aria-label="Notificações"
+            >
+              <Bell className="w-4 h-4" />
+              {unreadCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full bg-violet-600 text-white"
+                  style={{ fontSize: 10, fontWeight: 700 }}
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Desktop: dropdown de notificações */}
+            <div className="hidden md:block">
+              <NotificationsDropdown
+                variant="therapist"
+                triggerClass="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 hover:text-violet-700 transition-colors"
+                bellClass="w-4 h-4"
+              />
+            </div>
             <div className="flex items-center gap-2">
               {user?.avatar ? (
                 <img
@@ -201,16 +220,8 @@ export default function TherapistLayout() {
               >
                 {({ isActive }) => (
                   <>
-                    <div className={`relative w-8 h-8 flex items-center justify-center rounded-xl transition-colors ${isActive ? "bg-violet-100" : ""}`}>
+                    <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors ${isActive ? "bg-violet-100" : ""}`}>
                       <item.icon className="w-5 h-5" />
-                      {item.label === "Notificações" && unreadCount > 0 && (
-                        <span
-                          className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 flex items-center justify-center rounded-full bg-violet-600 text-white"
-                          style={{ fontSize: 9, fontWeight: 700 }}
-                        >
-                          {unreadCount > 9 ? "9+" : unreadCount}
-                        </span>
-                      )}
                     </div>
                     <span className="text-[10px]" style={{ fontWeight: isActive ? 600 : 400 }}>{item.label}</span>
                   </>

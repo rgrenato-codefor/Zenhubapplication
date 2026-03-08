@@ -259,9 +259,9 @@ export default function TherapistEarnings() {
         <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={earningsChartData}>
             <defs>
-              <linearGradient id="therapistGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#7C3AED" stopOpacity={0} />
+              <linearGradient id="therapistGradEarnings" x1="0" y1="0" x2="0" y2="1">
+                <stop key="stop-top"    offset="5%"  stopColor="#7C3AED" stopOpacity={0.3} />
+                <stop key="stop-bottom" offset="95%" stopColor="#7C3AED" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#EDE9FE" />
@@ -271,7 +271,7 @@ export default function TherapistEarnings() {
               contentStyle={{ background: "#fff", border: "1px solid #C4B5FD", borderRadius: "0.75rem" }}
               formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, ""]}
             />
-            <Area type="monotone" dataKey="net" stroke="#7C3AED" strokeWidth={2} fill="url(#therapistGrad)" name="Meu ganho" />
+            <Area type="monotone" dataKey="net" stroke="#7C3AED" strokeWidth={2} fill="url(#therapistGradEarnings)" name="Meu ganho" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
