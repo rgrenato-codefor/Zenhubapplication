@@ -107,7 +107,7 @@ export default function TherapistTherapies() {
         </div>
         {isAutonomous && (
           <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 text-white text-sm hover:bg-violet-700 transition-colors" style={{ fontWeight: 600 }}>
-            <Plus className="w-4 h-4" /> Nova terapia
+            <Plus className="w-4 h-4" /> ADICIONAR
           </button>
         )}
       </div>
@@ -178,7 +178,7 @@ export default function TherapistTherapies() {
           </div>
           {isAutonomous && (
             <button onClick={openAdd} className="flex items-center gap-1.5 text-violet-500 text-sm hover:text-violet-600" style={{ fontWeight: 600 }}>
-              <Plus className="w-4 h-4" /> Adicionar
+              <Plus className="w-4 h-4" /> ADICIONAR
             </button>
           )}
         </div>
