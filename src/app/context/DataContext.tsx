@@ -29,10 +29,11 @@ import {
   therapistEarningsData as mockTherapistEarningsData,
 } from "../data/mockData";
 import { therapistStore, type SessionRecord, type CatalogItem } from "../store/therapistStore";
+import type { MediaItem } from "../../lib/imagekit";
 import { unitStore } from "../store/unitStore";
 import { roomStore } from "../store/roomStore";
 
-// ── Firestore functions ──────────────────────────────────────────────────────
+// ── Firestore functions ─────────────────────────────────────────────────────
 import {
   getCompany, updateCompany as fsUpdateCompany,
   getUnitsByCompany, createUnit as fsCreateUnit,
@@ -65,7 +66,7 @@ import {
 } from "../../lib/firestore";
 
 // ─── Re-export types so pages can import from DataContext ─────────────────────
-export type { Company, Unit, Therapist, Client, Therapy, Room, Appointment, SessionRecord, CatalogItem };
+export type { Company, Unit, Therapist, Client, Therapy, Room, Appointment, SessionRecord, CatalogItem, MediaItem };
 
 // ─── Context type ─────────────────────────────────────────────────────────────
 
@@ -79,6 +80,10 @@ interface DataContextValue {
   therapies: Therapy[];
   rooms: Room[];
   sessionRecords: SessionRecord[];
+
+  // Gallery
+  myGallery: MediaItem[];
+  companyGallery: MediaItem[];
 
   // Super Admin — platform-wide lists
   allAdminCompanies: Company[];
@@ -162,6 +167,10 @@ interface DataContextValue {
   mutateMyAvailability: (schedule: Record<string, string[]>) => Promise<void>;
   mutateLinkToCompany: (inviteCode: string) => Promise<Company | null>;
   mutateUnlinkFromCompany: () => Promise<void>;
+  mutateAddMyGalleryItem: (item: MediaItem) => Promise<void>;
+  mutateRemoveMyGalleryItem: (itemId: string) => Promise<void>;
+  mutateAddCompanyGalleryItem: (item: MediaItem) => Promise<void>;
+  mutateRemoveCompanyGalleryItem: (itemId: string) => Promise<void>;
 
   // Client profile (client side)
   mutateMyClientProfile: (data: Partial<Client>) => Promise<void>;
@@ -369,20 +378,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // and fall back to the static mock only when state is still null (initial load).
   const demoCompany = isDemoMode
     ? (() => {
+        // Therapist role: ALWAYS derive from the live association store so that
+        // unlink / rejectAssociation is reflected immediately.
+        if (user?.role === "demo" || user?.role === "therapist") {
+          const therapistId = user?.therapistId;
+          if (therapistId) {
+            const assoc = therapistStore.getAssociation(therapistId);
+            if (assoc.companyId) {
+              const found = mockCompanies.find((c) => c.id === assoc.companyId);
+              if (found) return found as unknown as Company;
+            }
+          }
+          return null;
+        }
+        // Company / admin roles: prefer mutable state, fallback to mock
         if (company) return company;
-        // Company admin: look up by companyId
         if (demoCompanyId) {
           const found = mockCompanies.find((c) => c.id === demoCompanyId);
           if (found) return found as unknown as Company;
-        }
-        // Therapist in demo: look up via association (pending or active)
-        const therapistId = user?.therapistId;
-        if (therapistId) {
-          const assoc = therapistStore.getAssociation(therapistId);
-          if (assoc.companyId) {
-            const found = mockCompanies.find((c) => c.id === assoc.companyId);
-            if (found) return found as unknown as Company;
-          }
         }
         return null;
       })()
@@ -395,12 +408,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const demoTherapists = isDemoMode
     ? (() => {
         if (!demoCompanyId) return [] as unknown as Therapist[];
-        // Include statically assigned + dynamically approved from store
+        // Use ONLY the store's active associations as source of truth.
+        // Do NOT fall back to t.companyId from static mock data — that field
+        // never changes and would keep showing dissociated therapists.
         const activeIds = new Set(
           therapistStore.getCompanyTherapists(demoCompanyId).map((a) => a.therapistId)
         );
         return mockTherapists.filter(
-          (t) => t.companyId === demoCompanyId || activeIds.has(t.id)
+          (t) => activeIds.has(t.id)
         ) as unknown as Therapist[];
       })()
     : therapists;
@@ -461,6 +476,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ...therapistStore.getAllRecords().map((r) => r.appointmentId),
       ])
     : completedSessionIds;
+
+  const demoMyGallery = isDemoMode
+    ? therapistStore.getGallery(user?.therapistId ?? "")
+    : [];
+
+  const demoCompanyGallery = isDemoMode
+    ? therapistStore.getCompanyGallery(user?.companyId ?? demoCompanyId ?? "")
+    : [];
 
   // Super Admin demo: expose all mock companies/therapists/clients
   const demoAdminCompanies = isDemoMode ? (mockCompanies as unknown as Company[]) : allAdminCompanies;
@@ -805,6 +828,52 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setCompany(null);
   }, [isDemoMode, user, myTherapist]);
 
+  const mutateAddMyGalleryItem = useCallback(async (item: MediaItem) => {
+    if (isDemoMode) {
+      therapistStore.addGalleryItem(user?.therapistId ?? "", item);
+      return;
+    }
+    if (!myTherapist) return;
+    const gallery = [...(myTherapist.gallery ?? []), item];
+    await fsUpdateTherapist(myTherapist.id, { gallery } as any);
+    setMyTherapist((prev) => prev ? { ...prev, gallery } as any : prev);
+  }, [isDemoMode, user, myTherapist]);
+
+  const mutateRemoveMyGalleryItem = useCallback(async (itemId: string) => {
+    if (isDemoMode) {
+      therapistStore.removeGalleryItem(user?.therapistId ?? "", itemId);
+      return;
+    }
+    if (!myTherapist) return;
+    const gallery = ((myTherapist as any).gallery ?? []).filter((m: MediaItem) => m.id !== itemId);
+    await fsUpdateTherapist(myTherapist.id, { gallery } as any);
+    setMyTherapist((prev) => prev ? { ...prev, gallery } as any : prev);
+  }, [isDemoMode, user, myTherapist]);
+
+  const mutateAddCompanyGalleryItem = useCallback(async (item: MediaItem) => {
+    if (isDemoMode) {
+      therapistStore.addCompanyGalleryItem(user?.companyId ?? demoCompanyId ?? "", item);
+      return;
+    }
+    const cid = user?.companyId;
+    if (!cid) return;
+    const gallery = [...(company as any)?.gallery ?? [], item];
+    await fsUpdateCompany(cid, { gallery } as any);
+    setCompany((prev) => prev ? { ...prev, gallery } as any : prev);
+  }, [isDemoMode, user, demoCompanyId, company]);
+
+  const mutateRemoveCompanyGalleryItem = useCallback(async (itemId: string) => {
+    if (isDemoMode) {
+      therapistStore.removeCompanyGalleryItem(user?.companyId ?? demoCompanyId ?? "", itemId);
+      return;
+    }
+    const cid = user?.companyId;
+    if (!cid) return;
+    const gallery = ((company as any)?.gallery ?? []).filter((m: MediaItem) => m.id !== itemId);
+    await fsUpdateCompany(cid, { gallery } as any);
+    setCompany((prev) => prev ? { ...prev, gallery } as any : prev);
+  }, [isDemoMode, user, demoCompanyId, company]);
+
   // Client profile
   const mutateMyClientProfile = useCallback(async (data: Partial<Client>) => {
     if (isDemoMode) return;
@@ -865,6 +934,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     roomStoreBridge: roomStore,
     roomAssignments: isDemoMode ? demoRoomAssignments : roomAssignments,
     completedSessionIds: demoCompletedIds,
+    myGallery: demoMyGallery,
+    companyGallery: demoCompanyGallery,
     loading,
     mutateCompany,
     mutateAddUnit, mutateUpdateUnit, mutateDeleteUnit,
@@ -879,6 +950,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     mutateAssignRoom, mutateUnassignRoom,
     mutateMyTherapistProfile, mutateMyCatalog, mutateMyAvailability,
     mutateLinkToCompany, mutateUnlinkFromCompany,
+    mutateAddMyGalleryItem, mutateRemoveMyGalleryItem,
+    mutateAddCompanyGalleryItem, mutateRemoveCompanyGalleryItem,
     mutateMyClientProfile,
     searchCompaniesByName, fetchCompanyByInviteCode, fetchUnitsByCompany,
     refresh,

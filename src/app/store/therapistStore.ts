@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
 import { therapistCatalog as initialCatalog, therapists as initialTherapists } from "../data/mockData";
+import type { MediaItem } from "../../lib/imagekit";
+
+// Re-export so pages can import from one place
+export type { MediaItem };
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -86,13 +90,16 @@ function seedRecords(): SessionRecord[] {
 function seedAssociations(): Record<string, TherapistAssociation> {
   const result: Record<string, TherapistAssociation> = {};
   initialTherapists.forEach((t) => {
+    // t1 = terapeuta demo (Ana Carolina Silva) — inicia como AUTÔNOMO para
+    // que o usuário possa testar o fluxo completo: solicitar → pendente → aprovação
+    const isDemoTherapist = t.id === "t1";
     result[t.id] = {
       therapistId: t.id,
-      companyId: t.companyId ?? null,
-      unitId: (t as any).unitId ?? null,
+      companyId: isDemoTherapist ? null : (t.companyId ?? null),
+      unitId: isDemoTherapist ? null : ((t as any).unitId ?? null),
       commission: t.commission,
-      linkedAt: t.companyId ? "2024-01-15" : null,
-      status: t.companyId ? "active" : "none",
+      linkedAt: isDemoTherapist ? null : (t.companyId ? "2024-01-15" : null),
+      status: isDemoTherapist ? "none" : (t.companyId ? "active" : "none"),
     };
   });
   return result;
@@ -105,6 +112,28 @@ let sessionRecords: SessionRecord[] = seedRecords();
 let catalogs: Record<string, CatalogItem[]> = {};
 let associations: Record<string, TherapistAssociation> = seedAssociations();
 let availabilityMap: Record<string, Record<string, string[]>> = {};
+
+// ── Gallery state ─────────────────────────────────────────────────────────────
+
+function seedGalleries(): Record<string, MediaItem[]> {
+  const result: Record<string, MediaItem[]> = {};
+  initialTherapists.forEach((t) => {
+    const photos: string[] = (t as any).photos ?? [];
+    if (photos.length) {
+      result[t.id] = photos.map((url, i) => ({
+        id: `seed_${t.id}_${i}`,
+        type: "image" as const,
+        url,
+        thumbnailUrl: url,
+        uploadedAt: "2024-01-15",
+      }));
+    }
+  });
+  return result;
+}
+
+let therapistGalleries: Record<string, MediaItem[]> = seedGalleries();
+let companyGalleries:   Record<string, MediaItem[]> = {};
 
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((fn) => fn());
@@ -290,6 +319,50 @@ export const therapistStore = {
 
   setAvailability: (therapistId: string, schedule: Record<string, string[]>) => {
     availabilityMap[therapistId] = schedule;
+    notify();
+  },
+
+  // ── Gallery ───────────────────────────────────────────────────────────────
+
+  getGallery: (therapistId: string): MediaItem[] =>
+    therapistGalleries[therapistId] ?? [],
+
+  addGalleryItem: (therapistId: string, item: MediaItem) => {
+    therapistGalleries[therapistId] = [
+      ...(therapistGalleries[therapistId] ?? []),
+      item,
+    ];
+    notify();
+  },
+
+  removeGalleryItem: (therapistId: string, itemId: string) => {
+    therapistGalleries[therapistId] = (therapistGalleries[therapistId] ?? [])
+      .filter((m) => m.id !== itemId);
+    notify();
+  },
+
+  updateGalleryCaption: (therapistId: string, itemId: string, caption: string) => {
+    therapistGalleries[therapistId] = (therapistGalleries[therapistId] ?? [])
+      .map((m) => m.id === itemId ? { ...m, caption } : m);
+    notify();
+  },
+
+  // ── Company Gallery ───────────────────────────────────────────────────────
+
+  getCompanyGallery: (companyId: string): MediaItem[] =>
+    companyGalleries[companyId] ?? [],
+
+  addCompanyGalleryItem: (companyId: string, item: MediaItem) => {
+    companyGalleries[companyId] = [
+      ...(companyGalleries[companyId] ?? []),
+      item,
+    ];
+    notify();
+  },
+
+  removeCompanyGalleryItem: (companyId: string, itemId: string) => {
+    companyGalleries[companyId] = (companyGalleries[companyId] ?? [])
+      .filter((m) => m.id !== itemId);
     notify();
   },
 

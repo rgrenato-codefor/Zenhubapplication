@@ -1,11 +1,8 @@
-import { useState, useEffect } from "react";
-import {
-  Star, Edit2, Save, CheckCircle, X,
-  Link2, Copy, Check, Building2, LogOut,
-  AlertTriangle, Sparkles, AtSign, ExternalLink, Clock,
-} from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
+import { useTherapistStore } from "../../store/therapistStore";
+import { MediaGallery } from "../../components/shared/MediaGallery";
+import type { MediaItem } from "../../../lib/imagekit";
 
 const DAYS_MAP: Record<string, string> = {
   monday: "Seg", tuesday: "Ter", wednesday: "Qua",
@@ -14,11 +11,15 @@ const DAYS_MAP: Record<string, string> = {
 
 export default function TherapistProfile() {
   const { user } = useAuth();
+  // Direct store subscription — component re-renders on every store notification
+  // (link/unlink/approve) without relying on the DataContext chain.
+  const store = useTherapistStore();
   const {
     myTherapist: therapist, company,
-    therapistStore: store,
+    myGallery,
     mutateMyTherapistProfile,
     mutateLinkToCompany, mutateUnlinkFromCompany,
+    mutateAddMyGalleryItem, mutateRemoveMyGalleryItem,
   } = usePageData();
 
   const [editing, setEditing] = useState(false);
@@ -29,6 +30,7 @@ export default function TherapistProfile() {
   const [linking, setLinking] = useState(false);
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [galleryUploading, setGalleryUploading] = useState(false);
 
   const [form, setForm] = useState({
     bio: therapist?.bio ?? "",
@@ -47,12 +49,17 @@ export default function TherapistProfile() {
     }
   }, [therapist]);
 
-  const isLinked = !!therapist?.companyId && !!company;
-
   // Association status from the store (covers demo + real)
+  // Using the store directly via useTherapistStore() — always up-to-date.
   const assoc = therapist ? store.getAssociation(therapist.id) : null;
   const isPending  = assoc?.status === "pending";
   const isActive   = assoc?.status === "active";
+  // isLinked drives the company card visibility — purely from store status,
+  // no dependency on potentially-stale therapist.companyId or context company.
+  const isLinked = isPending || isActive;
+  // Company data for display: prefer context (reactive via DataContext fix),
+  // fall back to a mock lookup by the store's companyId.
+  const linkedCompany = company ?? null;
   // Company commission set by the company (only meaningful when active)
   const companyCommission = assoc?.commission ?? null;
 
@@ -96,6 +103,18 @@ export default function TherapistProfile() {
   };
 
   const publicUrl = `zenhub.com.br/${therapist.username ?? user?.therapistId}`;
+
+  const handleGalleryUpload = async (file: File, onProgress: (p: number) => void): Promise<MediaItem> => {
+    const item = await uploadMedia(file, "/zen-hub/therapists", onProgress);
+    await mutateAddMyGalleryItem(item);
+    return item;
+  };
+
+  const handleGalleryRemove = async (itemId: string) => {
+    const item = myGallery.find((m) => m.id === itemId);
+    await deleteMedia(item?.fileId);
+    await mutateRemoveMyGalleryItem(itemId);
+  };
 
   return (
     <div className="space-y-4">
@@ -278,12 +297,12 @@ export default function TherapistProfile() {
               <div className="rounded-xl border-2 border-amber-200 overflow-hidden">
                 <div className="flex items-center gap-3 p-3 bg-amber-50">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs shrink-0"
-                    style={{ background: company.color, fontWeight: 700 }}>
-                    {company.logo}
+                    style={{ background: linkedCompany?.color, fontWeight: 700 }}>
+                    {linkedCompany?.logo}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate" style={{ fontWeight: 600, color: company.color }}>
-                      {company.name}
+                    <p className="text-sm truncate" style={{ fontWeight: 600, color: linkedCompany?.color }}>
+                      {linkedCompany?.name}
                     </p>
                     <div className="flex items-center gap-1 mt-0.5">
                       <Clock className="w-3 h-3 text-amber-500 shrink-0" />
@@ -303,22 +322,22 @@ export default function TherapistProfile() {
               /* ── Active link ── */
               <div
                 className="flex items-center gap-3 p-3 rounded-xl"
-                style={{ background: `${company.color}12` }}
+                style={{ background: `${linkedCompany?.color}12` }}
               >
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs shrink-0"
-                  style={{ background: company.color, fontWeight: 700 }}
+                  style={{ background: linkedCompany?.color, fontWeight: 700 }}
                 >
-                  {company.logo}
+                  {linkedCompany?.logo}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate" style={{ fontWeight: 600, color: company.color }}>
-                    {company.name}
+                  <p className="text-sm truncate" style={{ fontWeight: 600, color: linkedCompany?.color }}>
+                    {linkedCompany?.name}
                   </p>
                   {companyCommission !== null && companyCommission > 0 ? (
                     <p className="text-xs text-gray-500">
                       Comissão definida pela empresa:{" "}
-                      <span style={{ fontWeight: 700, color: company.color }}>{companyCommission}%</span>
+                      <span style={{ fontWeight: 700, color: linkedCompany?.color }}>{companyCommission}%</span>
                       {" "}por sessão
                     </p>
                   ) : (
@@ -352,6 +371,19 @@ export default function TherapistProfile() {
             </button>
           </div>
         )}
+      </div>
+
+      {/* ── Gallery ───────────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-violet-100 p-4 md:p-5 shadow-sm">
+        <MediaGallery
+          items={myGallery}
+          onUpload={handleGalleryUpload}
+          onRemove={handleGalleryRemove}
+          canEdit
+          accentColor="#7C3AED"
+          title="Galeria de fotos & vídeos"
+          maxItems={30}
+        />
       </div>
 
       {/* ── Availability ──────────────────────────────────────────────────────── */}

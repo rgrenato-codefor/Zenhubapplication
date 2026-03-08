@@ -3,15 +3,18 @@ import {
   Save, Building2, Bell, Users, Link, Copy, CheckCheck,
   MapPin, Plus, Edit2, Trash2, X, Phone, Mail, Star,
   CheckCircle, AlertCircle, ChevronRight, ToggleLeft, ToggleRight,
-  Download, QrCode, Smartphone, Share2, Camera,
+  Download, QrCode, Smartphone, Share2, Camera, Image,
 } from "../../components/shared/icons";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { type Unit } from "../../context/DataContext";
+import { MediaGallery } from "../../components/shared/MediaGallery";
+import { uploadMedia, deleteMedia } from "../../../lib/imagekit";
+import type { MediaItem } from "../../../lib/imagekit";
 
 type UnitStatus = "active" | "inactive";
-type ActiveTab = "company" | "units" | "notifications" | "invites";
+type ActiveTab = "company" | "units" | "gallery" | "notifications" | "invites";
 
 // ── Unit Form Modal ──────────────────────────────────────────────────────────
 
@@ -233,8 +236,10 @@ function UnitModal({ mode, initial, companyId, primaryColor, onSave, onClose }: 
 export default function CompanySettings() {
   const { user } = useAuth();
   const {
-    company: companyData, units: unitsData,
+    company: companyData, units,
     mutateCompany, mutateAddUnit, mutateUpdateUnit, mutateDeleteUnit,
+    companyGallery,
+    mutateAddCompanyGalleryItem, mutateRemoveCompanyGalleryItem,
   } = usePageData();
 
   const companyId = user?.companyId ?? "";
@@ -276,8 +281,6 @@ export default function CompanySettings() {
       logoUrl: (companyData as any)?.logoUrl ?? "",
     });
   }, [companyData]);
-
-  const units = unitsData;
 
   const handleSaveCompany = async () => {
     await mutateCompany(companyForm);
@@ -324,9 +327,22 @@ export default function CompanySettings() {
     a.click();
   };
 
+  const handleCompanyGalleryUpload = async (file: File, onProgress: (p: number) => void): Promise<MediaItem> => {
+    const item = await uploadMedia(file, "/zen-hub/companies", onProgress);
+    await mutateAddCompanyGalleryItem(item);
+    return item;
+  };
+
+  const handleCompanyGalleryRemove = async (itemId: string) => {
+    const item = companyGallery.find((m: MediaItem) => m.id === itemId);
+    await deleteMedia(item?.fileId);
+    await mutateRemoveCompanyGalleryItem(itemId);
+  };
+
   const tabs = [
     { id: "company",       label: "Geral" },
     { id: "units",         label: "Unidades" },
+    { id: "gallery",       label: "Galeria" },
     { id: "notifications", label: "Notificações" },
     { id: "invites",       label: "Convites" },
   ];
@@ -701,6 +717,32 @@ export default function CompanySettings() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Galeria ────────────────────────────────────────────────────────────── */}
+      {activeTab === "gallery" && (
+        <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: primaryColor }}>
+              <Image className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-gray-900">Galeria da Empresa</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Fotos e vídeos dos seus espaços, equipe e serviços — visíveis no perfil público
+              </p>
+            </div>
+          </div>
+          <MediaGallery
+            items={companyGallery}
+            onUpload={handleCompanyGalleryUpload}
+            onRemove={handleCompanyGalleryRemove}
+            canEdit
+            accentColor={primaryColor}
+            title="Fotos & Vídeos da empresa"
+            maxItems={50}
+          />
         </div>
       )}
 

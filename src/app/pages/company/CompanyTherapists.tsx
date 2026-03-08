@@ -1,17 +1,22 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
-  Plus, Search, Edit2, Trash2, X, CheckCircle, UserPlus, Link2, Link2Off,
-  AlertCircle, Sparkles, Building2, Percent, ArrowLeft, MapPin, Loader2,
-  Star, Mail, Clock, Check, AlertTriangle,
+  UserPlus, Clock, Search, Star, Percent, Mail, Edit2, Link2Off,
+  Link2, X, AlertCircle, Check, CheckCircle, ArrowLeft, Loader2,
+  MapPin, Building2,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
 import { getTherapistByUsername } from "../../../lib/firestore";
+import { useTherapistStore } from "../../store/therapistStore";
 
 export default function CompanyTherapists() {
   const { user, isDemoMode } = useAuth();
-  const { company, therapists: allTherapists, therapies, therapistStore: store,
+  // Direct store subscription — ensures this component re-renders immediately
+  // on ANY store mutation (dissociate, approve, reject…) without depending on
+  // the DataContext forceRender propagation chain.
+  const store = useTherapistStore();
+  const { company, therapists: allTherapists, therapies,
     mutateInviteTherapist, mutateDissociateTherapist, mutateUpdateTherapistCommission,
     mutateApproveAssociation, mutateRejectAssociation } = usePageData();
   const { selectedUnitId, companyUnits } = useCompanyUnit();
@@ -92,6 +97,10 @@ export default function CompanyTherapists() {
     const current = store.getAssociation(found.id);
     if (current.companyId && current.companyId !== user?.companyId) {
       setInviteError("Este terapeuta já está vinculado a outra empresa.");
+      return;
+    }
+    if (current.status === "pending" && current.companyId === user?.companyId) {
+      setInviteError("Este terapeuta já tem uma solicitação pendente. Use a seção \"Solicitações pendentes\" acima para aprovar.");
       return;
     }
     if (companyTherapistIds.includes(found.id)) {

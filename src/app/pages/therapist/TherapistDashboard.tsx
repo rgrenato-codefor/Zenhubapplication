@@ -59,8 +59,11 @@ export default function TherapistDashboard() {
   const allTimeEarned = myRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
 
   // Unpaid vs paid breakdown (company owes therapist)
-  const unpaidRecords = myRecords.filter((r) => !r.paidByCompany);
-  const paidRecords   = myRecords.filter((r) => r.paidByCompany === true);
+  // Only records with companyId are subject to company payment.
+  // Autonomous sessions (companyId === null) are collected directly from the
+  // client — they are never "owed" by any company.
+  const unpaidRecords = myRecords.filter((r) => r.companyId && !r.paidByCompany);
+  const paidRecords   = myRecords.filter((r) => r.companyId && r.paidByCompany === true);
   const pendingReceivable = unpaidRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
   const alreadyReceived   = paidRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
 

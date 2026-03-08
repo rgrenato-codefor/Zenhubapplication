@@ -83,12 +83,15 @@ import {
   // Media / Files
   PhotoIcon,
   CameraIcon,
+  FilmIcon,
+  PlayIcon,
+  VideoCameraIcon,
+  CloudArrowUpIcon,
   QrCodeIcon,
   DocumentDuplicateIcon,
   DocumentTextIcon,
   ClipboardDocumentCheckIcon,
   BookmarkIcon,
-  CloudArrowUpIcon,
   // Misc
   SparklesIcon,
   StarIcon,
@@ -273,10 +276,14 @@ export const Database = CircleStackIcon;
 export const FileText = DocumentTextIcon;
 
 // Media
-export const Image    = PhotoIcon;
-export const Camera   = CameraIcon;
-export const QrCode   = QrCodeIcon;
-export const Smartphone = DevicePhoneMobileIcon;
+export const Image        = PhotoIcon;
+export const Camera       = CameraIcon;
+export const Film         = FilmIcon;
+export const Play         = PlayIcon;
+export const VideoCamera  = VideoCameraIcon;
+export const CloudUpload  = CloudArrowUpIcon;
+export const QrCode       = QrCodeIcon;
+export const Smartphone   = DevicePhoneMobileIcon;
 
 // Misc
 export const Star         = StarIcon;

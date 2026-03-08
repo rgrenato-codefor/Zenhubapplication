@@ -34,6 +34,8 @@ export function usePageData() {
     myCatalog: data.myCatalog,
     myAvailability: data.myAvailability,
     myClient: data.myClient,
+    myGallery: data.myGallery,
+    companyGallery: data.companyGallery,
 
     // ── Store bridges (same API as the original stores) ───────────────────────
     therapistStore: data.therapistStoreBridge,
@@ -80,6 +82,10 @@ export function usePageData() {
     mutateMyAvailability: data.mutateMyAvailability,
     mutateLinkToCompany: data.mutateLinkToCompany,
     mutateUnlinkFromCompany: data.mutateUnlinkFromCompany,
+    mutateAddMyGalleryItem: data.mutateAddMyGalleryItem,
+    mutateRemoveMyGalleryItem: data.mutateRemoveMyGalleryItem,
+    mutateAddCompanyGalleryItem: data.mutateAddCompanyGalleryItem,
+    mutateRemoveCompanyGalleryItem: data.mutateRemoveCompanyGalleryItem,
     mutateMyClientProfile: data.mutateMyClientProfile,
 
     // ── Search ────────────────────────────────────────────────────────────────
