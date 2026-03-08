@@ -1,10 +1,20 @@
 /**
- * useNotifications — derives real notifications from DataContext data.
- * No mock/static content; everything is derived from appointments,
- * session records, therapists, clients and admin platform lists.
+ * useNotifications — derives real notifications from DataContext data
+ * and persists read/dismissed state in Firestore (notificationStates/{uid}).
+ *
+ * Strategy:
+ *  - On mount: load persisted state from Firestore (readIds + dismissedIds)
+ *  - Optimistic UI: update local state immediately so the UI reacts instantly
+ *  - Background persist: fire-and-forget write to Firestore after every action
+ *  - On refresh / next session: Firestore state is reloaded → stays consistent
  */
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useData } from "../context/DataContext";
+import { useAuth } from "../context/AuthContext";
+import {
+  getNotificationState,
+  saveNotificationState,
+} from "../../lib/firestore";
 
 export type NotifIcon =
   | "calendar"
@@ -25,7 +35,7 @@ export interface AppNotification {
   sub: string;
   timeLabel: string; // "14h30", "amanhã 10h", "há 2 h"…
   read: boolean;
-  sortKey: number; // unix ms for ordering
+  sortKey: number;   // unix ms for ordering
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -61,7 +71,6 @@ function timeAgo(dateStr: string, timeStr?: string): string {
   const dt = new Date(timeStr ? `${dateStr}T${timeStr}:00` : `${dateStr}T00:00:00`);
   const diff = now - dt.getTime();
   if (diff < 0) {
-    // future
     const min = Math.abs(Math.floor(diff / 60000));
     const h = Math.floor(min / 60);
     const d = Math.floor(h / 24);
@@ -102,17 +111,65 @@ export type NotifVariant = "therapist" | "company" | "admin" | "client";
 
 export function useNotifications(variant: NotifVariant) {
   const data = useData();
+  const { user } = useAuth();
 
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  // ── Persisted state (loaded from Firestore) ──────────────────────────────
+  const [dismissed,  setDismissed]  = useState<Set<string>>(new Set());
+  const [readIds,    setReadIds]    = useState<Set<string>>(new Set());
+  const [stateReady, setStateReady] = useState(false);
+
+  // Ref to avoid stale closures in persist helper
+  const dismissedRef = useRef(dismissed);
+  const readIdsRef   = useRef(readIds);
+  dismissedRef.current = dismissed;
+  readIdsRef.current   = readIds;
+
+  // Load persisted state once the user is available
+  useEffect(() => {
+    if (!user?.uid) return;
+    let cancelled = false;
+
+    getNotificationState(user.uid).then((state) => {
+      if (cancelled) return;
+      setReadIds(new Set(state.readIds));
+      setDismissed(new Set(state.dismissedIds));
+      setStateReady(true);
+    });
+
+    return () => { cancelled = true; };
+  }, [user?.uid]);
+
+  // Persist current state to Firestore (fire-and-forget)
+  const persist = useCallback((
+    nextDismissed: Set<string>,
+    nextReadIds: Set<string>,
+  ) => {
+    if (!user?.uid) return;
+    saveNotificationState(user.uid, {
+      readIds:      [...nextReadIds],
+      dismissedIds: [...nextDismissed],
+    });
+  }, [user?.uid]);
+
+  // ── Actions ──────────────────────────────────────────────────────────────
 
   const dismiss = useCallback((id: string) => {
-    setDismissed((prev) => new Set([...prev, id]));
-  }, []);
+    setDismissed((prev) => {
+      const next = new Set([...prev, id]);
+      persist(next, readIdsRef.current);
+      return next;
+    });
+  }, [persist]);
 
   const markAllRead = useCallback((ids: string[]) => {
-    setReadIds((prev) => new Set([...prev, ...ids]));
-  }, []);
+    setReadIds((prev) => {
+      const next = new Set([...prev, ...ids]);
+      persist(dismissedRef.current, next);
+      return next;
+    });
+  }, [persist]);
+
+  // ── Compute raw notifications ─────────────────────────────────────────────
 
   const raw = useMemo((): AppNotification[] => {
     const td = todayStr();
@@ -136,7 +193,6 @@ export function useNotifications(variant: NotifVariant) {
         .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
         .slice(0, 3);
 
-      // Fallback: next future sessions if none today/tomorrow
       if (upcoming.length === 0) {
         upcoming = myApps
           .filter(
@@ -163,9 +219,7 @@ export function useNotifications(variant: NotifVariant) {
       });
 
       // 2. Pending (awaiting confirmation)
-      const pending = myApps
-        .filter((a) => a.status === "pending")
-        .slice(0, 2);
+      const pending = myApps.filter((a) => a.status === "pending").slice(0, 2);
       pending.forEach((a) => {
         const client = data.clients.find((c) => c.id === a.clientId);
         notifs.push({
@@ -183,11 +237,7 @@ export function useNotifications(variant: NotifVariant) {
 
       // 3. Recent completed sessions (last 7 days)
       const recentDone = myApps
-        .filter(
-          (a) =>
-            a.status === "completed" &&
-            a.date >= sevenAgo
-        )
+        .filter((a) => a.status === "completed" && a.date >= sevenAgo)
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, 2);
       recentDone.forEach((a) => {
@@ -200,7 +250,7 @@ export function useNotifications(variant: NotifVariant) {
           title: "Sessão concluída",
           sub: `${therapy?.name ?? "Terapia"} · ${fmtBRL(a.price)}`,
           timeLabel: timeAgo(a.date),
-          read: true,
+          read: false,
           sortKey: sortKey(a.date),
         });
       });
@@ -230,7 +280,6 @@ export function useNotifications(variant: NotifVariant) {
     if (variant === "company") {
       const apps = data.appointments;
 
-      // 1. Pending sessions awaiting confirmation
       const pendingApps = apps
         .filter((a) => a.status === "pending")
         .sort((a, b) => a.date.localeCompare(b.date))
@@ -251,7 +300,6 @@ export function useNotifications(variant: NotifVariant) {
         });
       });
 
-      // 2. Upcoming sessions today/tomorrow
       const todaySessions = apps.filter(
         (a) =>
           (a.date === td || a.date === tm) &&
@@ -259,7 +307,6 @@ export function useNotifications(variant: NotifVariant) {
           a.status !== "completed"
       );
       const todayFallback = todaySessions.slice(0, 1);
-
       todayFallback.forEach((a) => {
         const label = a.date === td ? "hoje" : a.date === tm ? "amanhã" : fmtDate(a.date);
         const count = apps.filter(
@@ -278,7 +325,6 @@ export function useNotifications(variant: NotifVariant) {
         });
       });
 
-      // 3. Therapists without recent sessions (inactive)
       const activeTherapistIds = new Set(
         apps
           .filter((a) => a.status === "completed" && a.date >= sevenAgo)
@@ -301,7 +347,6 @@ export function useNotifications(variant: NotifVariant) {
         });
       });
 
-      // 4. Unpaid commissions
       const unpaid = data.sessionRecords.filter((r) => !r.paidByCompany);
       if (unpaid.length > 0) {
         const total = unpaid.reduce(
@@ -321,7 +366,6 @@ export function useNotifications(variant: NotifVariant) {
         });
       }
 
-      // 5. Recently added therapists (last 2, sorted by name as proxy)
       const latestTherapists = [...data.therapists]
         .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
         .slice(0, 1);
@@ -346,7 +390,6 @@ export function useNotifications(variant: NotifVariant) {
       const companies = data.allAdminCompanies;
       const therapists = data.allAdminTherapists;
 
-      // 1. Latest companies
       const latestCompanies = [...companies]
         .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
         .slice(0, 2);
@@ -364,7 +407,6 @@ export function useNotifications(variant: NotifVariant) {
         });
       });
 
-      // 2. Latest therapists
       const latestTherapists = [...therapists]
         .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
         .slice(0, 2);
@@ -382,7 +424,6 @@ export function useNotifications(variant: NotifVariant) {
         });
       });
 
-      // 3. Inactive companies
       const inactive = companies.filter((co) => co.status === "inactive").slice(0, 2);
       inactive.forEach((co) => {
         notifs.push({
@@ -404,7 +445,6 @@ export function useNotifications(variant: NotifVariant) {
       const clientId = data.myClient?.id;
       const myApps = data.appointments.filter((a) => a.clientId === clientId);
 
-      // 1. Upcoming sessions
       let upcoming = myApps
         .filter(
           (a) =>
@@ -431,7 +471,6 @@ export function useNotifications(variant: NotifVariant) {
         });
       });
 
-      // 2. Pending confirmation
       const pending = myApps.filter((a) => a.status === "pending").slice(0, 1);
       pending.forEach((a) => {
         notifs.push({
@@ -447,13 +486,8 @@ export function useNotifications(variant: NotifVariant) {
         });
       });
 
-      // 3. Recent completed
       const done = myApps
-        .filter(
-          (a) =>
-            a.status === "completed" &&
-            a.date >= sevenAgo
-        )
+        .filter((a) => a.status === "completed" && a.date >= sevenAgo)
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, 2);
       done.forEach((a) => {
@@ -488,5 +522,12 @@ export function useNotifications(variant: NotifVariant) {
 
   const unreadCount = raw.filter((n) => !n.read).length;
 
-  return { notifications: raw, unreadCount, dismiss, markAllRead };
+  return {
+    notifications: raw,
+    unreadCount,
+    dismiss,
+    markAllRead,
+    /** True once the persisted state has been loaded from Firestore */
+    stateReady,
+  };
 }

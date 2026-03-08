@@ -742,3 +742,43 @@ export async function getPlatformSettings(): Promise<PlatformSettings | null> {
 export async function savePlatformSettings(data: Omit<PlatformSettings, "updatedAt">): Promise<void> {
   await setDoc(SETTINGS_DOC, { ...data, updatedAt: serverTimestamp() }, { merge: true });
 }
+
+// ─── Notification State ───────────────────────────────────────────────────────
+// Document per user: notificationStates/{uid}
+// Stores which notification IDs have been read or dismissed.
+
+export interface NotificationState {
+  readIds: string[];
+  dismissedIds: string[];
+}
+
+/** Load the persisted notification state for a user. Returns empty sets if none. */
+export async function getNotificationState(uid: string): Promise<NotificationState> {
+  try {
+    const snap = await getDoc(doc(db, "notificationStates", uid));
+    if (!snap.exists()) return { readIds: [], dismissedIds: [] };
+    const data = snap.data() as Partial<NotificationState>;
+    return {
+      readIds:      data.readIds      ?? [],
+      dismissedIds: data.dismissedIds ?? [],
+    };
+  } catch {
+    return { readIds: [], dismissedIds: [] };
+  }
+}
+
+/** Persist the notification state for a user (merge so partial updates are safe). */
+export async function saveNotificationState(
+  uid: string,
+  state: NotificationState,
+): Promise<void> {
+  try {
+    await setDoc(
+      doc(db, "notificationStates", uid),
+      state,
+      { merge: true },
+    );
+  } catch {
+    // Non-critical — silently swallow write failures
+  }
+}

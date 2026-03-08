@@ -256,7 +256,7 @@ export default function TherapistDashboard() {
         <h3 className="text-gray-900 mb-1">Histórico de Ganhos</h3>
         <p className="text-gray-400 text-xs mb-4">Valor bruto da sessão vs. seu ganho líquido</p>
         <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={chartData}>
+          <BarChart data={chartData} key={chartData.length}>
             <CartesianGrid strokeDasharray="3 3" stroke="#EDE9FE" />
             <XAxis dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
             <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
@@ -264,8 +264,8 @@ export default function TherapistDashboard() {
               contentStyle={{ background: "#fff", border: "1px solid #C4B5FD", borderRadius: "0.75rem" }}
               formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, ""]}
             />
-            <Bar key="gross-bar" dataKey="gross" fill="#EDE9FE" radius={[4, 4, 0, 0]} name="Valor da sessão" barSize={16} isAnimationActive={false} />
-            <Bar key="net-bar" dataKey="net" fill="#7C3AED" radius={[4, 4, 0, 0]} name="Meu ganho" barSize={16} isAnimationActive={false} />
+            <Bar id="bar-gross" dataKey="gross" fill="#EDE9FE" radius={[4, 4, 0, 0]} name="Valor da sessão" barSize={16} isAnimationActive={false} />
+            <Bar id="bar-net"   dataKey="net"   fill="#7C3AED" radius={[4, 4, 0, 0]} name="Meu ganho"       barSize={16} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
