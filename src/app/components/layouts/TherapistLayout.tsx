@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { Outlet, NavLink, useNavigate } from "react-router";
@@ -17,11 +17,24 @@ const navItems = [
 ];
 
 export default function TherapistLayout() {
-  const { user, signOut } = useAuth();
-  const { myTherapist: therapist } = usePageData();
+  const { user, signOut, isDemoMode } = useAuth();
+  const { myTherapist: therapist, refresh } = usePageData();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // One-time refresh for real (non-demo) users when entering the therapist area.
+  // This re-fetches the therapist document from Firestore so stale company state
+  // (e.g. dissociation done in another session) is reflected consistently across
+  // Dashboard, Terapias, Ganhos and Perfil.
+  const didRefresh = useRef(false);
+  useEffect(() => {
+    if (isDemoMode) return;
+    if (didRefresh.current) return;
+    didRefresh.current = true;
+    refresh();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLogout = () => {
     signOut();

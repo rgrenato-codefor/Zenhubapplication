@@ -6,7 +6,8 @@
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc,
   collection, query, where, getDocs, addDoc,
-  serverTimestamp, Timestamp, orderBy, limit,
+  serverTimestamp, Timestamp, orderBy, limit, deleteField,
+  onSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { CompanyPlan, TherapistPlan } from "../app/lib/planConfig";
@@ -362,7 +363,13 @@ export async function createTherapist(data: Omit<Therapist, "id" | "createdAt">)
 }
 
 export async function updateTherapist(id: string, data: Partial<Omit<Therapist, "id">>): Promise<void> {
-  await updateDoc(doc(db, "therapists", id), data);
+  // Firestore ignores `undefined` values in updateDoc — they do NOT delete the field.
+  // Convert any explicit `undefined` value to deleteField() so the field is actually removed.
+  const sanitized: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+    sanitized[k] = v === undefined ? deleteField() : v;
+  }
+  await updateDoc(doc(db, "therapists", id), sanitized);
 }
 
 export async function deleteTherapist(id: string): Promise<void> {
@@ -519,6 +526,52 @@ export async function getAppointmentsByClient(clientId: string): Promise<Appoint
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ ...d.data(), id: d.id } as Appointment));
   } catch { return []; }
+}
+
+// ── Real-time subscriptions ───────────────────────────────────────────────────
+
+/** Subscribe to all appointments for a company. Returns an unsubscribe fn. */
+export function subscribeAppointmentsByCompany(
+  companyId: string,
+  callback: (appointments: Appointment[]) => void,
+): () => void {
+  const q = query(collection(db, "appointments"), where("companyId", "==", companyId));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Appointment)));
+  }, () => { /* silently ignore permission errors */ });
+}
+
+/** Subscribe to all appointments for a therapist. Returns an unsubscribe fn. */
+export function subscribeAppointmentsByTherapist(
+  therapistId: string,
+  callback: (appointments: Appointment[]) => void,
+): () => void {
+  const q = query(collection(db, "appointments"), where("therapistId", "==", therapistId));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Appointment)));
+  }, () => { /* silently ignore permission errors */ });
+}
+
+/** Subscribe to all session records for a company. Returns an unsubscribe fn. */
+export function subscribeSessionRecordsByCompany(
+  companyId: string,
+  callback: (records: SessionRecord[]) => void,
+): () => void {
+  const q = query(collection(db, "sessionRecords"), where("companyId", "==", companyId));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ ...d.data(), id: d.id } as SessionRecord)));
+  }, () => { });
+}
+
+/** Subscribe to all session records for a therapist. Returns an unsubscribe fn. */
+export function subscribeSessionRecordsByTherapist(
+  therapistId: string,
+  callback: (records: SessionRecord[]) => void,
+): () => void {
+  const q = query(collection(db, "sessionRecords"), where("therapistId", "==", therapistId));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ ...d.data(), id: d.id } as SessionRecord)));
+  }, () => { });
 }
 
 export async function createAppointment(data: Omit<Appointment, "id" | "createdAt">): Promise<string> {

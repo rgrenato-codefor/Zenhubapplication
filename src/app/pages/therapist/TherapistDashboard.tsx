@@ -9,14 +9,16 @@ import {
 import { useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
+import { useTherapistStore } from "../../store/therapistStore";
 
 export default function TherapistDashboard() {
-  const { user } = useAuth();
+  const { user, isDemoMode } = useAuth();
   const navigate = useNavigate();
+  const store = useTherapistStore();
   const {
     myTherapist: therapist,
     appointments: allAppointments,
-    company,
+    company: ctxCompany,
     sessionRecords,
     completedSessionIds,
     therapistEarningsData,
@@ -24,9 +26,19 @@ export default function TherapistDashboard() {
     therapies,
   } = usePageData();
 
-  // ── Own appointments & records ─────────────────────────────────────────────
+  // ── Resolve the active company ───────────────────────────────────────────────
+  // Demo mode: derive exclusively from the in-memory association store so that
+  // dissociation (from either the company or therapist side) is reflected
+  // immediately without relying on DataContext's React state.
+  // Real mode: use the DataContext value (TherapistLayout calls refresh() on mount
+  // to ensure Firestore data is up-to-date).
   const myId = therapist?.id ?? user?.therapistId ?? "";
+  const assoc = isDemoMode ? store.getAssociation(myId) : null;
+  const company = isDemoMode
+    ? (assoc?.companyId ? ctxCompany : null)
+    : ctxCompany;
 
+  // ── Own appointments & records ─────────────────────────────────────────────
   // Use DataContext sessionRecords (works for both demo AND real Firestore users)
   const myRecords = useMemo(
     () => sessionRecords.filter((r) => r.therapistId === myId),

@@ -61,6 +61,8 @@ import {
   getAllCompanies as fsGetAllCompanies,
   getAllTherapists as fsGetAllTherapists,
   getAllClients as fsGetAllClients,
+  subscribeAppointmentsByCompany, subscribeAppointmentsByTherapist,
+  subscribeSessionRecordsByCompany, subscribeSessionRecordsByTherapist,
   type Company, type Unit, type Therapist, type Client,
   type Therapy, type Room, type Appointment, type TherapistAssociation,
 } from "../../lib/firestore";
@@ -237,6 +239,42 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const u3 = roomStore.subscribe(() => forceRender((n) => n + 1));
     return () => { u1(); u2(); u3(); };
   }, [isDemoMode]);
+
+  // ── Real-time Firestore subscriptions (non-demo) ──────────────────────────
+  // Keeps appointments and sessionRecords in sync across all browser sessions.
+  // Company admins receive updates from therapists' bookings automatically.
+  useEffect(() => {
+    if (!user || isDemoMode) return;
+
+    const role = user.role;
+    const unsubs: Array<() => void> = [];
+
+    if ((role === "company_admin" || role === "sales") && user.companyId) {
+      const cid = user.companyId;
+      unsubs.push(
+        subscribeAppointmentsByCompany(cid, (apts) => setAppointments(apts)),
+        subscribeSessionRecordsByCompany(cid, (recs) => {
+          setSessionRecords(recs);
+          setCompletedSessionIds(new Set(recs.map((r) => r.appointmentId)));
+        }),
+      );
+    }
+
+    if (role === "therapist" && myTherapist?.id) {
+      const tid = myTherapist.id;
+      unsubs.push(
+        subscribeAppointmentsByTherapist(tid, (apts) => setAppointments(apts)),
+        subscribeSessionRecordsByTherapist(tid, (recs) => {
+          setSessionRecords(recs);
+          setCompletedSessionIds(new Set(recs.map((r) => r.appointmentId)));
+        }),
+      );
+    }
+
+    return () => unsubs.forEach((u) => u());
+  // myTherapist?.id is the stable key for the therapist subscription
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, user?.role, user?.companyId, myTherapist?.id, isDemoMode]);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
 

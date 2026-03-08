@@ -9,6 +9,7 @@ import { usePageData } from "../../hooks/usePageData";
 import { useTherapistStore } from "../../store/therapistStore";
 import { MediaGallery } from "../../components/shared/MediaGallery";
 import type { MediaItem } from "../../../lib/imagekit";
+import { uploadMedia, deleteMedia } from "../../../lib/imagekit";
 
 const DAYS_MAP: Record<string, string> = {
   monday: "Seg", tuesday: "Ter", wednesday: "Qua",
@@ -16,7 +17,7 @@ const DAYS_MAP: Record<string, string> = {
 };
 
 export default function TherapistProfile() {
-  const { user } = useAuth();
+  const { user, isDemoMode } = useAuth();
   // Direct store subscription — component re-renders on every store notification
   // (link/unlink/approve) without relying on the DataContext chain.
   const store = useTherapistStore();
@@ -55,19 +56,23 @@ export default function TherapistProfile() {
     }
   }, [therapist]);
 
-  // Association status from the store (covers demo + real)
-  // Using the store directly via useTherapistStore() — always up-to-date.
-  const assoc = therapist ? store.getAssociation(therapist.id) : null;
-  const isPending  = assoc?.status === "pending";
-  const isActive   = assoc?.status === "active";
-  // isLinked drives the company card visibility — purely from store status,
-  // no dependency on potentially-stale therapist.companyId or context company.
-  const isLinked = isPending || isActive;
-  // Company data for display: prefer context (reactive via DataContext fix),
-  // fall back to a mock lookup by the store's companyId.
+  // ── Association status ────────────────────────────────────────────────────────
+  // SOURCE OF TRUTH rules:
+  //  • Demo mode  → in-memory store (reactive to link/unlink/approve actions)
+  //  • Real users → DataContext `company` (loaded from Firestore, same source as
+  //                 Dashboard / Terapias / Ganhos — guarantees consistency)
+  //    TherapistLayout calls refresh() on mount so Firestore data is always fresh.
+  const assocFromStore = isDemoMode && therapist ? store.getAssociation(therapist.id) : null;
+  const isPending  = isDemoMode ? assocFromStore?.status === "pending" : false;
+  const isActive   = isDemoMode ? assocFromStore?.status === "active"  : !!company;
+  const isLinked   = isPending || isActive;
+
+  // Company data for display
   const linkedCompany = company ?? null;
-  // Company commission set by the company (only meaningful when active)
-  const companyCommission = assoc?.commission ?? null;
+  // Commission: from store (demo) or therapist record (real)
+  const companyCommission = isDemoMode
+    ? (assocFromStore?.commission ?? null)
+    : (therapist?.commission ?? null);
 
   if (!therapist) return (
     <div className="text-gray-500 text-center py-20">Carregando perfil...</div>

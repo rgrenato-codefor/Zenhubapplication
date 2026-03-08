@@ -259,13 +259,17 @@ export default function CompanySchedule() {
     const cl = clients.find((c) => c.id === apt.clientId);
     const therapy = therapies.find((t) => t.id === apt.therapyId);
     const therapist = therapists.find((t) => t.id === apt.therapistId);
+    // Real mode: commission comes from the therapist record in Firestore (set by
+    // the company via mutateUpdateTherapistCommission / mutateApproveAssociation).
+    // Demo mode: fall back to the in-memory association store.
     const assoc = tStore.getAssociation(apt.therapistId);
+    const commissionPct = therapist?.commission ?? assoc.commission;
     setClosureModal({
       apt,
       clientName: cl?.name ?? "Cliente",
       therapyName: therapy?.name ?? "Terapia",
       therapistName: therapist?.name ?? "Terapeuta",
-      commissionPct: assoc.commission,
+      commissionPct,
     });
     setExtraCharge(0);
     setExtraNotes("");
