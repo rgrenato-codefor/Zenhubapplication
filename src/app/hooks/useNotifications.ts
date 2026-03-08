@@ -4,7 +4,6 @@
  * session records, therapists, clients and admin platform lists.
  */
 import { useMemo, useState, useCallback } from "react";
-import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 
 export type NotifIcon =
@@ -102,7 +101,6 @@ function fmtBRL(n: number) {
 export type NotifVariant = "therapist" | "company" | "admin" | "client";
 
 export function useNotifications(variant: NotifVariant) {
-  const { isDemoMode } = useAuth();
   const data = useData();
 
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -148,14 +146,6 @@ export function useNotifications(variant: NotifVariant) {
           .slice(0, 2);
       }
 
-      // Demo fallback: show the most recent past confirmed/pending
-      if (upcoming.length === 0 && isDemoMode) {
-        upcoming = myApps
-          .filter((a) => a.status === "confirmed" || a.status === "pending")
-          .sort((a, b) => b.date.localeCompare(a.date))
-          .slice(0, 2);
-      }
-
       upcoming.forEach((a) => {
         const client = data.clients.find((c) => c.id === a.clientId);
         const therapy = data.therapies.find((t) => t.id === a.therapyId);
@@ -191,12 +181,12 @@ export function useNotifications(variant: NotifVariant) {
         });
       });
 
-      // 3. Recent completed sessions (last 7 days, or latest 2 in demo)
+      // 3. Recent completed sessions (last 7 days)
       const recentDone = myApps
         .filter(
           (a) =>
             a.status === "completed" &&
-            (isDemoMode ? true : a.date >= sevenAgo)
+            a.date >= sevenAgo
         )
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, 2);
@@ -268,14 +258,7 @@ export function useNotifications(variant: NotifVariant) {
           a.status !== "cancelled" &&
           a.status !== "completed"
       );
-      // Demo: if none, show the most recent confirmed
-      const todayFallback =
-        todaySessions.length === 0 && isDemoMode
-          ? apps
-              .filter((a) => a.status === "confirmed")
-              .sort((a, b) => b.date.localeCompare(a.date))
-              .slice(0, 1)
-          : todaySessions.slice(0, 1);
+      const todayFallback = todaySessions.slice(0, 1);
 
       todayFallback.forEach((a) => {
         const label = a.date === td ? "hoje" : a.date === tm ? "amanhã" : fmtDate(a.date);
@@ -432,14 +415,6 @@ export function useNotifications(variant: NotifVariant) {
         .sort((a, b) => a.date.localeCompare(b.date))
         .slice(0, 2);
 
-      // Demo fallback: show most recent confirmed
-      if (upcoming.length === 0 && isDemoMode) {
-        upcoming = myApps
-          .filter((a) => a.status === "confirmed" || a.status === "pending")
-          .sort((a, b) => b.date.localeCompare(a.date))
-          .slice(0, 2);
-      }
-
       upcoming.forEach((a) => {
         const therapist = data.therapists.find((t) => t.id === a.therapistId);
         const therapy = data.therapies.find((t) => t.id === a.therapyId);
@@ -477,7 +452,7 @@ export function useNotifications(variant: NotifVariant) {
         .filter(
           (a) =>
             a.status === "completed" &&
-            (isDemoMode ? true : a.date >= sevenAgo)
+            a.date >= sevenAgo
         )
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, 2);
@@ -509,7 +484,7 @@ export function useNotifications(variant: NotifVariant) {
       .map((n) => ({ ...n, read: n.read || readIds.has(n.id) }))
       .sort((a, b) => b.sortKey - a.sortKey)
       .slice(0, 8);
-  }, [variant, data, dismissed, readIds, isDemoMode]);
+  }, [variant, data, dismissed, readIds]);
 
   const unreadCount = raw.filter((n) => !n.read).length;
 

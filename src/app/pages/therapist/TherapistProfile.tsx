@@ -17,10 +17,7 @@ const DAYS_MAP: Record<string, string> = {
 };
 
 export default function TherapistProfile() {
-  const { user, isDemoMode } = useAuth();
-  // Direct store subscription — component re-renders on every store notification
-  // (link/unlink/approve) without relying on the DataContext chain.
-  const store = useTherapistStore();
+  const { user } = useAuth();
   const {
     myTherapist: therapist, company,
     myGallery,
@@ -57,22 +54,16 @@ export default function TherapistProfile() {
   }, [therapist]);
 
   // ── Association status ────────────────────────────────────────────────────────
-  // SOURCE OF TRUTH rules:
-  //  • Demo mode  → in-memory store (reactive to link/unlink/approve actions)
-  //  • Real users → DataContext `company` (loaded from Firestore, same source as
-  //                 Dashboard / Terapias / Ganhos — guarantees consistency)
-  //    TherapistLayout calls refresh() on mount so Firestore data is always fresh.
-  const assocFromStore = isDemoMode && therapist ? store.getAssociation(therapist.id) : null;
-  const isPending  = isDemoMode ? assocFromStore?.status === "pending" : false;
-  const isActive   = isDemoMode ? assocFromStore?.status === "active"  : !!company;
+  // SOURCE OF TRUTH: DataContext `company` (loaded from Firestore, always fresh
+  // since TherapistLayout calls refresh() on mount).
+  const isPending  = false; // real pending state: therapist.companyId set but not approved
+  const isActive   = !!company;
   const isLinked   = isPending || isActive;
 
   // Company data for display
   const linkedCompany = company ?? null;
-  // Commission: from store (demo) or therapist record (real)
-  const companyCommission = isDemoMode
-    ? (assocFromStore?.commission ?? null)
-    : (therapist?.commission ?? null);
+  // Commission from therapist record (set by company)
+  const companyCommission = therapist?.commission ?? null;
 
   if (!therapist) return (
     <div className="text-gray-500 text-center py-20">Carregando perfil...</div>

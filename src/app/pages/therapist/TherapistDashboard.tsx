@@ -12,7 +12,7 @@ import { usePageData } from "../../hooks/usePageData";
 import { useTherapistStore } from "../../store/therapistStore";
 
 export default function TherapistDashboard() {
-  const { user, isDemoMode } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const store = useTherapistStore();
   const {
@@ -33,10 +33,7 @@ export default function TherapistDashboard() {
   // Real mode: use the DataContext value (TherapistLayout calls refresh() on mount
   // to ensure Firestore data is up-to-date).
   const myId = therapist?.id ?? user?.therapistId ?? "";
-  const assoc = isDemoMode ? store.getAssociation(myId) : null;
-  const company = isDemoMode
-    ? (assoc?.companyId ? ctxCompany : null)
-    : ctxCompany;
+  const company = ctxCompany;
 
   // ── Own appointments & records ─────────────────────────────────────────────
   // Use DataContext sessionRecords (works for both demo AND real Firestore users)

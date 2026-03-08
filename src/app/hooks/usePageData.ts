@@ -1,14 +1,10 @@
 /**
- * usePageData — backward-compatible data access hook.
+ * usePageData — unified data access hook.
  *
- * Pages replace:
- *   import { therapists, clients, ... } from "../../data/mockData"
- *   import { useTherapistStore } from "../../store/therapistStore"
- * with:
- *   const { therapists, clients, ..., therapistStore } = usePageData()
+ * All pages import data and mutations from this hook instead of
+ * accessing mockData or stores directly.
  *
- * For demo users → returns filtered mockData (same as before).
- * For real users → returns Firestore data from DataContext.
+ * Data is fetched from Firestore via DataContext.
  */
 
 import { useData } from "../context/DataContext";

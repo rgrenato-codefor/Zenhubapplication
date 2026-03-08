@@ -29,8 +29,6 @@ import {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const DEMO_EMAIL = "teste@teste.com.br";
-
 /** Route associated with each role for automatic redirection */
 export const ROLE_ROUTES: Record<UserRole, string> = {
   super_admin: "/admin",
@@ -38,7 +36,6 @@ export const ROLE_ROUTES: Record<UserRole, string> = {
   sales: "/empresa",
   therapist: "/terapeuta",
   client: "/cliente",
-  demo: "/admin", // default demo view
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,18 +53,9 @@ export interface AuthUser {
   avatar?: string;
 }
 
-/**
- * When isDemoMode is true, demoViewAs controls which environment
- * the demo user is currently previewing.
- */
-export type DemoViewAs = Exclude<UserRole, "demo">;
-
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  isDemoMode: boolean;
-  demoViewAs: DemoViewAs;
-  setDemoViewAs: (role: DemoViewAs) => void;
   signIn: (email: string, password: string) => Promise<{ route: string }>;
   signInGoogle: () => Promise<{ route: string }>;
   signOut: () => Promise<void>;
@@ -125,65 +113,11 @@ export interface RegisterClientParams {
   slug?: string;
 }
 
-// ─── Mock DEMO users (used only when isDemoMode === true) ─────────────────────
-
-export const DEMO_USERS: AuthUser[] = [
-  {
-    uid: "demo-superadmin",
-    name: "Admin Master",
-    email: DEMO_EMAIL,
-    role: "super_admin",
-  },
-  {
-    uid: "demo-company",
-    name: "Juliana Santos",
-    email: DEMO_EMAIL,
-    role: "company_admin",
-    companyId: "c1",
-  },
-  {
-    uid: "demo-sales",
-    name: "Pedro Alves",
-    email: DEMO_EMAIL,
-    role: "sales",
-    companyId: "c1",
-  },
-  {
-    uid: "demo-therapist",
-    name: "Ana Carolina Silva",
-    email: DEMO_EMAIL,
-    role: "therapist",
-    companyId: "c1",
-    therapistId: "t1",
-    avatar:
-      "https://images.unsplash.com/photo-1706087467429-2096dbdcb477?w=150&h=150&fit=crop&crop=face",
-  },
-  {
-    uid: "demo-client",
-    name: "Mariana Oliveira",
-    email: DEMO_EMAIL,
-    role: "client",
-    companyId: "c1",
-    clientId: "cl1",
-    avatar:
-      "https://images.unsplash.com/photo-1630595633877-9918ee257288?w=150&h=150&fit=crop&crop=face",
-  },
-];
-
-export const DEMO_VIEW_OPTIONS: { role: DemoViewAs; label: string; route: string }[] = [
-  { role: "company_admin", label: "Empresa", route: "/empresa" },
-  { role: "therapist", label: "Terapeuta", route: "/terapeuta" },
-  { role: "client", label: "Cliente", route: "/cliente" },
-];
-
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  isDemoMode: false,
-  demoViewAs: "company_admin",
-  setDemoViewAs: () => {},
   signIn: async () => ({ route: "/" }),
   signInGoogle: async () => ({ route: "/" }),
   signOut: async () => {},
@@ -199,27 +133,9 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [demoViewAs, setDemoViewAs] = useState<DemoViewAs>("company_admin");
   // When true, the next onAuthStateChanged event is swallowed so that
   // registerCompany can set the user state itself without a race condition.
   const skipNextAuthEvent = useRef(false);
-
-  const isDemoMode = user?.email === DEMO_EMAIL;
-
-  /**
-   * Build the AuthUser that the rest of the app sees.
-   * For demo mode: use the DEMO_USERS entry matching demoViewAs.
-   * For real users: use the Firestore profile.
-   */
-  const buildEffectiveUser = useCallback(
-    (base: AuthUser): AuthUser => {
-      if (base.email !== DEMO_EMAIL) return base;
-      const demoUser = DEMO_USERS.find((u) => u.role === demoViewAs) ?? DEMO_USERS[0];
-      // Keep the real Firebase uid so Auth still works
-      return { ...demoUser, uid: base.uid, email: DEMO_EMAIL };
-    },
-    [demoViewAs]
-  );
 
   /**
    * When a real user logs in but has no profile in Firestore (e.g. incomplete
@@ -271,19 +187,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  // Re-compute effective user whenever demoViewAs changes
-  useEffect(() => {
-    if (!user) return;
-    if (user.email !== DEMO_EMAIL) return;
-    const effective = buildEffectiveUser(user);
-    setUser(effective);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demoViewAs]);
-
   // Firebase Auth listener — runs once on mount
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
-      // Let register* functions manage their own user state update
       if (skipNextAuthEvent.current) {
         skipNextAuthEvent.current = false;
         return;
@@ -298,29 +204,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         let profile = await getUserProfile(fbUser.uid);
 
-        // If no profile exists yet:
         if (!profile) {
-          const isDemo = fbUser.email === DEMO_EMAIL;
-          if (!isDemo) {
-            // Try to recover from sub-collections (handles incomplete registration)
-            const recovered = await recoverProfileFromSubCollections(fbUser.uid, fbUser.email || "");
-            if (recovered) {
-              profile = recovered;
-            } else {
-              // Truly no data — user is mid-registration or something went wrong.
-              // Don't create a wrong profile; just wait.
-              setLoading(false);
-              return;
-            }
+          const recovered = await recoverProfileFromSubCollections(fbUser.uid, fbUser.email || "");
+          if (recovered) {
+            profile = recovered;
           } else {
-            // Demo user: auto-create demo profile
-            const baseProfile = {
-              name: fbUser.displayName || fbUser.email?.split("@")[0] || "Usuário",
-              email: fbUser.email || "",
-              role: "demo" as UserRole,
-            };
-            await createUserProfile(fbUser.uid, baseProfile);
-            profile = { uid: fbUser.uid, ...baseProfile };
+            setLoading(false);
+            return;
           }
         }
 
@@ -335,8 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           avatar: profile.avatar ?? fbUser.photoURL ?? undefined,
         };
 
-        const effective = buildEffectiveUser(baseUser);
-        setUser(effective);
+        setUser(baseUser);
       } catch (err) {
         console.error("Error loading user profile:", err);
         setUser(null);
@@ -346,7 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return unsub;
-  }, [buildEffectiveUser, recoverProfileFromSubCollections]);
+  }, [recoverProfileFromSubCollections]);
 
   // ─── signIn ──────────────────────────────────────────────────────────────
 
@@ -358,32 +247,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let profile = await getUserProfile(fbUser.uid);
 
       if (!profile) {
-        const isDemo = fbUser.email === DEMO_EMAIL;
-        if (isDemo) {
-          const baseProfile = {
-            name: fbUser.displayName || email.split("@")[0],
-            email: fbUser.email || email,
-            role: "demo" as UserRole,
-          };
-          await createUserProfile(fbUser.uid, baseProfile);
-          profile = { uid: fbUser.uid, ...baseProfile };
+        const recovered = await recoverProfileFromSubCollections(fbUser.uid, fbUser.email || email);
+        if (recovered) {
+          profile = recovered;
         } else {
-          // Real user with no profile: try to recover from sub-collections.
-          // This handles the case where registration failed mid-way (Auth created
-          // but Firestore writes didn't complete).
-          const recovered = await recoverProfileFromSubCollections(fbUser.uid, fbUser.email || email);
-          if (recovered) {
-            profile = recovered;
-          } else {
-            // No sub-collection documents either — this is a fresh unregistered user.
-            // Throw so the UI can show a meaningful message instead of silently
-            // creating a wrong role.
-            await firebaseSignOut(auth);
-            throw Object.assign(
-              new Error("Nenhum cadastro encontrado para este e-mail. Por favor, faça o registro."),
-              { code: "auth/user-not-registered" }
-            );
-          }
+          await firebaseSignOut(auth);
+          throw Object.assign(
+            new Error("Nenhum cadastro encontrado para este e-mail. Por favor, faça o registro."),
+            { code: "auth/user-not-registered" }
+          );
         }
       }
 
@@ -398,16 +270,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         avatar: profile.avatar ?? fbUser.photoURL ?? undefined,
       };
 
-      const isDemo = baseUser.email === DEMO_EMAIL;
-      const effectiveRole: UserRole = isDemo ? demoViewAs : baseUser.role;
-      const route = ROLE_ROUTES[effectiveRole] ?? "/";
-
-      const effective = buildEffectiveUser(baseUser);
-      setUser(effective);
-
+      const route = ROLE_ROUTES[baseUser.role] ?? "/";
+      setUser(baseUser);
       return { route };
     },
-    [demoViewAs, buildEffectiveUser, recoverProfileFromSubCollections]
+    [recoverProfileFromSubCollections]
   );
 
   // ─── signInGoogle ────────────────────────────────────────────────────────
@@ -419,8 +286,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let profile = await getUserProfile(fbUser.uid);
 
     if (!profile) {
-      // For Google sign-in, new users default to client (correct behaviour).
-      // Try sub-collections first in case they registered elsewhere.
       const recovered = await recoverProfileFromSubCollections(fbUser.uid, fbUser.email || "");
       if (recovered) {
         profile = recovered;
@@ -448,11 +313,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const route = ROLE_ROUTES[baseUser.role] ?? "/";
-    const effective = buildEffectiveUser(baseUser);
-    setUser(effective);
-
+    setUser(baseUser);
     return { route };
-  }, [buildEffectiveUser, recoverProfileFromSubCollections]);
+  }, [recoverProfileFromSubCollections]);
 
   // ─── registerCompany ──────────────────────────────────────────────────────
 
@@ -661,7 +524,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     await firebaseSignOut(auth);
     setUser(null);
-    setDemoViewAs("company_admin");
   }, []);
 
   // ─── Legacy shims ─────────────────────────────────────────────────────────
@@ -677,9 +539,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         loading,
-        isDemoMode,
-        demoViewAs,
-        setDemoViewAs,
         signIn,
         signInGoogle,
         signOut,

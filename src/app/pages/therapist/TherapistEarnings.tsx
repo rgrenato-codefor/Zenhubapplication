@@ -7,7 +7,6 @@ import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 
 export default function TherapistEarnings() {
-  const { isDemoMode } = useAuth();
   const {
     myTherapist: therapist,
     company,
@@ -99,10 +98,8 @@ export default function TherapistEarnings() {
     });
   }, [allRecords]);
 
-  // Use mock chart data in demo mode (more visually interesting), computed for real
-  const earningsChartData = (isDemoMode && therapistEarningsData.length > 0)
-    ? therapistEarningsData
-    : computedChartData;
+  // Always use computed chart data from real Firestore records
+  const earningsChartData = computedChartData;
 
   if (!therapist) return <div className="text-gray-500 text-center py-20">Carregando...</div>;
 

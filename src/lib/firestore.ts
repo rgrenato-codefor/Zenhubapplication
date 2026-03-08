@@ -1,6 +1,5 @@
 /**
  * Firestore service layer — full CRUD for all ZEN HUB collections.
- * Pages use isDemoMode to decide whether to call these or use mockData.
  */
 
 import {
@@ -26,7 +25,7 @@ function stripMeta<T extends object>(data: T): Omit<T, "id" | "createdAt"> {
 
 export type UserRole =
   | "super_admin" | "company_admin" | "sales"
-  | "therapist" | "client" | "demo";
+  | "therapist" | "client";
 
 export interface UserProfile {
   uid: string;

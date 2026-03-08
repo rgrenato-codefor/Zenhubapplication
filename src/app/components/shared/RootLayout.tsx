@@ -7,13 +7,11 @@
  */
 import { Outlet } from "react-router";
 import { DataProvider } from "../../context/DataContext";
-import { DemoModeBanner } from "./DemoModeBanner";
 
 export default function RootLayout() {
   return (
     <DataProvider>
       <Outlet />
-      <DemoModeBanner />
     </DataProvider>
   );
 }

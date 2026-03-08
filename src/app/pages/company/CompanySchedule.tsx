@@ -59,7 +59,8 @@ export default function CompanySchedule() {
   const {
     company, therapists, clients, appointments: storeAppointments,
     therapies, rooms: storeRooms,
-    therapistStore: tStore, roomStore: rStore,
+    therapistStore: tStore,
+    sessionRecords, completedSessionIds, roomAssignments,
     mutateCompleteSession, mutateAddAppointment, mutateAddClient,
   } = usePageData();
   const { selectedUnitId } = useCompanyUnit();
@@ -247,12 +248,13 @@ export default function CompanySchedule() {
   });
 
   const companyClients = clients;
-  const companyRecords = tStore.getCompanyRecords(user?.companyId ?? "");
+  // Use real Firestore session records (filtered by companyId)
+  const companyRecords = sessionRecords.filter((r) => r.companyId === user?.companyId);
 
   const dayAppointments = (date: string) => companyAppointments.filter((a) => a.date === date);
 
   const getEffectiveStatus = (apt: any) =>
-    tStore.isCompleted(apt.id) ? "completed" : apt.status;
+    completedSessionIds.has(apt.id) ? "completed" : apt.status;
 
   // ── Closure ──────────────────────────────────────────────────────────────
   const openClosure = (apt: any) => {
@@ -521,11 +523,11 @@ export default function CompanySchedule() {
                 const therapy = therapies.find((th) => th.id === apt.therapyId);
                 const effectiveStatus = getEffectiveStatus(apt);
                 const st = statusConfig[effectiveStatus] ?? statusConfig.confirmed;
-                const isCompleted = tStore.isCompleted(apt.id);
+                const isCompleted = completedSessionIds.has(apt.id);
                 const canClose = !isCompleted && (apt.status === "confirmed" || apt.status === "pending");
                 const rec = companyRecords.find((r) => r.appointmentId === apt.id);
-                const roomId = rStore.getRoomForAppointment(apt.id);
-                const room = roomId ? rStore.getRoom(roomId) : null;
+                const roomId = roomAssignments[apt.id];
+                const room = roomId ? storeRooms.find((r) => r.id === roomId) : null;
                 return (
                   <div key={apt.id} className={`flex items-center gap-4 px-6 py-4 ${isCompleted ? "bg-emerald-50/30" : ""}`}>
                     <div className="text-center w-16 shrink-0">
@@ -596,9 +598,9 @@ export default function CompanySchedule() {
                 const therapy = therapies.find((th) => th.id === apt.therapyId);
                 const st = statusConfig[getEffectiveStatus(apt)] ?? statusConfig.confirmed;
                 const rec = companyRecords.find((r) => r.appointmentId === apt.id);
-                const canClose = !tStore.isCompleted(apt.id) && (apt.status === "confirmed" || apt.status === "pending");
-                const roomId = rStore.getRoomForAppointment(apt.id);
-                const room = roomId ? rStore.getRoom(roomId) : null;
+                const canClose = !completedSessionIds.has(apt.id) && (apt.status === "confirmed" || apt.status === "pending");
+                const roomId = roomAssignments[apt.id];
+                const room = roomId ? storeRooms.find((r) => r.id === roomId) : null;
                 return (
                   <tr key={apt.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{apt.date.split("-").reverse().join("/")} {apt.time}</td>

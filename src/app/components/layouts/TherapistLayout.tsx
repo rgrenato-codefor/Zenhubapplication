@@ -17,19 +17,16 @@ const navItems = [
 ];
 
 export default function TherapistLayout() {
-  const { user, signOut, isDemoMode } = useAuth();
+  const { user, signOut } = useAuth();
   const { myTherapist: therapist, refresh } = usePageData();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // One-time refresh for real (non-demo) users when entering the therapist area.
-  // This re-fetches the therapist document from Firestore so stale company state
-  // (e.g. dissociation done in another session) is reflected consistently across
-  // Dashboard, Terapias, Ganhos and Perfil.
+  // One-time refresh when entering the therapist area so stale company state
+  // (e.g. dissociation done in another session) is reflected immediately.
   const didRefresh = useRef(false);
   useEffect(() => {
-    if (isDemoMode) return;
     if (didRefresh.current) return;
     didRefresh.current = true;
     refresh();

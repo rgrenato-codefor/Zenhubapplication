@@ -11,7 +11,7 @@ import { getTherapistByUsername } from "../../../lib/firestore";
 import { useTherapistStore } from "../../store/therapistStore";
 
 export default function CompanyTherapists() {
-  const { user, isDemoMode } = useAuth();
+  const { user } = useAuth();
   // Direct store subscription — ensures this component re-renders immediately
   // on ANY store mutation (dissociate, approve, reject…) without depending on
   // the DataContext forceRender propagation chain.
@@ -36,21 +36,13 @@ export default function CompanyTherapists() {
   const [addStep, setAddStep] = useState<"search" | "preview">("search");
   const [previewTherapist, setPreviewTherapist] = useState<typeof allTherapists[0] | null>(null);
 
-  // Get company therapists:
-  //  - Demo mode: use the in-memory store (supports runtime add/remove)
-  //  - Real mode: use allTherapists from DataContext (already fetched from Firestore)
-  const companyTherapistIds: string[] = isDemoMode
-    ? store.getCompanyTherapists(user?.companyId ?? "").map((a) => a.therapistId)
-    : allTherapists
-        .filter((t) => t.companyId === user?.companyId)
-        .map((t) => t.id);
+  // Get company therapists from DataContext (already fetched from Firestore)
+  const companyTherapistIds: string[] = allTherapists
+    .filter((t) => t.companyId === user?.companyId)
+    .map((t) => t.id);
 
   const companyTherapists = allTherapists
-    .filter((t) =>
-      isDemoMode
-        ? companyTherapistIds.includes(t.id)
-        : t.companyId === user?.companyId
-    )
+    .filter((t) => t.companyId === user?.companyId)
     .filter((t) => {
       if (!selectedUnitId) return true;
       const assoc = store.getAssociation(t.id);
@@ -76,8 +68,8 @@ export default function CompanyTherapists() {
       (t) => t.username?.toLowerCase() === query || t.id === query
     );
 
-    // 2️⃣ If not found locally and NOT in demo mode, hit Firestore
-    if (!found && !isDemoMode) {
+    // 2️⃣ If not found locally, hit Firestore
+    if (!found) {
       setSearching(true);
       try {
         found = (await getTherapistByUsername(query)) ?? undefined;
@@ -835,7 +827,7 @@ export default function CompanyTherapists() {
         </div>
       )}
 
-      {/* ── Modal: Confirmar desassociação ────────────────────────────────── */}
+      {/* ── Modal: Confirmar desassociação ──────────────────────────��─────── */}
       {modal === "dissociate" && selectedTherapist && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
