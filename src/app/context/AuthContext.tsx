@@ -457,12 +457,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ─── registerCompany ──────────────────────────────────────────────────────
 
   const registerCompany = useCallback(async (params: RegisterCompanyParams): Promise<void> => {
-    const PLAN_MAP: Record<string, "Starter" | "Business" | "Premium"> = {
-      basic: "Starter",
-      pro: "Business",
-      enterprise: "Premium",
-    };
-    const plan = PLAN_MAP[params.plan] ?? "Business";
+    // plan is passed by name directly (e.g. "Business", "Premium") from the registration form
+    const plan = params.plan || "Business";
 
     // Tell the onAuthStateChanged listener to skip the next event so we can
     // set the user ourselves after all Firestore writes complete.

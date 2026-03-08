@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   CalendarDays, Clock, CheckCircle, AlertCircle, XCircle, CalendarCheck,
-  DollarSign, Building2, X, DoorOpen, Search, UserPlus, Loader2,
+  DollarSign, Building2, X, DoorOpen, Search, UserPlus, Loader2, Plus,
+  ChevronLeft, ChevronRight,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
@@ -23,14 +24,26 @@ const HOURS = [
   "13:00","14:00","15:00","16:00","17:00","18:00","19:00",
 ];
 
-const TODAY_STR = "2026-03-04";
-const DAYS = [
-  { date: "2026-03-02", label: "Seg 02", isToday: false },
-  { date: "2026-03-03", label: "Ter 03", isToday: false },
-  { date: "2026-03-04", label: "Qua 04", isToday: true },
-  { date: "2026-03-05", label: "Qui 05", isToday: false },
-  { date: "2026-03-06", label: "Sex 06", isToday: false },
-  { date: "2026-03-07", label: "Sáb 07", isToday: false },
+// ─── Date helpers ──────────────────────────────────────────────────────────────
+const TODAY = (() => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+})();
+
+function toISO(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, "0");
+  const dd   = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+const TODAY_STR = toISO(TODAY);
+
+const DAY_ABBR = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const MONTH_PT = [
+  "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+  "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro",
 ];
 
 const statusConfig: Record<string, { label: string; bg: string; color: string }> = {
@@ -60,6 +73,33 @@ export default function CompanySchedule() {
   const [extraNotes, setExtraNotes] = useState("");
   const [closureNotes, setClosureNotes] = useState("");
   const [closureSuccess, setClosureSuccess] = useState(false);
+
+  // ── Week navigation ────────────────────────────────────────────────────────
+  const [weekOffset, setWeekOffset] = useState(0); // in days (shifts center)
+
+  // 7 dias centrados em TODAY + weekOffset: [-3, -2, -1, 0, +1, +2, +3]
+  const weekDays = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(TODAY);
+      d.setDate(TODAY.getDate() + weekOffset + (i - 3));
+      const iso = toISO(d);
+      return {
+        date:    iso,
+        label:   `${DAY_ABBR[d.getDay()]} ${String(d.getDate()).padStart(2, "0")}`,
+        isToday: iso === TODAY_STR,
+      };
+    });
+  }, [weekOffset]);
+
+  // Dynamic header subtitle
+  const weekSubtitle = useMemo(() => {
+    const d1 = new Date(weekDays[0].date + "T12:00:00");
+    const d2 = new Date(weekDays[6].date + "T12:00:00");
+    if (d1.getMonth() === d2.getMonth()) {
+      return `${d1.getDate()} a ${d2.getDate()} de ${MONTH_PT[d1.getMonth()]}, ${d1.getFullYear()}`;
+    }
+    return `${d1.getDate()} de ${MONTH_PT[d1.getMonth()]} — ${d2.getDate()} de ${MONTH_PT[d2.getMonth()]}, ${d2.getFullYear()}`;
+  }, [weekDays]);
 
   // ── New Appointment form state ────────────────────────────────────────────
   const emptyApt = {
@@ -214,7 +254,7 @@ export default function CompanySchedule() {
   const getEffectiveStatus = (apt: any) =>
     tStore.isCompleted(apt.id) ? "completed" : apt.status;
 
-  // ── Closure ───────────────────────────────────────────────────────────────
+  // ── Closure ──────────────────────────────────────────────────────────────
   const openClosure = (apt: any) => {
     const cl = clients.find((c) => c.id === apt.clientId);
     const therapy = therapies.find((t) => t.id === apt.therapyId);
@@ -278,7 +318,7 @@ export default function CompanySchedule() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-gray-900">Agenda</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Semana de 02 a 07 de Março, 2026</p>
+          <p className="text-gray-500 text-sm mt-0.5">{weekSubtitle}</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {closureSuccess && (
@@ -287,6 +327,30 @@ export default function CompanySchedule() {
               <span style={{ fontWeight: 600 }}>Encerrado!</span>
             </div>
           )}
+          {/* Week nav */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setWeekOffset((w) => w - 7)}
+              className="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:bg-white hover:shadow-sm transition-all"
+              aria-label="Semana anterior"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setWeekOffset(0)}
+              className={`px-2 py-1 rounded-md text-xs transition-colors ${weekOffset === 0 ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              style={{ fontWeight: weekOffset === 0 ? 600 : 400 }}
+            >
+              Hoje
+            </button>
+            <button
+              onClick={() => setWeekOffset((w) => w + 7)}
+              className="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:bg-white hover:shadow-sm transition-all"
+              aria-label="Próxima semana"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
           <div className="flex bg-gray-100 rounded-lg p-0.5">
             {(["week", "day", "list"] as const).map((v) => (
               <button
@@ -324,30 +388,44 @@ export default function CompanySchedule() {
       </div>
 
       {/* Day selector */}
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
-        {DAYS.map((day) => {
+      <div className="grid grid-cols-4 lg:grid-cols-7 gap-3">
+        {weekDays.map((day) => {
           const dayApts = dayAppointments(day.date);
           const pendingClose = dayApts.filter(
             (a) => !tStore.isCompleted(a.id) && (a.status === "confirmed" || a.status === "pending")
           ).length;
+          const isSelected = selectedDay === day.date && view === "day";
           return (
             <button
               key={day.date}
               onClick={() => { setSelectedDay(day.date); setView("day"); }}
-              className={`rounded-xl p-3 text-center transition-all border ${
-                selectedDay === day.date && view === "day"
+              className={`rounded-xl p-3 text-center transition-all border-2 ${
+                isSelected
                   ? "text-white shadow-md"
                   : day.isToday
-                  ? "bg-white border-gray-200 shadow-sm"
+                  ? "bg-white shadow-sm"
                   : "bg-white border-gray-100 hover:border-gray-200"
               }`}
-              style={selectedDay === day.date && view === "day" ? { background: primaryColor, borderColor: primaryColor } : {}}
+              style={
+                isSelected
+                  ? { background: primaryColor, borderColor: primaryColor }
+                  : day.isToday
+                  ? { borderColor: primaryColor }
+                  : {}
+              }
             >
-              <p className="text-xs opacity-70">{day.label.split(" ")[0]}</p>
-              <p className="text-lg" style={{ fontWeight: 700 }}>{day.label.split(" ")[1]}</p>
+              <p className={`text-xs ${day.isToday && !isSelected ? "opacity-100" : "opacity-70"}`}
+                 style={day.isToday && !isSelected ? { color: primaryColor, fontWeight: 600 } : {}}
+              >{day.label.split(" ")[0]}</p>
+              <p className="text-lg" style={{ fontWeight: 700, color: isSelected ? "white" : day.isToday ? primaryColor : undefined }}>{day.label.split(" ")[1]}</p>
+              {day.isToday && !isSelected && (
+                <div className="flex justify-center mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: primaryColor }} />
+                </div>
+              )}
               {dayApts.length > 0 && (
                 <div className="mt-1 flex justify-center items-center gap-1">
-                  <span className={`text-xs px-1.5 rounded-full ${selectedDay === day.date && view === "day" ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"}`}>
+                  <span className={`text-xs px-1.5 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"}`}>
                     {dayApts.length}
                   </span>
                   {pendingClose > 0 && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
@@ -361,28 +439,44 @@ export default function CompanySchedule() {
       {/* ── Week View ───────────────────────────────────────────────────── */}
       {view === "week" && (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="grid border-b border-gray-100" style={{ gridTemplateColumns: `80px repeat(${DAYS.length}, 1fr)` }}>
+          <div className="grid border-b border-gray-100" style={{ gridTemplateColumns: `80px repeat(${weekDays.length}, 1fr)` }}>
             <div className="p-3" />
-            {DAYS.map((day) => (
-              <div key={day.date} className={`p-3 text-center border-l border-gray-100 ${day.isToday ? "bg-teal-50" : ""}`}>
+            {weekDays.map((day) => (
+              <div
+                key={day.date}
+                className="p-3 text-center border-l border-gray-100"
+                style={day.isToday ? { background: `${primaryColor}10` } : {}}
+              >
                 <p className="text-xs text-gray-400">{day.label.split(" ")[0]}</p>
-                <p className={`text-sm ${day.isToday ? "text-teal-600" : "text-gray-700"}`} style={{ fontWeight: day.isToday ? 700 : 500 }}>
+                <p
+                  className="text-sm"
+                  style={{ fontWeight: day.isToday ? 700 : 500, color: day.isToday ? primaryColor : "#374151" }}
+                >
                   {day.label.split(" ")[1]}
                 </p>
+                {day.isToday && (
+                  <div className="flex justify-center mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: primaryColor }} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
           <div className="overflow-y-auto max-h-[400px]">
             {HOURS.map((hour) => (
-              <div key={hour} className="grid border-b border-gray-50 hover:bg-gray-50/50" style={{ gridTemplateColumns: `80px repeat(${DAYS.length}, 1fr)` }}>
+              <div key={hour} className="grid border-b border-gray-50 hover:bg-gray-50/50" style={{ gridTemplateColumns: `80px repeat(${weekDays.length}, 1fr)` }}>
                 <div className="p-3 text-xs text-gray-400 text-right pr-4 border-r border-gray-100">{hour}</div>
-                {DAYS.map((day) => {
+                {weekDays.map((day) => {
                   const apt = companyAppointments.find((a) => a.date === day.date && a.time === hour);
                   const cl = apt ? companyClients.find((c) => c.id === apt.clientId) : null;
                   const therapist = apt ? companyTherapists.find((t) => t.id === apt.therapistId) : null;
                   const st = apt ? statusConfig[getEffectiveStatus(apt)] : null;
                   return (
-                    <div key={day.date} className="p-1 border-l border-gray-50 min-h-[52px]">
+                    <div
+                      key={day.date}
+                      className="p-1 border-l border-gray-50 min-h-[52px]"
+                      style={day.isToday ? { background: `${primaryColor}05` } : {}}
+                    >
                       {apt && st && (
                         <button
                           onClick={() => { setSelectedDay(day.date); setView("day"); }}
@@ -407,7 +501,7 @@ export default function CompanySchedule() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
             <h3 className="text-gray-900">
-              {DAYS.find((d) => d.date === selectedDay)?.label || selectedDay}
+              {weekDays.find((d) => d.date === selectedDay)?.label || selectedDay}
             </h3>
             <span className="text-sm" style={{ color: primaryColor, fontWeight: 600 }}>
               {dayAppointments(selectedDay).length} sessões

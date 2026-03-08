@@ -59,6 +59,8 @@ export function usePageData() {
     mutateInviteTherapist: data.mutateInviteTherapist,
     mutateDissociateTherapist: data.mutateDissociateTherapist,
     mutateUpdateTherapistCommission: data.mutateUpdateTherapistCommission,
+    mutateApproveAssociation: data.mutateApproveAssociation,
+    mutateRejectAssociation: data.mutateRejectAssociation,
     mutateAddClient: data.mutateAddClient,
     mutateUpdateClient: data.mutateUpdateClient,
     mutateAddTherapy: data.mutateAddTherapy,

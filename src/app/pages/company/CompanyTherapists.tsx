@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   Plus, Search, Edit2, Trash2, X, CheckCircle, UserPlus, Link2, Link2Off,
   AlertCircle, Sparkles, Building2, Percent, ArrowLeft, MapPin, Loader2,
-  Star, Mail,
+  Star, Mail, Clock, Check, AlertTriangle,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
@@ -12,12 +12,13 @@ import { getTherapistByUsername } from "../../../lib/firestore";
 export default function CompanyTherapists() {
   const { user, isDemoMode } = useAuth();
   const { company, therapists: allTherapists, therapies, therapistStore: store,
-    mutateInviteTherapist, mutateDissociateTherapist, mutateUpdateTherapistCommission } = usePageData();
+    mutateInviteTherapist, mutateDissociateTherapist, mutateUpdateTherapistCommission,
+    mutateApproveAssociation, mutateRejectAssociation } = usePageData();
   const { selectedUnitId, companyUnits } = useCompanyUnit();
   const primaryColor = company?.color || "#0D9488";
 
   const [search, setSearch] = useState("");
-  const [modal, setModal] = useState<"add" | "edit_commission" | "dissociate" | null>(null);
+  const [modal, setModal] = useState<"add" | "edit_commission" | "dissociate" | "approve" | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState("");
   const [newCommission, setNewCommission] = useState(50);
@@ -142,7 +143,7 @@ export default function CompanyTherapists() {
   const openEditCommission = (therapistId: string) => {
     setSelectedId(therapistId);
     const assoc = store.getAssociation(therapistId);
-    setNewCommission(assoc.commission);
+    setNewCommission(assoc.commission || 50);
     setModal("edit_commission");
   };
 
@@ -150,6 +151,9 @@ export default function CompanyTherapists() {
     setSelectedId(therapistId);
     setModal("dissociate");
   };
+
+  // Pending association requests (therapist-initiated, awaiting company approval)
+  const pendingRequests = store.getPendingForCompany(user?.companyId ?? "");
 
   return (
     <div className="space-y-6">
@@ -167,6 +171,85 @@ export default function CompanyTherapists() {
           <UserPlus className="w-4 h-4" /> Associar Terapeuta
         </button>
       </div>
+
+      {/* ── Pending requests ────────────────────────────────────────────────── */}
+      {pendingRequests.length > 0 && (
+        <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-amber-100 bg-amber-50">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+              <Clock className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-amber-900" style={{ fontWeight: 700 }}>
+                Solicitações pendentes ({pendingRequests.length})
+              </p>
+              <p className="text-xs text-amber-600">
+                Terapeutas aguardando sua aprovação para integrar a equipe
+              </p>
+            </div>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {pendingRequests.map((req) => {
+              // Look up full therapist data if available in allTherapists (for display)
+              const fullTherapist = allTherapists.find((t) => t.id === req.therapistId);
+              const name    = fullTherapist?.name    ?? req.therapistName    ?? "Terapeuta";
+              const avatar  = fullTherapist?.avatar  ?? req.therapistAvatar  ?? "";
+              const specialty = fullTherapist?.specialty ?? req.therapistSpecialty ?? "";
+              const username  = fullTherapist?.username  ?? req.therapistUsername  ?? req.therapistId;
+              return (
+                <div key={req.therapistId} className="flex items-center gap-4 px-5 py-4">
+                  {/* Avatar */}
+                  {avatar ? (
+                    <img src={avatar} alt={name} className="w-12 h-12 rounded-xl object-cover shrink-0" />
+                  ) : (
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0"
+                      style={{ background: primaryColor, fontWeight: 700 }}
+                    >
+                      {name.charAt(0)}
+                    </div>
+                  )}
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-900 truncate" style={{ fontWeight: 700 }}>{name}</p>
+                    <p className="text-xs text-gray-400">@{username}</p>
+                    {specialty && <p className="text-xs text-gray-500 mt-0.5">{specialty}</p>}
+                  </div>
+                  {/* Status badge */}
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 shrink-0">
+                    <Clock className="w-3 h-3 text-amber-500" />
+                    <span className="text-xs text-amber-600" style={{ fontWeight: 600 }}>Pendente</span>
+                  </div>
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => {
+                        setSelectedId(req.therapistId);
+                        setNewCommission(50);
+                        setNewUnitId(null);
+                        setModal("approve");
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-white hover:opacity-90 transition-opacity"
+                      style={{ background: primaryColor, fontWeight: 600 }}
+                    >
+                      <Check className="w-3.5 h-3.5" /> Aprovar
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await mutateRejectAssociation(req.therapistId);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs border border-red-100 text-red-500 hover:bg-red-50 transition-colors"
+                      style={{ fontWeight: 600 }}
+                    >
+                      <X className="w-3.5 h-3.5" /> Rejeitar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative">
@@ -565,6 +648,122 @@ export default function CompanyTherapists() {
           </div>
         </div>
       )}
+
+      {/* ── Modal: Approve pending association ──────────────────────────────── */}
+      {modal === "approve" && selectedId && (() => {
+        const req = pendingRequests.find((r) => r.therapistId === selectedId);
+        const fullT = allTherapists.find((t) => t.id === selectedId);
+        const name = fullT?.name ?? req?.therapistName ?? "Terapeuta";
+        const avatar = fullT?.avatar ?? req?.therapistAvatar ?? "";
+        return (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+              <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${primaryColor}15` }}>
+                    <CheckCircle className="w-5 h-5" style={{ color: primaryColor }} />
+                  </div>
+                  <div>
+                    <h3 className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>Aprovar Terapeuta</h3>
+                    <p className="text-gray-400 text-xs">Defina a comissão antes de confirmar</p>
+                  </div>
+                </div>
+                <button onClick={() => { setModal(null); setSelectedId(null); }} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-5">
+                {/* Therapist preview */}
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
+                  {avatar ? (
+                    <img src={avatar} alt={name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
+                      style={{ background: primaryColor, fontWeight: 700 }}>
+                      {name.charAt(0)}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-900 truncate" style={{ fontWeight: 700 }}>{name}</p>
+                    <p className="text-xs text-gray-400">@{fullT?.username ?? req?.therapistUsername ?? selectedId}</p>
+                  </div>
+                </div>
+
+                {/* Unit */}
+                {companyUnits.length > 0 && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>
+                      Unidade de atendimento
+                    </label>
+                    <select
+                      value={newUnitId ?? ""}
+                      onChange={(e) => setNewUnitId(e.target.value || null)}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 bg-white"
+                      style={{ ["--tw-ring-color" as string]: `${primaryColor}50` }}
+                    >
+                      <option value="">Sem unidade específica</option>
+                      {companyUnits.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name}{u.isMain ? " (principal)" : ""}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Commission slider */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>
+                    Comissão do terapeuta
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range" min={10} max={90} step={5}
+                      value={newCommission}
+                      onChange={(e) => setNewCommission(Number(e.target.value))}
+                      className="flex-1"
+                      style={{ accentColor: primaryColor }}
+                    />
+                    <div className="w-16 py-1.5 rounded-lg text-center text-white text-sm shrink-0"
+                      style={{ background: primaryColor, fontWeight: 700 }}>
+                      {newCommission}%
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 p-3 rounded-xl bg-gray-50">
+                    <div className="flex-1 text-center">
+                      <p className="text-xs text-gray-400">Terapeuta recebe</p>
+                      <p className="text-sm text-emerald-600" style={{ fontWeight: 700 }}>{newCommission}%</p>
+                    </div>
+                    <div className="w-px h-8 bg-gray-200" />
+                    <div className="flex-1 text-center">
+                      <p className="text-xs text-gray-400">Empresa fica com</p>
+                      <p className="text-sm text-gray-900" style={{ fontWeight: 700 }}>{100 - newCommission}%</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={() => { setModal(null); setSelectedId(null); }}
+                    className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await mutateApproveAssociation(selectedId, newCommission, newUnitId);
+                      setModal(null);
+                      setSelectedId(null);
+                    }}
+                    className="flex-1 py-2.5 text-white rounded-xl text-sm hover:opacity-90 transition-opacity"
+                    style={{ background: primaryColor, fontWeight: 600 }}
+                  >
+                    Confirmar aprovação
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Modal: Editar comissão ─────────────────────────────────────────── */}
       {modal === "edit_commission" && selectedTherapist && selectedAssoc && (

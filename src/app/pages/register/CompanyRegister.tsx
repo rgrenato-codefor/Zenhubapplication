@@ -1,14 +1,15 @@
-import { useState } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router";
 import {
   Sparkles, Building2, MapPin, User, Lock, CheckCircle,
-  ArrowRight, ArrowLeft, Eye, EyeOff, Loader2, Star, Zap, Crown,
-  Phone, Mail, FileText, ChevronRight, AlertCircle,
+  ArrowRight, ArrowLeft, Eye, EyeOff, Loader2, Star,
+  Phone, Mail, ChevronRight, AlertCircle,
+  Gift, RocketLaunch, Briefcase, Crown,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
-// Google sign-in temporariamente desativado:
-// import { GoogleButton } from "../../components/shared/GoogleButton";
-// import { signInWithGoogleGIS } from "../../../lib/googleGIS";
+import { useCepLookup } from "../../hooks/useCepLookup";
+import { DEFAULT_COMPANY_PLANS, COMPANY_MODULES, type CompanyPlan } from "../../lib/planConfig";
+import { getCompanyPlans } from "../../../lib/firestore";
 
 const STEPS = [
   { id: 1, label: "Empresa", icon: Building2 },
@@ -21,57 +22,6 @@ const STEPS = [
 const SEGMENTS = [
   "Clínica de Terapias", "Spa & Bem-estar", "Studio de Massagem",
   "Centro Holístico", "Clínica de Estética", "Outro",
-];
-
-const PLANS = [
-  {
-    id: "basic",
-    name: "Básico",
-    price: "R$ 97",
-    period: "/mês",
-    color: "#6B7280",
-    icon: Star,
-    highlight: false,
-    features: [
-      "Até 3 terapeutas",
-      "50 agendamentos/mês",
-      "Dashboard básico",
-      "Suporte por e-mail",
-    ],
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "R$ 197",
-    period: "/mês",
-    color: "#7C3AED",
-    icon: Zap,
-    highlight: true,
-    badge: "Mais popular",
-    features: [
-      "Até 10 terapeutas",
-      "Agendamentos ilimitados",
-      "Relatórios avançados",
-      "Comissões automáticas",
-      "Suporte prioritário",
-    ],
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: "R$ 397",
-    period: "/mês",
-    color: "#D97706",
-    icon: Crown,
-    highlight: false,
-    features: [
-      "Terapeutas ilimitados",
-      "Multi-unidades",
-      "API & integrações",
-      "Relatórios personalizados",
-      "Gerente de conta dedicado",
-    ],
-  },
 ];
 
 type FormData = {
@@ -105,7 +55,7 @@ const initialForm: FormData = {
   cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "",
   responsibleName: "", responsibleEmail: "", responsiblePhone: "", role: "",
   password: "", confirmPassword: "",
-  plan: "pro",
+  plan: "",
 };
 
 function maskCNPJ(v: string) {
@@ -140,11 +90,48 @@ export default function CompanyRegister() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const numberInputRef = useRef<HTMLInputElement>(null);
+  const [plans, setPlans] = useState<CompanyPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPlans = async () => {
+      setPlansLoading(true);
+      try {
+        const fetched = await getCompanyPlans();
+        const active = (fetched.length > 0 ? fetched : DEFAULT_COMPANY_PLANS)
+          .filter((p) => p.isActive)
+          .sort((a, b) => a.order - b.order);
+        setPlans(active);
+        // Auto-select: prefer the paid plan in the middle, else first active plan
+        const paid = active.filter((p) => p.price > 0);
+        const recommended = paid[Math.floor(paid.length / 2)] ?? active[0];
+        if (recommended) setForm((prev) => ({ ...prev, plan: recommended.id }));
+      } finally {
+        setPlansLoading(false);
+      }
+    };
+    fetchPlans();
+  }, []);
 
   const set = (field: keyof FormData, value: string) => {
     setForm((p) => ({ ...p, [field]: value }));
     setErrors((p) => ({ ...p, [field]: "" }));
   };
+
+  // ── ViaCEP lookup ────────────────────────────────────────────────────────
+  const handleCepFound = useCallback(
+    (addr: { logradouro: string; bairro: string; localidade: string; uf: string }) => {
+      if (addr.logradouro) set("street",       addr.logradouro);
+      if (addr.bairro)     set("neighborhood", addr.bairro);
+      if (addr.localidade) set("city",         addr.localidade);
+      if (addr.uf)         set("state",        addr.uf);
+      // Focus number field after auto-fill
+      setTimeout(() => numberInputRef.current?.focus(), 80);
+    },
+    [] // eslint-disable-line
+  );
+  const { cepStatus, lookupCep } = useCepLookup(handleCepFound);
 
   const validateStep = () => {
     const e: Partial<FormData> = {};
@@ -220,19 +207,6 @@ export default function CompanyRegister() {
       setSubmitting(false);
     }
   };
-
-  // Google sign-in temporariamente desativado:
-  // const handleGoogleLink = async () => {
-  //   try {
-  //     const cred = await signInWithGoogleGIS();
-  //     const fbUser = cred.user;
-  //     set("responsibleName", fbUser.displayName || form.responsibleName);
-  //     set("responsibleEmail", fbUser.email || form.responsibleEmail);
-  //     setGoogleLinked(true);
-  //   } catch {
-  //     // user cancelled or error — silently ignore
-  //   }
-  // };
 
   const inputCls = (field: keyof FormData) =>
     `w-full px-4 py-3 rounded-xl border text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 transition-all ${
@@ -473,13 +447,39 @@ export default function CompanyRegister() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className={labelCls} style={{ fontWeight: 600, color: "#D1D5DB" }}>CEP *</label>
-                      <input
-                        className={inputCls("cep")}
-                        placeholder="00000-000"
-                        value={form.cep}
-                        onChange={(e) => set("cep", maskCEP(e.target.value))}
-                      />
+                      <div className="relative">
+                        <input
+                          className={inputCls("cep")}
+                          placeholder="00000-000"
+                          value={form.cep}
+                          maxLength={9}
+                          onChange={(e) => {
+                            const masked = maskCEP(e.target.value);
+                            set("cep", masked);
+                            lookupCep(masked);
+                          }}
+                        />
+                        {cepStatus === "loading" && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
+                          </div>
+                        )}
+                        {cepStatus === "found" && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <CheckCircle className="w-4 h-4 text-emerald-500" />
+                          </div>
+                        )}
+                      </div>
                       {errors.cep && <p className="text-red-400 text-xs mt-1">{errors.cep}</p>}
+                      {cepStatus === "not_found" && (
+                        <p className="text-amber-400 text-xs mt-1">CEP não encontrado. Preencha manualmente.</p>
+                      )}
+                      {cepStatus === "error" && (
+                        <p className="text-red-400 text-xs mt-1">Erro ao buscar CEP. Preencha manualmente.</p>
+                      )}
+                      {cepStatus === "found" && (
+                        <p className="text-emerald-400 text-xs mt-1">Endereço preenchido automaticamente!</p>
+                      )}
                     </div>
                     <div>
                       <label className={labelCls} style={{ fontWeight: 600, color: "#D1D5DB" }}>Estado *</label>
@@ -514,6 +514,7 @@ export default function CompanyRegister() {
                         placeholder="123"
                         value={form.number}
                         onChange={(e) => set("number", e.target.value)}
+                        ref={numberInputRef}
                       />
                       {errors.number && <p className="text-red-400 text-xs mt-1">{errors.number}</p>}
                     </div>
@@ -732,57 +733,110 @@ export default function CompanyRegister() {
                   <p className="text-gray-400 text-sm">Comece com 14 dias grátis em qualquer plano</p>
                 </div>
                 <div className="space-y-3">
-                  {PLANS.map((plan) => {
-                    const Icon = plan.icon;
-                    const selected = form.plan === plan.id;
-                    return (
-                      <button
-                        key={plan.id}
-                        type="button"
-                        onClick={() => set("plan", plan.id)}
-                        className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
-                          selected
-                            ? "border-violet-500 bg-violet-500/10"
-                            : "border-white/10 bg-white/5 hover:border-white/20"
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div
-                            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                            style={{ background: `${plan.color}20` }}
-                          >
-                            <Icon className="w-5 h-5" style={{ color: plan.color }} />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-white text-sm" style={{ fontWeight: 700 }}>{plan.name}</span>
-                              {plan.badge && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300" style={{ fontWeight: 600 }}>
-                                  {plan.badge}
+                  {plansLoading ? (
+                    <div className="flex items-center justify-center py-10 gap-3">
+                      <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
+                      <span className="text-gray-400 text-sm">Carregando planos...</span>
+                    </div>
+                  ) : (
+                    plans.map((plan, idx) => {
+                      const selected = form.plan === plan.id;
+                      // "Recommended" badge for the middle paid plan
+                      const paidPlans = plans.filter((p) => p.price > 0);
+                      const midIndex = Math.floor(paidPlans.length / 2);
+                      const isRecommended = plan.price > 0 && paidPlans[midIndex]?.id === plan.id;
+
+                      // Build feature bullets from limits
+                      const feats: string[] = [];
+                      if (plan.limits.therapists === null) feats.push("Terapeutas ilimitados");
+                      else if (plan.limits.therapists) feats.push(`Até ${plan.limits.therapists} terapeutas`);
+                      if (plan.limits.units === null) feats.push("Multi-unidades");
+                      else if (plan.limits.units && plan.limits.units > 1) feats.push(`Até ${plan.limits.units} unidades`);
+                      if (plan.limits.clients === null) feats.push("Clientes ilimitados");
+                      else if (plan.limits.clients) feats.push(`Até ${plan.limits.clients} clientes`);
+                      // Fill with modules if needed
+                      if (feats.length < 2 && plan.modules.length > 0) {
+                        plan.modules.slice(0, 2 - feats.length).forEach((m) => {
+                          feats.push(COMPANY_MODULES[m as keyof typeof COMPANY_MODULES] ?? m);
+                        });
+                      }
+
+                      return (
+                        <button
+                          key={plan.id}
+                          type="button"
+                          onClick={() => setForm((p) => ({ ...p, plan: plan.id }))}
+                          className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
+                            selected
+                              ? "border-violet-500 bg-violet-500/10"
+                              : isRecommended
+                              ? "border-violet-800/60 bg-white/5 hover:border-violet-600/60"
+                              : "border-white/10 bg-white/5 hover:border-white/20"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {/* Heroicon */}
+                            {(() => {
+                              const PlanIcon = getPlanIcon(plan.id);
+                              return (
+                                <div
+                                  className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                                  style={{ background: `${plan.color}22` }}
+                                >
+                                  <PlanIcon className="w-5 h-5" style={{ color: plan.color }} />
+                                </div>
+                              );
+                            })()}
+
+                            {/* Name + features */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                <span className="text-white text-sm" style={{ fontWeight: 700 }}>
+                                  {plan.name}
                                 </span>
+                                {isRecommended && (
+                                  <span
+                                    className="text-xs px-2 py-0.5 rounded-full bg-violet-500/25 text-violet-300"
+                                    style={{ fontWeight: 600 }}
+                                  >
+                                    Mais popular
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                                {feats.slice(0, 3).map((f) => (
+                                  <span key={f} className="text-xs text-gray-400">{f}</span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Price */}
+                            <div className="text-right shrink-0">
+                              {plan.price === 0 ? (
+                                <p className="text-emerald-400 text-sm" style={{ fontWeight: 700 }}>Grátis</p>
+                              ) : (
+                                <>
+                                  <p className="text-white text-sm" style={{ fontWeight: 700 }}>
+                                    R$ {plan.price.toLocaleString("pt-BR")}
+                                  </p>
+                                  <p className="text-gray-400 text-xs">/mês</p>
+                                </>
                               )}
                             </div>
-                            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                              {plan.features.slice(0, 2).map((f) => (
-                                <span key={f} className="text-xs text-gray-400">{f}</span>
-                              ))}
+
+                            {/* Radio */}
+                            <div
+                              className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
+                                selected ? "border-violet-500 bg-violet-500" : "border-white/20"
+                              }`}
+                            >
+                              {selected && <div className="w-2 h-2 rounded-full bg-white" />}
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-white" style={{ fontWeight: 700 }}>{plan.price}</p>
-                            <p className="text-gray-400 text-xs">{plan.period}</p>
-                          </div>
-                          <div
-                            className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
-                              selected ? "border-violet-500 bg-violet-500" : "border-white/20"
-                            }`}
-                          >
-                            {selected && <div className="w-2 h-2 rounded-full bg-white" />}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
                 <p className="text-gray-500 text-xs text-center mt-4">
                   Cancele quando quiser. Sem fidelidade.
@@ -838,4 +892,15 @@ export default function CompanyRegister() {
       </div>
     </div>
   );
+}
+
+// ── Heroicon mapping for plan cards (by plan id prefix) ──────────────────────
+type HeroIcon = React.ComponentType<React.SVGProps<SVGSVGElement>>;
+
+function getPlanIcon(planId: string): HeroIcon {
+  if (planId.includes("free"))       return Gift;
+  if (planId.includes("starter"))    return RocketLaunch;
+  if (planId.includes("business"))   return Briefcase;
+  if (planId.includes("premium"))    return Crown;
+  return Star; // fallback
 }

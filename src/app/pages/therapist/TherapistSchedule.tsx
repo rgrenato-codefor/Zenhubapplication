@@ -66,6 +66,17 @@ const DAY_LABELS: Record<string, string> = {
   thursday: "Quinta", friday: "Sexta", saturday: "Sábado", sunday: "Domingo",
 };
 
+// ── All 7 days for the availability grid (always fixed Mon → Sun) ──────────
+const ALL_WEEK_DAYS = [
+  { dayKey: "monday",    label: "Seg" },
+  { dayKey: "tuesday",   label: "Ter" },
+  { dayKey: "wednesday", label: "Qua" },
+  { dayKey: "thursday",  label: "Qui" },
+  { dayKey: "friday",    label: "Sex" },
+  { dayKey: "saturday",  label: "Sáb" },
+  { dayKey: "sunday",    label: "Dom" },
+];
+
 function StatusBadge({ status }: { status: string }) {
   if (status === "completed")
     return <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700"><CheckCircle className="w-3 h-3" /> Encerrado</span>;
@@ -602,8 +613,8 @@ export default function TherapistSchedule() {
           <div className="bg-white rounded-xl border border-violet-100 p-5 shadow-sm">
             <div className="flex items-center gap-2 mb-1"><Clock className="w-4 h-4 text-violet-500" /><h3 className="text-gray-900">Horários disponíveis</h3></div>
             <p className="text-gray-400 text-xs mb-5">Clique para marcar ou desmarcar sua disponibilidade.</p>
-            <div className="grid grid-cols-5 gap-3">
-              {visibleDays.map((day) => {
+            <div className="grid grid-cols-7 gap-2">
+              {ALL_WEEK_DAYS.map((day) => {
                 const slots = availability[day.dayKey] ?? [];
                 return (
                   <div key={day.dayKey}>
@@ -615,7 +626,7 @@ export default function TherapistSchedule() {
                           <button
                             key={slot}
                             onClick={() => toggleSlot(day.dayKey, slot)}
-                            className={`w-full py-1 px-1 rounded-lg text-xs transition-all ${active ? "bg-violet-600 text-white" : "bg-gray-50 text-gray-400 hover:bg-violet-50 hover:text-violet-500 border border-gray-100"}`}
+                            className={`w-full py-1 px-0.5 rounded-lg text-xs transition-all ${active ? "bg-violet-600 text-white" : "bg-gray-50 text-gray-400 hover:bg-violet-50 hover:text-violet-500 border border-gray-100"}`}
                             style={{ fontWeight: active ? 600 : 400 }}
                           >
                             {slot}
@@ -632,7 +643,7 @@ export default function TherapistSchedule() {
           <div className="bg-white rounded-xl border border-violet-100 p-5 shadow-sm">
             <h3 className="text-gray-900 mb-3">Resumo semanal</h3>
             <div className="space-y-2">
-              {visibleDays.map((day) => {
+              {ALL_WEEK_DAYS.map((day) => {
                 const slots = availability[day.dayKey] ?? [];
                 if (slots.length === 0) return null;
                 return (

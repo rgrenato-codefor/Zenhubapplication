@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Users, Sparkles, CalendarDays, UserCircle,
   DollarSign, BarChart3, Settings, LogOut, Menu, X, Bell,
   ChevronDown, ChevronRight, DoorOpen, MapPin, Check, Building2,
+  UserCircle as UserIcon,
 } from "../shared/icons";
 import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useAuth } from "../../context/AuthContext";
@@ -118,6 +119,8 @@ function UnitSwitcher({ primaryColor }: { primaryColor: string }) {
 function CompanyLayoutInner() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dashOpen, setDashOpen] = useState(true);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, signOut } = useAuth();
   const { company } = usePageData();
   const { selectedUnitId, setSelectedUnitId, companyUnits } = useCompanyUnit();
@@ -132,6 +135,17 @@ function CompanyLayoutInner() {
   );
 
   const handleLogout = () => { signOut(); navigate("/"); };
+
+  // Close user menu on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -288,20 +302,97 @@ function CompanyLayoutInner() {
               triggerClass="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors"
               bellClass="w-4 h-4"
             />
-            <div className="flex items-center gap-2 cursor-pointer">
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm"
-                style={{ background: primaryColor, fontWeight: 700 }}
+
+            {/* ── User menu ── */}
+            <div ref={userMenuRef} className="relative">
+              <button
+                onClick={() => setUserMenuOpen((o) => !o)}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                {user?.name?.charAt(0)}
-              </div>
-              <div className="hidden sm:block">
-                <p className="text-sm text-gray-900 leading-tight">{user?.name}</p>
-                <p className="text-xs text-gray-400">
-                  {user?.role === "company_admin" ? "Admin" : "Vendas"}
-                </p>
-              </div>
-              <ChevronDown className="w-4 h-4 text-gray-400" />
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm shrink-0"
+                  style={{ background: primaryColor, fontWeight: 700 }}
+                >
+                  {user?.name?.charAt(0)}
+                </div>
+                <div className="hidden sm:block text-left">
+                  <p className="text-sm text-gray-900 leading-tight">{user?.name}</p>
+                  <p className="text-xs text-gray-400">
+                    {user?.role === "company_admin" ? "Admin" : "Vendas"}
+                  </p>
+                </div>
+                <ChevronDown
+                  className={`w-4 h-4 text-gray-400 transition-transform ${userMenuOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {userMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl border border-gray-200 shadow-xl z-50 overflow-hidden">
+                  {/* Header */}
+                  <div className="px-4 py-4 border-b border-gray-100" style={{ background: `${primaryColor}08` }}>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0"
+                        style={{ background: primaryColor, fontWeight: 700 }}
+                      >
+                        {user?.name?.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-900 truncate" style={{ fontWeight: 700 }}>
+                          {user?.name}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                        <span
+                          className="inline-block text-xs px-2 py-0.5 rounded-full mt-1"
+                          style={{ background: `${primaryColor}20`, color: primaryColor, fontWeight: 600 }}
+                        >
+                          {user?.role === "company_admin" ? "Admin da Empresa" : "Vendas"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Menu items */}
+                  <div className="p-1.5 space-y-0.5">
+                    {user?.role === "company_admin" && (
+                      <button
+                        onClick={() => { navigate("/empresa/configuracoes"); setUserMenuOpen(false); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                      >
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center"
+                          style={{ background: `${primaryColor}15` }}
+                        >
+                          <Settings className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                        </div>
+                        <span>Configurações da empresa</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { navigate("/empresa/configuracoes"); setUserMenuOpen(false); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
+                        <UserIcon className="w-3.5 h-3.5 text-gray-500" />
+                      </div>
+                      <span>Meu perfil</span>
+                    </button>
+                  </div>
+
+                  {/* Logout */}
+                  <div className="p-1.5 border-t border-gray-100">
+                    <button
+                      onClick={() => { handleLogout(); setUserMenuOpen(false); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center">
+                        <LogOut className="w-3.5 h-3.5 text-red-500" />
+                      </div>
+                      <span style={{ fontWeight: 600 }}>Sair da conta</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>

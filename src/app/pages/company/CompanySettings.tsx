@@ -3,7 +3,7 @@ import {
   Save, Building2, Bell, Users, Link, Copy, CheckCheck,
   MapPin, Plus, Edit2, Trash2, X, Phone, Mail, Star,
   CheckCircle, AlertCircle, ChevronRight, ToggleLeft, ToggleRight,
-  Download, QrCode, Smartphone, Share2,
+  Download, QrCode, Smartphone, Share2, Camera,
 } from "../../components/shared/icons";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { useAuth } from "../../context/AuthContext";
@@ -257,6 +257,8 @@ export default function CompanySettings() {
     cnpj: (companyData as any)?.cnpj ?? "",
     segment: (companyData as any)?.segment ?? "",
     color: companyData?.color ?? "#0D9488",
+    logo: companyData?.logo ?? "",
+    logoUrl: (companyData as any)?.logoUrl ?? "",
   });
 
   // Keep form in sync when companyData arrives from Firestore asynchronously
@@ -270,6 +272,8 @@ export default function CompanySettings() {
       cnpj: (companyData as any)?.cnpj ?? "",
       segment: (companyData as any)?.segment ?? "",
       color: companyData.color ?? "#0D9488",
+      logo: companyData.logo ?? "",
+      logoUrl: (companyData as any)?.logoUrl ?? "",
     });
   }, [companyData]);
 
@@ -387,31 +391,118 @@ export default function CompanySettings() {
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
               <h3 className="text-gray-900 mb-4">Identidade Visual</h3>
-              <div className="flex items-center gap-3 mb-4">
-                <div
-                  className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-lg shadow-lg"
-                  style={{ background: primaryColor, fontWeight: 700 }}
-                >
-                  {companyData?.logo}
-                </div>
-                <div>
-                  <p className="text-sm text-gray-700" style={{ fontWeight: 600 }}>{companyData?.name}</p>
-                  <p className="text-xs text-gray-400">Logo da empresa</p>
+
+              {/* ── Logo ─────────────────────────────────────────── */}
+              <div className="mb-5">
+                <label className="block text-sm text-gray-600 mb-2" style={{ fontWeight: 600 }}>
+                  Logotipo da empresa
+                </label>
+                <div className="flex items-center gap-4">
+                  {/* Preview */}
+                  <div className="relative group">
+                    {companyForm.logoUrl ? (
+                      <img
+                        src={companyForm.logoUrl}
+                        alt="Logo"
+                        className="w-16 h-16 rounded-2xl object-cover shadow-md"
+                      />
+                    ) : (
+                      <div
+                        className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-lg shadow-md"
+                        style={{ background: companyForm.color, fontWeight: 700 }}
+                      >
+                        {companyForm.logo || companyForm.name?.slice(0, 2).toUpperCase() || "ZH"}
+                      </div>
+                    )}
+                    {/* Upload overlay */}
+                    <label
+                      className="absolute inset-0 rounded-2xl bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                      title="Trocar logo"
+                    >
+                      <Camera className="w-5 h-5 text-white" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            setCompanyForm((p) => ({
+                              ...p,
+                              logoUrl: ev.target?.result as string,
+                            }));
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs text-gray-500 mb-2">
+                      Clique no logo para trocar a imagem. JPG, PNG ou SVG, máx. 2 MB.
+                    </p>
+                    {/* Initials fallback */}
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Sigla (exibida sem imagem)</label>
+                      <input
+                        value={companyForm.logo}
+                        maxLength={3}
+                        className="w-20 px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-center uppercase focus:outline-none focus:ring-2"
+                        style={{ ["--tw-ring-color" as string]: `${companyForm.color}50` }}
+                        onChange={(e) => setCompanyForm((p) => ({ ...p, logo: e.target.value.toUpperCase() }))}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              {/* ── Cor ─────────────────────────────────────────── */}
               <div>
                 <label className="block text-sm text-gray-600 mb-2" style={{ fontWeight: 600 }}>
                   Cor da empresa
                 </label>
-                <div className="flex items-center gap-2">
-                  <input type="color" defaultValue={primaryColor} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
-                  <span className="text-sm text-gray-600 font-mono">{primaryColor}</span>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={companyForm.color}
+                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5"
+                    onChange={(e) => setCompanyForm((p) => ({ ...p, color: e.target.value }))}
+                  />
+                  <div
+                    className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200"
+                    style={{ background: `${companyForm.color}10` }}
+                  >
+                    <div
+                      className="w-4 h-4 rounded-full flex-shrink-0"
+                      style={{ background: companyForm.color }}
+                    />
+                    <span className="text-sm text-gray-700 font-mono">{companyForm.color}</span>
+                  </div>
+                </div>
+                {/* Color preview on elements */}
+                <div className="mt-3 flex gap-2">
+                  {["#7C3AED","#0D9488","#2563EB","#D97706","#DC2626","#0EA5E9","#10B981"].map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setCompanyForm((p) => ({ ...p, color: c }))}
+                      className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110"
+                      style={{
+                        background: c,
+                        borderColor: companyForm.color === c ? c : "transparent",
+                        outline: companyForm.color === c ? `2px solid ${c}` : "none",
+                        outlineOffset: "2px",
+                      }}
+                      title={c}
+                    />
+                  ))}
                 </div>
               </div>
             </div>
             <button
               className="w-full flex items-center justify-center gap-2 py-3 text-white rounded-xl text-sm hover:opacity-90 transition-opacity"
-              style={{ background: primaryColor, fontWeight: 600 }}
+              style={{ background: companyForm.color, fontWeight: 600 }}
               onClick={handleSaveCompany}
             >
               <Save className="w-4 h-4" /> Salvar Alterações

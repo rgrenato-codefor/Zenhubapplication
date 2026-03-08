@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Star, Edit2, Save, CheckCircle, X,
   Link2, Copy, Check, Building2, LogOut,
-  AlertTriangle, Sparkles, AtSign, ExternalLink,
+  AlertTriangle, Sparkles, AtSign, ExternalLink, Clock,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
@@ -16,6 +16,7 @@ export default function TherapistProfile() {
   const { user } = useAuth();
   const {
     myTherapist: therapist, company,
+    therapistStore: store,
     mutateMyTherapistProfile,
     mutateLinkToCompany, mutateUnlinkFromCompany,
   } = usePageData();
@@ -47,6 +48,13 @@ export default function TherapistProfile() {
   }, [therapist]);
 
   const isLinked = !!therapist?.companyId && !!company;
+
+  // Association status from the store (covers demo + real)
+  const assoc = therapist ? store.getAssociation(therapist.id) : null;
+  const isPending  = assoc?.status === "pending";
+  const isActive   = assoc?.status === "active";
+  // Company commission set by the company (only meaningful when active)
+  const companyCommission = assoc?.commission ?? null;
 
   if (!therapist) return (
     <div className="text-gray-500 text-center py-20">Carregando perfil...</div>
@@ -264,29 +272,67 @@ export default function TherapistProfile() {
 
         {isLinked ? (
           <div className="space-y-3">
-            <div
-              className="flex items-center gap-3 p-3 rounded-xl"
-              style={{ background: `${company.color}12` }}
-            >
+            {/* Active or Pending state */}
+            {isPending ? (
+              /* ── Awaiting approval ── */
+              <div className="rounded-xl border-2 border-amber-200 overflow-hidden">
+                <div className="flex items-center gap-3 p-3 bg-amber-50">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs shrink-0"
+                    style={{ background: company.color, fontWeight: 700 }}>
+                    {company.logo}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm truncate" style={{ fontWeight: 600, color: company.color }}>
+                      {company.name}
+                    </p>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+                      <p className="text-xs text-amber-600" style={{ fontWeight: 600 }}>
+                        Aguardando aprovação da empresa
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-3 py-2 bg-amber-50 border-t border-amber-100">
+                  <p className="text-xs text-amber-700">
+                    Sua solicitação foi enviada. A empresa precisa aprovar e definir sua comissão antes do vínculo ser ativado.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* ── Active link ── */
               <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs shrink-0"
-                style={{ background: company.color, fontWeight: 700 }}
+                className="flex items-center gap-3 p-3 rounded-xl"
+                style={{ background: `${company.color}12` }}
               >
-                {company.logo}
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs shrink-0"
+                  style={{ background: company.color, fontWeight: 700 }}
+                >
+                  {company.logo}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm truncate" style={{ fontWeight: 600, color: company.color }}>
+                    {company.name}
+                  </p>
+                  {companyCommission !== null && companyCommission > 0 ? (
+                    <p className="text-xs text-gray-500">
+                      Comissão definida pela empresa:{" "}
+                      <span style={{ fontWeight: 700, color: company.color }}>{companyCommission}%</span>
+                      {" "}por sessão
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">Comissão ainda não definida pela empresa</p>
+                  )}
+                </div>
+                <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm truncate" style={{ fontWeight: 600, color: company.color }}>
-                  {company.name}
-                </p>
-                <p className="text-xs text-gray-400">Comissão: {therapist.commission}% por sessão</p>
-              </div>
-              <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
-            </div>
+            )}
             <button
               onClick={() => setShowUnlinkConfirm(true)}
               className="flex items-center gap-2 text-xs text-red-500 hover:text-red-700 transition-colors"
             >
-              <LogOut className="w-3.5 h-3.5" /> Desvincular empresa
+              <LogOut className="w-3.5 h-3.5" /> {isPending ? "Cancelar solicitação" : "Desvincular empresa"}
             </button>
           </div>
         ) : (

@@ -41,9 +41,17 @@ export type CatalogItem = {
 export type TherapistAssociation = {
   therapistId: string;
   companyId: string | null;
+  companyName?: string | null;
   unitId?: string | null;
   commission: number;
   linkedAt: string | null;
+  /** "none" = autônomo, "pending" = aguardando aprovação da empresa, "active" = vinculado */
+  status: "none" | "pending" | "active";
+  // Dados do terapeuta para exibição na fila de pendentes (lado empresa)
+  therapistName?: string;
+  therapistAvatar?: string;
+  therapistSpecialty?: string;
+  therapistUsername?: string;
 };
 
 // ── Seed data ────────────────────────────────────────────────────────────────
@@ -84,6 +92,7 @@ function seedAssociations(): Record<string, TherapistAssociation> {
       unitId: (t as any).unitId ?? null,
       commission: t.commission,
       linkedAt: t.companyId ? "2024-01-15" : null,
+      status: t.companyId ? "active" : "none",
     };
   });
   return result;
@@ -139,6 +148,7 @@ export const therapistStore = {
         therapistId, companyId: t?.companyId ?? null,
         unitId: (t as any)?.unitId ?? null,
         commission: t?.commission ?? 50, linkedAt: null,
+        status: "none",
       };
     }
     return associations[therapistId];
@@ -152,9 +162,60 @@ export const therapistStore = {
 
   associateTherapist: (therapistId: string, companyId: string, commission: number, unitId?: string | null) => {
     associations[therapistId] = {
-      therapistId, companyId, commission,
+      ...(associations[therapistId] ?? { therapistId }),
+      companyId, commission,
       unitId: unitId ?? null,
       linkedAt: new Date().toISOString(),
+      status: "active",
+    };
+    notify();
+  },
+
+  /** Terapeuta solicita vínculo — cria associação com status "pending" */
+  requestLink: (
+    therapistId: string,
+    companyId: string,
+    companyName?: string,
+    meta?: { name?: string; avatar?: string; specialty?: string; username?: string },
+  ) => {
+    associations[therapistId] = {
+      ...(associations[therapistId] ?? { therapistId }),
+      companyId,
+      companyName: companyName ?? null,
+      unitId: null,
+      commission: 0,
+      linkedAt: null,
+      status: "pending",
+      therapistName: meta?.name,
+      therapistAvatar: meta?.avatar,
+      therapistSpecialty: meta?.specialty,
+      therapistUsername: meta?.username,
+    };
+    notify();
+  },
+
+  /** Empresa aprova a solicitação e define comissão */
+  approveAssociation: (therapistId: string, commission: number, unitId?: string | null) => {
+    associations[therapistId] = {
+      ...(associations[therapistId] ?? { therapistId }),
+      commission,
+      unitId: unitId ?? null,
+      linkedAt: new Date().toISOString(),
+      status: "active",
+    };
+    notify();
+  },
+
+  /** Empresa rejeita ou terapeuta desvincula */
+  rejectAssociation: (therapistId: string) => {
+    associations[therapistId] = {
+      therapistId,
+      companyId: null,
+      companyName: null,
+      unitId: null,
+      commission: 0,
+      linkedAt: null,
+      status: "none",
     };
     notify();
   },
@@ -164,6 +225,7 @@ export const therapistStore = {
       ...associations[therapistId],
       companyId: null,
       linkedAt: null,
+      status: "none",
     };
     notify();
   },
@@ -173,8 +235,13 @@ export const therapistStore = {
     notify();
   },
 
+  /** Retorna apenas associações ATIVAS para a empresa */
   getCompanyTherapists: (companyId: string) =>
-    Object.values(associations).filter((a) => a.companyId === companyId),
+    Object.values(associations).filter((a) => a.companyId === companyId && a.status === "active"),
+
+  /** Retorna solicitações PENDENTES de aprovação para a empresa */
+  getPendingForCompany: (companyId: string) =>
+    Object.values(associations).filter((a) => a.companyId === companyId && a.status === "pending"),
 
   // ── Catalog ───────────────────────────────────────────────────────────────
 

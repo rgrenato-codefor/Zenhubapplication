@@ -125,6 +125,8 @@ interface DataContextValue {
   mutateInviteTherapist: (code: string, commission: number, unitId?: string | null) => Promise<Therapist | null>;
   mutateDissociateTherapist: (therapistId: string) => Promise<void>;
   mutateUpdateTherapistCommission: (therapistId: string, commission: number) => Promise<void>;
+  mutateApproveAssociation: (therapistId: string, commission: number, unitId?: string | null) => Promise<void>;
+  mutateRejectAssociation: (therapistId: string) => Promise<void>;
 
   // Clients
   mutateAddClient: (data: Omit<Client, "id" | "createdAt">) => Promise<Client>;
@@ -363,8 +365,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const demoCompanyId = user?.companyId;
 
+  // In demo mode: prefer the mutable `company` state (updated by mutateCompany)
+  // and fall back to the static mock only when state is still null (initial load).
   const demoCompany = isDemoMode
-    ? (mockCompanies.find((c) => c.id === demoCompanyId) ?? null) as Company | null
+    ? (() => {
+        if (company) return company;
+        // Company admin: look up by companyId
+        if (demoCompanyId) {
+          const found = mockCompanies.find((c) => c.id === demoCompanyId);
+          if (found) return found as unknown as Company;
+        }
+        // Therapist in demo: look up via association (pending or active)
+        const therapistId = user?.therapistId;
+        if (therapistId) {
+          const assoc = therapistStore.getAssociation(therapistId);
+          if (assoc.companyId) {
+            const found = mockCompanies.find((c) => c.id === assoc.companyId);
+            if (found) return found as unknown as Company;
+          }
+        }
+        return null;
+      })()
     : company;
 
   const demoUnits = isDemoMode
@@ -372,7 +393,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
     : units;
 
   const demoTherapists = isDemoMode
-    ? (mockTherapists.filter((t) => t.companyId === demoCompanyId) as unknown as Therapist[])
+    ? (() => {
+        if (!demoCompanyId) return [] as unknown as Therapist[];
+        // Include statically assigned + dynamically approved from store
+        const activeIds = new Set(
+          therapistStore.getCompanyTherapists(demoCompanyId).map((a) => a.therapistId)
+        );
+        return mockTherapists.filter(
+          (t) => t.companyId === demoCompanyId || activeIds.has(t.id)
+        ) as unknown as Therapist[];
+      })()
     : therapists;
 
   const demoClients = isDemoMode
@@ -396,7 +426,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     : sessionRecords;
 
   const demoMyTherapist = isDemoMode
-    ? (mockTherapists.find((t) => t.id === user?.therapistId) as unknown as Therapist | null ?? null)
+    ? (() => {
+        const t = mockTherapists.find((mt) => mt.id === user?.therapistId);
+        if (!t) return null;
+        // Reflect the current association state from the store
+        const assoc = therapistStore.getAssociation(t.id);
+        return {
+          ...t,
+          companyId: assoc.companyId ?? undefined,
+          commission: assoc.status === "active" ? assoc.commission : t.commission,
+        } as unknown as Therapist;
+      })()
     : myTherapist;
 
   const demoMyClient = isDemoMode
@@ -439,7 +479,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Company
   const mutateCompany = useCallback(async (data: Partial<Company>) => {
-    if (isDemoMode) return; // demo: read-only
+    if (isDemoMode) {
+      // Demo mode: persist color/settings in React state so all pages re-render
+      setCompany((prev) => {
+        const base = prev
+          ?? (mockCompanies.find((c) => c.id === user?.companyId) as unknown as Company ?? null);
+        return base ? { ...base, ...data } : null;
+      });
+      return;
+    }
     const cid = user?.companyId;
     if (!cid) return;
     await fsUpdateCompany(cid, data);
@@ -516,6 +564,35 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (isDemoMode) { therapistStore.updateCommission(therapistId, commission); return; }
     await fsUpdateTherapist(therapistId, { commission });
     setTherapists((prev) => prev.map((t) => t.id === therapistId ? { ...t, commission } : t));
+  }, [isDemoMode]);
+
+  const mutateApproveAssociation = useCallback(async (therapistId: string, commission: number, unitId?: string | null) => {
+    if (isDemoMode) {
+      therapistStore.approveAssociation(therapistId, commission, unitId);
+      return;
+    }
+    // Real: update therapist record + association document
+    await fsUpdateTherapist(therapistId, { companyId: user!.companyId!, commission, unitId: unitId ?? undefined });
+    await setTherapistAssociation({
+      therapistId,
+      companyId: user!.companyId!,
+      unitId: unitId ?? null,
+      commission,
+      linkedAt: new Date().toISOString(),
+    });
+    setTherapists((prev) =>
+      prev.some((p) => p.id === therapistId)
+        ? prev.map((p) => p.id === therapistId ? { ...p, companyId: user!.companyId!, commission } : p)
+        : prev
+    );
+  }, [isDemoMode, user]);
+
+  const mutateRejectAssociation = useCallback(async (therapistId: string) => {
+    if (isDemoMode) {
+      therapistStore.rejectAssociation(therapistId);
+      return;
+    }
+    await setTherapistAssociation({ therapistId, companyId: null, unitId: null, commission: 0, linkedAt: null });
   }, [isDemoMode]);
 
   // Clients
@@ -686,7 +763,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [isDemoMode, user, myTherapist]);
 
   const mutateLinkToCompany = useCallback(async (inviteCode: string): Promise<Company | null> => {
-    if (isDemoMode) return null;
+    if (isDemoMode) {
+      const co = mockCompanies.find((c) => c.inviteCode === inviteCode.toUpperCase());
+      if (!co) return null;
+      const therapistId = user?.therapistId;
+      if (!therapistId) return null;
+      const t = mockTherapists.find((mt) => mt.id === therapistId);
+      therapistStore.requestLink(therapistId, co.id, co.name, {
+        name: t?.name ?? "Terapeuta",
+        avatar: t?.avatar ?? "",
+        specialty: t?.specialty ?? "",
+        username: t?.username ?? therapistId,
+      });
+      return co as unknown as Company;
+    }
     const co = await getCompanyByInviteCode(inviteCode);
     if (!co || !myTherapist) return null;
     await fsUpdateTherapist(myTherapist.id, { companyId: co.id });
@@ -700,16 +790,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setMyTherapist((prev) => prev ? { ...prev, companyId: co.id } : prev);
     setCompany(co);
     return co;
-  }, [isDemoMode, myTherapist]);
+  }, [isDemoMode, user, myTherapist]);
 
   const mutateUnlinkFromCompany = useCallback(async () => {
-    if (isDemoMode) return;
+    if (isDemoMode) {
+      const therapistId = user?.therapistId;
+      if (therapistId) therapistStore.rejectAssociation(therapistId);
+      return;
+    }
     if (!myTherapist) return;
     await fsUpdateTherapist(myTherapist.id, { companyId: undefined });
     await setTherapistAssociation({ therapistId: myTherapist.id, companyId: null, unitId: null, commission: 50, linkedAt: null });
     setMyTherapist((prev) => prev ? { ...prev, companyId: undefined } : prev);
     setCompany(null);
-  }, [isDemoMode, myTherapist]);
+  }, [isDemoMode, user, myTherapist]);
 
   // Client profile
   const mutateMyClientProfile = useCallback(async (data: Partial<Client>) => {
@@ -775,6 +869,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     mutateCompany,
     mutateAddUnit, mutateUpdateUnit, mutateDeleteUnit,
     mutateInviteTherapist, mutateDissociateTherapist, mutateUpdateTherapistCommission,
+    mutateApproveAssociation, mutateRejectAssociation,
     mutateAddClient, mutateUpdateClient,
     mutateAddTherapy, mutateUpdateTherapy, mutateDeleteTherapy,
     mutateAddRoom, mutateUpdateRoom, mutateDeleteRoom,

@@ -107,6 +107,8 @@ import {
   DevicePhoneMobileIcon,
   BriefcaseIcon,
   NoSymbolIcon,
+  RocketLaunchIcon,
+  GiftIcon,
 } from "@heroicons/react/24/outline";
 
 // ── Type compatible with how icons are used (e.g. in StatCard) ────────────────
@@ -286,6 +288,8 @@ export const Award        = TrophyIcon;
 export const Briefcase    = BriefcaseIcon;
 export const Languages    = LanguageIcon;
 export const KeyRound     = KeyIcon;
+export const RocketLaunch = RocketLaunchIcon;
+export const Gift         = GiftIcon;
 
 // Re-export heroicons names directly too (used by some ui components)
 export {
@@ -379,4 +383,6 @@ export {
   ChatBubbleLeftRightIcon,
   ChatBubbleOvalLeftEllipsisIcon,
   ShareIcon,
+  RocketLaunchIcon,
+  GiftIcon,
 };
