@@ -339,24 +339,40 @@ export default function TherapistDashboard() {
         </div>
         <div className="space-y-3">
           {todayAppointments.map((apt) => {
-            const client = clients.find((c) => c.id === apt.clientId);
+            const client  = clients.find((c) => c.id === apt.clientId);
             const therapy = therapies.find((t) => t.id === apt.therapyId);
             const completed = isCompleted(apt.id);
-            const earned = isAutonomous ? apt.price : apt.price * commissionPct / 100;
+
+            // Para atendimento encerrado → valor congelado do SessionRecord.
+            // Para atendimento em aberto  → prévia com a comissão atual.
+            const rec    = myRecords.find((r) => r.appointmentId === apt.id);
+            const earned = completed && rec
+              ? rec.therapistEarned
+              : (isAutonomous ? apt.price : apt.price * commissionPct / 100);
+
+            // Nomes: preferir campos inline (autônomo) antes de buscar pelo id
+            const clientName  = client?.name  ?? (apt as any).clientName  ?? "Cliente";
+            const therapyName = therapy?.name ?? (apt as any).therapyName ?? "Terapia";
+
             return (
               <div key={apt.id} className={`flex items-center gap-4 p-3 rounded-xl ${completed ? "bg-emerald-50" : "bg-violet-50"}`}>
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs shrink-0 ${completed ? "bg-emerald-500" : "bg-violet-600"}`} style={{ fontWeight: 700 }}>
                   {completed ? <CheckCircle className="w-5 h-5" /> : apt.time}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-900" style={{ fontWeight: 600 }}>{client?.name ?? "Cliente"}</p>
-                  <p className="text-xs text-gray-500">{therapy?.name ?? "Terapia"} · {apt.duration}min</p>
+                  <p className="text-sm text-gray-900" style={{ fontWeight: 600 }}>{clientName}</p>
+                  <p className="text-xs text-gray-500">{therapyName} · {apt.duration}min</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm text-emerald-600" style={{ fontWeight: 700 }}>
-                    +R$ {earned.toFixed(0)}
+                    +R$ {earned.toFixed(2)}
                   </p>
-                  {completed && <p className="text-xs text-emerald-500">✓ Encerrado</p>}
+                  {completed && rec && (
+                    <p className="text-xs text-emerald-500">✓ Encerrado · {rec.commissionPct}%</p>
+                  )}
+                  {!completed && (
+                    <p className="text-xs text-gray-400">prévia</p>
+                  )}
                 </div>
               </div>
             );

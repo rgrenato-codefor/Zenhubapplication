@@ -13,8 +13,9 @@ import { useCompanyUnit } from "../../context/CompanyContext";
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   confirmed: { label: "Confirmado", color: "text-emerald-600 bg-emerald-50", icon: CheckCircle },
-  pending: { label: "Pendente", color: "text-amber-600 bg-amber-50", icon: AlertCircle },
-  completed: { label: "Concluído", color: "text-blue-600 bg-blue-50", icon: CheckCircle },
+  pending:   { label: "Pendente",   color: "text-amber-600 bg-amber-50",     icon: AlertCircle },
+  completed: { label: "Concluído",  color: "text-blue-600 bg-blue-50",       icon: CheckCircle },
+  cancelled: { label: "Cancelado",  color: "text-red-500 bg-red-50",         icon: AlertCircle },
 };
 
 // Cores padrão para unidades no comparativo
@@ -426,7 +427,7 @@ export default function CompanyDashboard() {
             {todayAppointments.map((apt) => {
               const therapist = allTherapists.find((t) => t.id === apt.therapistId);
               const client = allClients.find((c) => c.id === apt.clientId);
-              const status = statusConfig[apt.status];
+              const status = statusConfig[apt.status] ?? statusConfig.confirmed;
               const aptUnit = companyUnits.find((u) => u.id === (apt as any).unitId);
               return (
                 <div key={apt.id} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
