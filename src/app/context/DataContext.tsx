@@ -663,12 +663,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const mutateMyCatalog = useCallback(async (catalog: CatalogItem[]) => {
     if (isDemoMode) { therapistStore.setCatalog(user?.therapistId ?? "", catalog as any); return; }
     if (!myTherapist) return;
-    // save each item
-    for (const item of catalog) {
-      await saveCatalogItem({ ...item, therapistId: myTherapist.id });
-    }
+    // Delete items that were removed from the catalog
+    const newIds = new Set(catalog.map((i) => i.id));
+    const toDelete = myCatalog.filter((i) => !newIds.has(i.id));
+    await Promise.all(toDelete.map((i) => deleteCatalogItem(i.id)));
+    // Upsert all remaining/new items
+    await Promise.all(
+      catalog.map((item) => saveCatalogItem({ ...item, therapistId: myTherapist.id }))
+    );
     setMyCatalog(catalog);
-  }, [isDemoMode, user, myTherapist]);
+  }, [isDemoMode, user, myTherapist, myCatalog]);
 
   const mutateMyAvailability = useCallback(async (schedule: Record<string, string[]>) => {
     if (isDemoMode) { therapistStore.setAvailability(user?.therapistId ?? "", schedule); return; }

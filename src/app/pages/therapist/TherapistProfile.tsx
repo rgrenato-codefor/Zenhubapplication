@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Star, Edit2, Save, CheckCircle, X,
   Link2, Copy, Check, Building2, LogOut,
@@ -27,12 +27,24 @@ export default function TherapistProfile() {
   const [codeError, setCodeError] = useState("");
   const [linking, setLinking] = useState(false);
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
     bio: therapist?.bio ?? "",
     specialty: therapist?.specialty ?? "",
     phone: therapist?.phone ?? "",
   });
+
+  // Sync form whenever therapist loads or changes
+  useEffect(() => {
+    if (therapist) {
+      setForm({
+        bio: therapist.bio ?? "",
+        specialty: therapist.specialty ?? "",
+        phone: therapist.phone ?? "",
+      });
+    }
+  }, [therapist]);
 
   const isLinked = !!therapist?.companyId && !!company;
 
@@ -41,8 +53,13 @@ export default function TherapistProfile() {
   );
 
   const handleSave = async () => {
-    await mutateMyTherapistProfile(form);
-    setEditing(false);
+    setSaving(true);
+    try {
+      await mutateMyTherapistProfile(form);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleLinkCompany = async () => {
@@ -114,7 +131,7 @@ export default function TherapistProfile() {
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 text-white text-sm hover:bg-violet-700 transition-colors"
                   style={{ fontWeight: 600 }}
                 >
-                  <Save className="w-4 h-4" />
+                  {saving ? "..." : <Save className="w-4 h-4" />}
                   <span className="hidden sm:inline">Salvar</span>
                 </button>
               </div>

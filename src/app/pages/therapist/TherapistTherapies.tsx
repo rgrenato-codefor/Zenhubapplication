@@ -22,16 +22,20 @@ const COLORS = ["#7C3AED","#0D9488","#D97706","#DC2626","#059669","#3B82F6","#EC
 
 export default function TherapistTherapies() {
   const { user } = useAuth();
-  const { myTherapist: therapist, company, therapies: companyTherapies, therapistStore: store } = usePageData();
+  const {
+    myTherapist: therapist, company, therapies: companyTherapies,
+    myCatalog, mutateMyCatalog,
+  } = usePageData();
 
   const [modal, setModal] = useState<"add" | "edit" | null>(null);
   const [editItem, setEditItem] = useState<CatalogItem | null>(null);
   const [form, setForm] = useState<typeof EMPTY_ITEM>({ ...EMPTY_ITEM });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   if (!therapist) return <div className="text-gray-500 text-center py-20">Carregando...</div>;
 
-  const catalog = store.getCatalog(therapist.id) as CatalogItem[];
+  const catalog = myCatalog as CatalogItem[];
   const isAutonomous = !company;
   const availableCompanyTherapies = companyTherapies.filter((t) => t.companyId === therapist.companyId);
 
@@ -40,9 +44,10 @@ export default function TherapistTherapies() {
     return match?.id;
   }).filter(Boolean));
 
-  const toggleCompanyTherapy = (ct: typeof companyTherapies[0]) => {
+  const toggleCompanyTherapy = async (ct: typeof companyTherapies[0]) => {
+    let next: CatalogItem[];
     if (selectedCompanyIds.has(ct.id)) {
-      store.setCatalog(therapist.id, catalog.filter((c) => c.name !== ct.name));
+      next = catalog.filter((c) => c.name !== ct.name);
     } else {
       const newItem: CatalogItem = {
         id: `tc_${ct.id}_${Date.now()}`,
@@ -53,8 +58,10 @@ export default function TherapistTherapies() {
         color: ct.color,
         active: true,
       };
-      store.addCatalogItem(therapist.id, newItem);
+      next = [...catalog, newItem];
     }
+    setSaving(true);
+    try { await mutateMyCatalog(next); } finally { setSaving(false); }
   };
 
   const openAdd = () => { setForm({ ...EMPTY_ITEM }); setEditItem(null); setModal("add"); };
@@ -64,18 +71,29 @@ export default function TherapistTherapies() {
     setModal("edit");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name.trim() || form.myPrice <= 0 || form.duration <= 0) return;
+    let next: CatalogItem[];
     if (modal === "add") {
-      store.addCatalogItem(therapist.id, { ...form, id: `tc_custom_${Date.now()}` });
+      next = [...catalog, { ...form, id: `tc_custom_${Date.now()}` }];
     } else if (editItem) {
-      store.updateCatalogItem(therapist.id, { ...editItem, ...form });
-    }
-    setModal(null);
+      next = catalog.map((c) => c.id === editItem.id ? { ...editItem, ...form } : c);
+    } else return;
+    setSaving(true);
+    try { await mutateMyCatalog(next); setModal(null); } finally { setSaving(false); }
   };
 
-  const handleDelete = (id: string) => { store.removeCatalogItem(therapist.id, id); setDeleteConfirm(null); };
-  const toggleActive = (item: CatalogItem) => store.updateCatalogItem(therapist.id, { ...item, active: !item.active });
+  const handleDelete = async (id: string) => {
+    setSaving(true);
+    try { await mutateMyCatalog(catalog.filter((c) => c.id !== id)); setDeleteConfirm(null); } finally { setSaving(false); }
+  };
+
+  const toggleActive = async (item: CatalogItem) => {
+    const next = catalog.map((c) => c.id === item.id ? { ...c, active: !c.active } : c);
+    setSaving(true);
+    try { await mutateMyCatalog(next); } finally { setSaving(false); }
+  };
+
   const earnings = (price: number) => isAutonomous ? price : price * (therapist.commission / 100);
 
   return (

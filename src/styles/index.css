@@ -1,3 +1,23 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+/*
+ * Prevent iOS Safari auto-zoom when focusing input/select/textarea.
+ * Safari zooms in when the font-size is below 16px; this forces a minimum
+ * of 16px only on touch devices, keeping desktop styling unchanged.
+ */
+@media (hover: none) and (pointer: coarse) {
+  input,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="search"],
+  input[type="url"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
