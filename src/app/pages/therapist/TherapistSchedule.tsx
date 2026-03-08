@@ -6,6 +6,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import type { SessionRecord, CatalogItem } from "../../context/DataContext";
+import { checkAppointmentConflicts } from "../../lib/appointmentConflicts";
 
 type ClosureModal = {
   apt: any;
@@ -347,6 +348,22 @@ export default function TherapistSchedule() {
     const err = validateBooking();
     if (err) { setBookingError(err); return; }
     if (!therapist) return;
+
+    // ── Conflict & availability check ─────────────────────────────────────
+    const { blocked, warn, message } = checkAppointmentConflicts({
+      existing: allAppointments,
+      availability: myAvailability,
+      therapistId: therapist.id,
+      date: bookingForm.date,
+      time: bookingForm.time,
+      duration: Number(bookingForm.duration),
+    });
+    if (blocked) { setBookingError(message); return; }
+    if (warn && bookingError !== message) {
+      setBookingError("⚠️ " + message + " Clique em Salvar novamente para agendar mesmo assim.");
+      return;
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     setBookingLoading(true);
     setBookingError("");

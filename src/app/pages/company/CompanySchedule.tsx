@@ -8,6 +8,7 @@ import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
 import type { SessionRecord } from "../../context/DataContext";
+import { checkAppointmentConflicts } from "../../lib/appointmentConflicts";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type ClosureModal = {
@@ -212,6 +213,25 @@ export default function CompanySchedule() {
     if (!newApt.therapistId) { setAptError("Selecione o terapeuta."); return; }
     if (!newApt.therapyId) { setAptError("Selecione a terapia."); return; }
     if (!price || isNaN(Number(price))) { setAptError("Informe o valor."); return; }
+
+    // ── Conflict & availability check ──────────────────────────────────────
+    const selectedT = therapists.find((t) => t.id === newApt.therapistId);
+    const { blocked, warn, message } = checkAppointmentConflicts({
+      existing: storeAppointments,
+      availability: (selectedT as any)?.schedule,
+      therapistId: newApt.therapistId,
+      date: newApt.date,
+      time: newApt.time,
+      duration: Number(duration),
+    });
+    if (blocked) { setAptError(message); return; }
+    if (warn && aptError !== message) {
+      // Show warning once — user must click again to confirm
+      setAptError("⚠️ " + message + " Clique em Confirmar novamente para agendar mesmo assim.");
+      return;
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     setAptError("");
     setSavingApt(true);
     try {
