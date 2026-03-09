@@ -65,6 +65,14 @@ export interface Unit {
   name: string;
   fullName: string;
   address: string;
+  // Structured address fields (filled via CEP autocomplete)
+  cep?: string;
+  street?: string;
+  number?: string;
+  complement?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
   phone: string;
   email: string;
   status: "active" | "inactive";

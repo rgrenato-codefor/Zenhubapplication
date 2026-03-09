@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Save, Building2, Bell, Users, Link, Copy, CheckCheck,
   MapPin, Plus, Edit2, Trash2, X, Phone, Mail, Star,
   CheckCircle, AlertCircle, ChevronRight, ToggleLeft, ToggleRight,
-  Download, QrCode, Smartphone, Share2, Camera, Image,
+  Download, QrCode, Smartphone, Share2, Camera, Image, Search,
 } from "../../components/shared/icons";
+import { useCepLookup } from "../../hooks/useCepLookup";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
@@ -15,6 +16,13 @@ import type { MediaItem } from "../../../lib/imagekit";
 
 type UnitStatus = "active" | "inactive";
 type ActiveTab = "company" | "units" | "gallery" | "notifications" | "invites";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function maskCEP(v: string) {
+  const d = v.replace(/\D/g, "").slice(0, 8);
+  return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
+}
 
 // ── Unit Form Modal ──────────────────────────────────────────────────────────
 
@@ -27,204 +35,433 @@ type UnitModalProps = {
   onClose: () => void;
 };
 
-const emptyForm = {
-  name: "",
-  address: "",
-  phone: "",
-  email: "",
-  status: "active" as UnitStatus,
-  isMain: false,
-};
+const STEPS = [
+  { number: 1, label: "Identificação" },
+  { number: 2, label: "Endereço"      },
+  { number: 3, label: "Contato"       },
+] as const;
 
 function UnitModal({ mode, initial, companyId, primaryColor, onSave, onClose }: UnitModalProps) {
+  const [step, setStep] = useState(1);
   const [form, setForm] = useState({
-    name: initial?.name ?? "",
-    address: initial?.address ?? "",
-    phone: initial?.phone ?? "",
-    email: initial?.email ?? "",
-    status: initial?.status ?? ("active" as UnitStatus),
-    isMain: initial?.isMain ?? false,
+    name:         initial?.name         ?? "",
+    cep:          initial?.cep          ?? "",
+    street:       initial?.street       ?? "",
+    number:       initial?.number       ?? "",
+    complement:   initial?.complement   ?? "",
+    neighborhood: initial?.neighborhood ?? "",
+    city:         initial?.city         ?? "",
+    state:        initial?.state        ?? "",
+    phone:        initial?.phone        ?? "",
+    email:        initial?.email        ?? "",
+    status:       initial?.status       ?? ("active" as UnitStatus),
+    isMain:       initial?.isMain       ?? false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm((p) => ({ ...p, [k]: v }));
 
-  const validate = () => {
+  const clearErr = (...keys: string[]) =>
+    setErrors((p) => { const n = { ...p }; keys.forEach((k) => delete n[k]); return n; });
+
+  // ── CEP autocomplete ────────────────────────────────────────────────────────
+  const onCepFound = useCallback((addr: { logradouro: string; bairro: string; localidade: string; uf: string }) => {
+    setForm((p) => ({
+      ...p,
+      street:       addr.logradouro || p.street,
+      neighborhood: addr.bairro     || p.neighborhood,
+      city:         addr.localidade || p.city,
+      state:        addr.uf         || p.state,
+    }));
+    setErrors((e) => { const n = { ...e }; ["street","city","state"].forEach((k) => delete n[k]); return n; });
+  }, []);
+
+  const { cepStatus, lookupCep } = useCepLookup(onCepFound);
+
+  // ── Per-step validation ─────────────────────────────────────────────────────
+  const validateStep = (s: number) => {
     const e: Record<string, string> = {};
-    if (!form.name.trim()) e.name = "Informe o nome da unidade.";
-    if (!form.address.trim()) e.address = "Informe o endereço.";
+    if (s === 1 && !form.name.trim())   e.name   = "Informe o nome da unidade.";
+    if (s === 2) {
+      if (!form.street.trim()) e.street = "Informe o logradouro.";
+      if (!form.number.trim()) e.number = "Informe o número.";
+      if (!form.city.trim())   e.city   = "Informe a cidade.";
+      if (!form.state.trim())  e.state  = "Informe o estado (UF).";
+    }
     return e;
   };
 
-  const handleSave = () => {
-    const e = validate();
+  const handleNext = () => {
+    const e = validateStep(step);
     if (Object.keys(e).length) { setErrors(e); return; }
+    setErrors({});
+    setStep((s) => s + 1);
+  };
+
+  const handleBack = () => { setErrors({}); setStep((s) => s - 1); };
+
+  const handleSave = () => {
+    const e = validateStep(step);
+    if (Object.keys(e).length) { setErrors(e); return; }
+
+    const addressParts = [
+      form.street, form.number, form.complement,
+      form.neighborhood, form.city, form.state,
+    ].filter(Boolean);
+    const address = addressParts.join(", ") + (form.cep ? ` — CEP ${form.cep}` : "");
+
     const unit: Unit = {
-      id: initial?.id ?? `un_${Date.now()}`,
-      companyId: companyId,
-      fullName: `Unidade ${form.name}`,
+      id:              initial?.id              ?? `un_${Date.now()}`,
+      companyId,
+      fullName:        `Unidade ${form.name}`,
       therapistsCount: initial?.therapistsCount ?? 0,
-      roomsCount: initial?.roomsCount ?? 0,
-      ...form,
+      roomsCount:      initial?.roomsCount      ?? 0,
+      address,
+      cep:          form.cep,
+      street:       form.street,
+      number:       form.number,
+      complement:   form.complement,
+      neighborhood: form.neighborhood,
+      city:         form.city,
+      state:        form.state,
+      name:         form.name,
+      phone:        form.phone,
+      email:        form.email,
+      status:       form.status,
+      isMain:       form.isMain,
     };
     onSave(unit);
   };
 
+  const inputCls = (field: string) =>
+    `w-full px-3.5 py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all ${
+      errors[field]
+        ? "border-red-300 focus:ring-red-400/30"
+        : "border-gray-200 focus:ring-violet-400/30"
+    }`;
+
+  const stepMeta = [
+    { title: "Como vamos chamar esta unidade?",  sub: "Use um nome que identifique facilmente a localização ou filial." },
+    { title: "Onde fica esta unidade?",           sub: "Digite o CEP para preencher o endereço automaticamente." },
+    { title: "Como entrar em contato?",           sub: "Telefone e e-mail são opcionais, mas ajudam seus clientes." },
+  ][step - 1];
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col">
+
+        {/* ── Header ─────────────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-6 pt-6 pb-5 shrink-0">
           <div className="flex items-center gap-3">
             <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center"
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
               style={{ background: `${primaryColor}15` }}
             >
-              <MapPin className="w-4 h-4" style={{ color: primaryColor }} />
+              <MapPin className="w-5 h-5" style={{ color: primaryColor }} />
             </div>
-            <p className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>
-              {mode === "add" ? "Nova unidade" : "Editar unidade"}
-            </p>
+            <div>
+              <p className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>
+                {mode === "add" ? "Nova unidade" : "Editar unidade"}
+              </p>
+              <p className="text-gray-400 text-xs mt-0.5">Passo {step} de {STEPS.length}</p>
+            </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="px-6 py-5 space-y-4">
-          {/* Nome */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>
-              Nome da unidade *
-            </label>
-            <input
-              className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all ${
-                errors.name
-                  ? "border-red-300 focus:ring-red-400/30"
-                  : "border-gray-200 focus:ring-violet-400/30"
-              }`}
-              placeholder="Ex: Pinheiros, Centro, Jardins, Unidade 2..."
-              value={form.name}
-              onChange={(e) => { set("name", e.target.value); setErrors((p) => ({ ...p, name: "" })); }}
-            />
-            {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
-          </div>
-
-          {/* Endereço */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>
-              Endereço *
-            </label>
-            <input
-              className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all ${
-                errors.address
-                  ? "border-red-300 focus:ring-red-400/30"
-                  : "border-gray-200 focus:ring-violet-400/30"
-              }`}
-              placeholder="Rua, número, bairro, cidade, estado"
-              value={form.address}
-              onChange={(e) => { set("address", e.target.value); setErrors((p) => ({ ...p, address: "" })); }}
-            />
-            {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address}</p>}
-          </div>
-
-          {/* Phone + Email */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>
-                Telefone
-              </label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                <input
-                  className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/30"
-                  placeholder="(11) 99999-0000"
-                  value={form.phone}
-                  onChange={(e) => set("phone", e.target.value)}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 600 }}>
-                E-mail
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                <input
-                  className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/30"
-                  placeholder="unidade@empresa.com"
-                  value={form.email}
-                  onChange={(e) => set("email", e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-2" style={{ fontWeight: 600 }}>
-              Status da unidade
-            </label>
-            <div className="flex gap-2">
-              {(["active", "inactive"] as UnitStatus[]).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => set("status", s)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-xs transition-all"
-                  style={
-                    form.status === s
-                      ? s === "active"
-                        ? { background: "#ECFDF5", borderColor: "#059669", color: "#059669", fontWeight: 700 }
-                        : { background: "#F3F4F6", borderColor: "#6B7280", color: "#6B7280", fontWeight: 700 }
-                      : { borderColor: "#E5E7EB", color: "#9CA3AF" }
-                  }
-                >
-                  {s === "active" ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                  {s === "active" ? "Ativa" : "Inativa"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Marcar como principal */}
-          <div
-            className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50 cursor-pointer"
-            onClick={() => set("isMain", !form.isMain)}
-          >
-            <div className="flex items-center gap-2.5">
-              <Star className="w-4 h-4 text-amber-400" />
-              <div>
-                <p className="text-sm text-gray-700" style={{ fontWeight: 600 }}>
-                  Unidade principal
-                </p>
-                <p className="text-xs text-gray-400">
-                  Aparece em destaque e é selecionada por padrão
-                </p>
-              </div>
-            </div>
-            {form.isMain
-              ? <ToggleRight className="w-6 h-6" style={{ color: primaryColor }} />
-              : <ToggleLeft className="w-6 h-6 text-gray-300" />}
+        {/* ── Step indicator ──────────────────────────────────────────────────── */}
+        <div className="px-6 pb-6 shrink-0">
+          <div className="flex items-center">
+            {STEPS.map((s, idx) => {
+              const done    = step > s.number;
+              const current = step === s.number;
+              return (
+                <div key={s.number} className="flex items-center flex-1 last:flex-none">
+                  <div className="flex flex-col items-center gap-2">
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-xs transition-all"
+                      style={
+                        done
+                          ? { background: primaryColor, color: "#fff", fontWeight: 700 }
+                          : current
+                          ? { background: `${primaryColor}18`, border: `2px solid ${primaryColor}`, color: primaryColor, fontWeight: 700 }
+                          : { background: "#F3F4F6", color: "#9CA3AF", fontWeight: 600 }
+                      }
+                    >
+                      {done ? <CheckCircle className="w-4 h-4" /> : s.number}
+                    </div>
+                    <span
+                      className="text-xs whitespace-nowrap"
+                      style={{
+                        color: current ? primaryColor : done ? "#6B7280" : "#9CA3AF",
+                        fontWeight: current ? 600 : 500,
+                      }}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
+                  {idx < STEPS.length - 1 && (
+                    <div
+                      className="flex-1 h-0.5 mx-3 mb-6 rounded-full transition-all"
+                      style={{ background: step > s.number ? primaryColor : "#E5E7EB" }}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+        {/* ── Step title ──────────────────────────────────────────────────────── */}
+        <div className="px-6 pb-6 shrink-0">
+          <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "1.0625rem" }}>
+            {stepMeta.title}
+          </p>
+          <p className="text-gray-400 text-sm mt-1.5">{stepMeta.sub}</p>
+        </div>
+
+        {/* ── Body ────────────────────────────────────────────────────────────── */}
+        <div className="px-6 pb-4 shrink-0">
+
+          {/* Step 1 — Nome */}
+          {step === 1 && (
+            <div className="space-y-1.5">
+              <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>
+                Nome da unidade *
+              </label>
+              <input
+                autoFocus
+                className={inputCls("name")}
+                placeholder="Ex: Pinheiros, Centro, Jardins, Unidade 2..."
+                value={form.name}
+                onChange={(e) => { set("name", e.target.value); clearErr("name"); }}
+                onKeyDown={(e) => { if (e.key === "Enter") handleNext(); }}
+              />
+              {errors.name && <p className="text-red-500 text-xs pt-1">{errors.name}</p>}
+            </div>
+          )}
+
+          {/* Step 2 — Endereço */}
+          {step === 2 && (
+            <div className="space-y-4">
+
+              {/* CEP */}
+              <div className="space-y-1.5">
+                <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>CEP</label>
+                <div className="relative">
+                  <input
+                    autoFocus
+                    className={`${inputCls("cep")} pr-11`}
+                    placeholder="00000-000"
+                    value={form.cep}
+                    maxLength={9}
+                    onChange={(e) => {
+                      const masked = maskCEP(e.target.value);
+                      set("cep", masked);
+                      clearErr("cep");
+                      lookupCep(masked);
+                    }}
+                  />
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                    {cepStatus === "loading"   && <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />}
+                    {cepStatus === "found"     && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                    {cepStatus === "not_found" && <AlertCircle className="w-4 h-4 text-amber-400" />}
+                    {(cepStatus === "idle" || cepStatus === "error") && <Search className="w-4 h-4 text-gray-300" />}
+                  </div>
+                </div>
+                {cepStatus === "not_found" && (
+                  <p className="text-amber-500 text-xs pt-0.5">CEP não encontrado. Preencha o endereço manualmente.</p>
+                )}
+                {cepStatus === "found" && (
+                  <p className="text-emerald-600 text-xs pt-0.5">Endereço preenchido automaticamente. Confira os campos abaixo.</p>
+                )}
+              </div>
+
+              {/* Logradouro + Número */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 space-y-1.5">
+                  <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>Logradouro *</label>
+                  <input
+                    className={inputCls("street")}
+                    placeholder="Rua, Av., Alameda..."
+                    value={form.street}
+                    onChange={(e) => { set("street", e.target.value); clearErr("street"); }}
+                  />
+                  {errors.street && <p className="text-red-500 text-xs pt-0.5">{errors.street}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>Número *</label>
+                  <input
+                    className={inputCls("number")}
+                    placeholder="123"
+                    value={form.number}
+                    onChange={(e) => { set("number", e.target.value); clearErr("number"); }}
+                  />
+                  {errors.number && <p className="text-red-500 text-xs pt-0.5">{errors.number}</p>}
+                </div>
+              </div>
+
+              {/* Complemento */}
+              <div className="space-y-1.5">
+                <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>
+                  Complemento{" "}
+                  <span className="text-gray-300" style={{ fontWeight: 400 }}>(opcional)</span>
+                </label>
+                <input
+                  className={inputCls("complement")}
+                  placeholder="Sala 4, 2º andar, Bloco B..."
+                  value={form.complement}
+                  onChange={(e) => set("complement", e.target.value)}
+                />
+              </div>
+
+              {/* Bairro + Cidade + UF */}
+              <div className="grid grid-cols-5 gap-3">
+                <div className="col-span-2 space-y-1.5">
+                  <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>Bairro</label>
+                  <input
+                    className={inputCls("neighborhood")}
+                    placeholder="Bairro"
+                    value={form.neighborhood}
+                    onChange={(e) => set("neighborhood", e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>Cidade *</label>
+                  <input
+                    className={inputCls("city")}
+                    placeholder="São Paulo"
+                    value={form.city}
+                    onChange={(e) => { set("city", e.target.value); clearErr("city"); }}
+                  />
+                  {errors.city && <p className="text-red-500 text-xs pt-0.5">{errors.city}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>UF *</label>
+                  <input
+                    className={inputCls("state")}
+                    placeholder="SP"
+                    value={form.state}
+                    maxLength={2}
+                    onChange={(e) => { set("state", e.target.value.toUpperCase()); clearErr("state"); }}
+                  />
+                  {errors.state && <p className="text-red-500 text-xs pt-0.5">{errors.state}</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3 — Contato + Status */}
+          {step === 3 && (
+            <div className="space-y-5">
+
+              {/* Telefone */}
+              <div className="space-y-1.5">
+                <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>Telefone</label>
+                <div className="relative">
+                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    autoFocus
+                    className="w-full pl-10 pr-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/30"
+                    placeholder="(11) 99999-0000"
+                    value={form.phone}
+                    onChange={(e) => set("phone", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* E-mail */}
+              <div className="space-y-1.5">
+                <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>E-mail</label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    className="w-full pl-10 pr-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/30"
+                    placeholder="unidade@empresa.com"
+                    value={form.email}
+                    onChange={(e) => set("email", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="space-y-2">
+                <label className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>
+                  Status da unidade
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {(["active", "inactive"] as UnitStatus[]).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => set("status", s)}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl border text-sm transition-all"
+                      style={
+                        form.status === s
+                          ? s === "active"
+                            ? { background: "#ECFDF5", borderColor: "#059669", color: "#059669", fontWeight: 700 }
+                            : { background: "#F3F4F6", borderColor: "#6B7280", color: "#6B7280", fontWeight: 700 }
+                          : { borderColor: "#E5E7EB", color: "#9CA3AF" }
+                      }
+                    >
+                      {s === "active"
+                        ? <CheckCircle className="w-4 h-4 shrink-0" />
+                        : <AlertCircle className="w-4 h-4 shrink-0" />}
+                      {s === "active" ? "Ativa" : "Inativa"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Unidade principal */}
+              <div
+                className="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-gray-50/80 cursor-pointer hover:bg-gray-100/60 transition-colors"
+                onClick={() => set("isMain", !form.isMain)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                    <Star className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-700" style={{ fontWeight: 600 }}>Unidade principal</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Aparece em destaque e selecionada por padrão</p>
+                  </div>
+                </div>
+                {form.isMain
+                  ? <ToggleRight className="w-7 h-7 shrink-0" style={{ color: primaryColor }} />
+                  : <ToggleLeft className="w-7 h-7 shrink-0 text-gray-300" />}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer ─────────────────────────────────────────────────────────── */}
+        <div className="flex gap-3 px-6 py-5 mt-2 border-t border-gray-100 shrink-0">
           <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 transition-colors"
+            onClick={step === 1 ? onClose : handleBack}
+            className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 transition-colors"
           >
-            Cancelar
+            {step === 1 ? "Cancelar" : "← Voltar"}
           </button>
-          <button
-            onClick={handleSave}
-            className="flex-1 py-2.5 rounded-xl text-white text-sm transition-opacity hover:opacity-90"
-            style={{ background: primaryColor, fontWeight: 700 }}
-          >
-            {mode === "add" ? "Criar unidade" : "Salvar alterações"}
-          </button>
+          {step < 3 ? (
+            <button
+              onClick={handleNext}
+              className="flex-1 py-3 rounded-xl text-white text-sm transition-opacity hover:opacity-90"
+              style={{ background: primaryColor, fontWeight: 700 }}
+            >
+              Próximo →
+            </button>
+          ) : (
+            <button
+              onClick={handleSave}
+              className="flex-1 py-3 rounded-xl text-white text-sm transition-opacity hover:opacity-90"
+              style={{ background: primaryColor, fontWeight: 700 }}
+            >
+              {mode === "add" ? "Criar unidade" : "Salvar alterações"}
+            </button>
+          )}
         </div>
       </div>
     </div>

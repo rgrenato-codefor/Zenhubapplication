@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import {
-  Sparkles, User, Mail, Phone, Lock, Eye, EyeOff,
+  User, Mail, Phone, Lock, Eye, EyeOff,
   ArrowRight, CheckCircle, Loader2, AtSign, KeyRound,
   Briefcase, ChevronRight, ChevronLeft, Search, MapPin, X, AlertCircle,
 } from "../../components/shared/icons";
@@ -280,11 +280,8 @@ export default function TherapistRegister() {
       {/* Right panel */}
       <div className="flex-1 flex flex-col overflow-y-auto">
         {/* Mobile header */}
-        <div className="lg:hidden flex items-center gap-2 px-6 pt-6 pb-2">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
-          <span className="text-white" style={{ fontWeight: 700 }}>ZEN HUB</span>
+        <div className="lg:hidden flex items-center px-6 pt-6 pb-2">
+          <ZenHubLogo variant="full" textColor="#ffffff" height={32} />
         </div>
 
         <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
@@ -456,12 +453,13 @@ export default function TherapistRegister() {
                 <Field label="Especialidade principal *" error={errors.specialty}>
                   <select
                     className={inputCls(!!errors.specialty)}
+                    style={{ colorScheme: "dark" }}
                     value={form.specialty}
                     onChange={(e) => set("specialty", e.target.value)}
                   >
-                    <option value="">Selecione...</option>
+                    <option value="" style={{ background: "#1f2937", color: "#9ca3af" }}>Selecione...</option>
                     {SPECIALTIES.map((s) => (
-                      <option key={s} value={s}>{s}</option>
+                      <option key={s} value={s} style={{ background: "#1f2937", color: "#ffffff" }}>{s}</option>
                     ))}
                   </select>
                 </Field>
@@ -756,7 +754,7 @@ export default function TherapistRegister() {
   );
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────���─────────────────
 
 const inputCls = (hasError: boolean) =>
   `w-full px-4 py-3 rounded-xl border text-sm bg-white/5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all ${

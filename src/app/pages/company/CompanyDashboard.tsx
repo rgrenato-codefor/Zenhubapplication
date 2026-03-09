@@ -334,14 +334,15 @@ export default function CompanyDashboard() {
                 }))}
                 barSize={14}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                <XAxis dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
-                <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                <CartesianGrid key="grid" strokeDasharray="3 3" stroke="#F3F4F6" />
+                <XAxis key="x" dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
+                <YAxis key="y" stroke="#9CA3AF" tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
+                  key="tooltip"
                   contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }}
                   formatter={(v: number, name: string) => [`R$ ${v.toLocaleString("pt-BR")}`, name]}
                 />
-                <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
+                <Legend key="legend" wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
                 {companyUnits.map((unit, idx) => (
                   <Bar
                     key={unit.id}
@@ -380,14 +381,15 @@ export default function CompanyDashboard() {
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={activeRevenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <YAxis stroke="#9CA3AF" tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+              <CartesianGrid key="grid" strokeDasharray="3 3" stroke="#F3F4F6" />
+              <XAxis key="x" dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
+              <YAxis key="y" stroke="#9CA3AF" tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
               <Tooltip
+                key="tooltip"
                 contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }}
                 formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, "Receita"]}
               />
-              <Area type="monotone" dataKey="revenue" stroke={primaryColor} strokeWidth={2} fill={primaryColor} fillOpacity={0.12} isAnimationActive={false} />
+              <Area key="area" type="monotone" dataKey="revenue" stroke={primaryColor} strokeWidth={2} fill={primaryColor} fillOpacity={0.12} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -403,11 +405,11 @@ export default function CompanyDashboard() {
           <p className="text-gray-400 text-xs mb-4">Sessões por dia</p>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={activeWeeklyData} barSize={20}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis dataKey="day" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <YAxis stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }} />
-              <Bar dataKey="sessions" fill={primaryColor} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <CartesianGrid key="grid" strokeDasharray="3 3" stroke="#F3F4F6" />
+              <XAxis key="x" dataKey="day" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
+              <YAxis key="y" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
+              <Tooltip key="tooltip" contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }} />
+              <Bar key="bar" dataKey="sessions" fill={primaryColor} radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>
