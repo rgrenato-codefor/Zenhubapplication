@@ -8,7 +8,7 @@ import { usePageData } from "../../hooks/usePageData";
 
 const navItems = [
   { path: "/cliente", icon: Home, label: "Início", end: true },
-  { path: "/cliente/terapeutas", icon: Users, label: "Terapeutas" },
+  { path: "/cliente/terapeutas", icon: Users, label: "Profissionais" },
   { path: "/cliente/reservas", icon: CalendarDays, label: "Minhas Reservas" },
   { path: "/cliente/perfil", icon: UserCircle, label: "Meu Perfil" },
 ];

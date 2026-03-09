@@ -399,7 +399,7 @@ export default function TherapistPublicProfile() {
         <div className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-gray-400 mb-0.5" style={{ fontWeight: 500 }}>Link do perfil</p>
-            <p className="text-sm text-gray-600 truncate">zenhub.com.br/{therapist.username}</p>
+            <p className="text-sm text-gray-600 truncate">zenhub.online/{therapist.username}</p>
           </div>
           <button
             onClick={handleCopyLink}

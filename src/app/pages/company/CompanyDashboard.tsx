@@ -191,7 +191,7 @@ export default function CompanyDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           {
-            title: "Terapeutas",
+            title: "Profissionais",
             value: companyTherapists.length,
             icon: Star,
             color: primaryColor,
@@ -277,7 +277,7 @@ export default function CompanyDashboard() {
                 {/* Stats row */}
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   {[
-                    { label: "Terapeutas", value: therapistsCount },
+                    { label: "Profissionais", value: therapistsCount },
                     { label: "Sessões", value: sessionsCount },
                     { label: "Receita", value: `R$ ${(revenue / 1000).toFixed(1)}k` },
                   ].map((s) => (
@@ -463,7 +463,7 @@ export default function CompanyDashboard() {
         {/* Top Therapists */}
         <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-900">Terapeutas Destaque</h3>
+            <h3 className="text-gray-900">Profissionais Destaque</h3>
             <button className="text-xs flex items-center gap-1" style={{ color: primaryColor }}>
               Ver todos <ArrowUpRight className="w-3 h-3" />
             </button>
@@ -503,7 +503,7 @@ export default function CompanyDashboard() {
               );
             })}
             {companyTherapists.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-4">Nenhum terapeuta nesta unidade</p>
+              <p className="text-sm text-gray-400 text-center py-4">Nenhum profissional nesta unidade</p>
             )}
           </div>
         </div>

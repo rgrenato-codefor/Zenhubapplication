@@ -57,7 +57,7 @@ export default function TherapistLayout() {
           {sidebarOpen ? (
             <div className="flex flex-col justify-center">
               <ZenHubLogo variant="full" textColor="#111827" height={34} />
-              <p className="text-xs text-violet-500 mt-0.5">Portal do Terapeuta</p>
+              <p className="text-xs text-violet-500 mt-0.5">Portal do Profissional</p>
             </div>
           ) : (
             <ZenHubLogo variant="icon" height={34} />

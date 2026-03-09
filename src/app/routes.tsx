@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router";
 import Login from "./pages/Login";
 import RootLayout from "./components/shared/RootLayout";
 import { ProtectedRoute } from "./components/shared/ProtectedRoute";
+import RegisterSelect from "./pages/register/RegisterSelect";
 import CompanyRegister from "./pages/register/CompanyRegister";
 import ClientRegister from "./pages/register/ClientRegister";
 import TherapistRegister from "./pages/register/TherapistRegister";
@@ -55,7 +56,8 @@ export const router = createBrowserRouter([
     children: [
       // Public
       { path: "/", Component: Login },
-      { path: "/cadastro", Component: CompanyRegister },
+      { path: "/cadastro", Component: RegisterSelect },
+      { path: "/cadastro/empresa", Component: CompanyRegister },
       { path: "/cadastro/cliente", Component: ClientRegister },
       { path: "/cadastro/cliente/:slug", Component: ClientRegister },
       { path: "/cadastro/terapeuta", Component: TherapistRegister },

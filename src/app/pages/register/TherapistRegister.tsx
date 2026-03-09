@@ -202,7 +202,7 @@ export default function TherapistRegister() {
           <p className="text-gray-400 mb-1">
             Seu link público:{" "}
             <span className="text-teal-400" style={{ fontWeight: 600 }}>
-              zenhub.com.br/@{form.username}
+              zenhub.online/@{form.username}
             </span>
           </p>
           {linkedCompany && (
@@ -444,7 +444,7 @@ export default function TherapistRegister() {
                   </div>
                   {form.username.length >= 3 && !errors.username && (
                     <p className="text-teal-400 text-xs mt-1">
-                      zenhub.com.br/@{form.username}
+                      zenhub.online/@{form.username}
                     </p>
                   )}
                 </Field>
@@ -742,7 +742,7 @@ export default function TherapistRegister() {
               </p>
               <p className="text-gray-600 text-xs">
                 É uma empresa?{" "}
-                <Link to="/cadastro" className="text-violet-400 hover:text-violet-300" style={{ fontWeight: 600 }}>
+                <Link to="/cadastro/empresa" className="text-violet-400 hover:text-violet-300" style={{ fontWeight: 600 }}>
                   Cadastrar empresa
                 </Link>
               </p>
@@ -754,7 +754,7 @@ export default function TherapistRegister() {
   );
 }
 
-// ── Helpers ────────────────────────────────────────────────���─────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 const inputCls = (hasError: boolean) =>
   `w-full px-4 py-3 rounded-xl border text-sm bg-white/5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all ${

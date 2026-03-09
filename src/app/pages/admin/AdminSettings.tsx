@@ -22,8 +22,8 @@ import { auth } from "../../../lib/firebase";
 
 const DEFAULTS: Omit<PlatformSettings, "updatedAt"> = {
   platformName: "ZEN HUB",
-  domain: "zenhub.com.br",
-  supportEmail: "suporte@zenhub.com.br",
+  domain: "zenhub.online",
+  supportEmail: "suporte@zenhub.online",
   timezone: "America/Sao_Paulo",
   language: "pt-BR",
   notifications: {
@@ -377,8 +377,8 @@ export default function AdminSettings() {
                 { key: "newCompany",    label: "Novas empresas cadastradas",    desc: "Alerta quando uma nova empresa se registrar na plataforma" },
                 { key: "weeklyReport",  label: "Relatório semanal",              desc: "Resumo consolidado enviado toda segunda-feira" },
                 { key: "paymentAlerts", label: "Alertas de pagamento",           desc: "Notificações sobre assinaturas vencidas ou falhas de cobrança" },
-                { key: "newUsers",      label: "Novos usuários",                 desc: "Alerta de novos cadastros de terapeutas e clientes" },
-                { key: "planUpgrades",  label: "Upgrades de plano",              desc: "Quando uma empresa ou terapeuta muda de plano" },
+                { key: "newUsers",      label: "Novos usuários",                 desc: "Alerta de novos cadastros de profissionais e clientes" },
+                { key: "planUpgrades",  label: "Upgrades de plano",              desc: "Quando uma empresa ou profissional muda de plano" },
               ] as { key: keyof typeof notifs; label: string; desc: string }[]).map((item) => (
                 <div key={item.key} className="flex items-center justify-between py-3.5 border-b border-gray-700/60 last:border-0 gap-4">
                   <div className="flex-1 min-w-0">
@@ -461,7 +461,7 @@ export default function AdminSettings() {
           {/* Planos — atalho */}
           <Section icon={CreditCard} iconColor="#F59E0B" title="Planos" subtitle="Gerenciamento de planos e preços">
             <p className="text-xs text-gray-400 mb-4">
-              Configure planos de empresa e terapeuta, preços, módulos liberados e limites de uso na página dedicada.
+              Configure planos de empresa e profissional, preços, módulos liberados e limites de uso na página dedicada.
             </p>
             <button
               onClick={() => navigate("/admin/planos")}

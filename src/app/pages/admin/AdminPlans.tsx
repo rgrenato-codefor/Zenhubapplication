@@ -700,7 +700,7 @@ function ResetConfirmModal({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = "empresas" | "terapeutas";
+type Tab = "empresas" | "profissionais";
 
 export default function AdminPlans() {
   const [tab, setTab] = useState<Tab>("empresas");
@@ -942,8 +942,8 @@ export default function AdminPlans() {
         <>
           <div className="flex gap-1 bg-gray-800/60 p-1 rounded-xl border border-gray-700 w-fit">
             {([
-              { id: "empresas",   label: "Planos de Empresa",   icon: Building2, count: companyPlans.length   },
-              { id: "terapeutas", label: "Planos de Terapeuta",  icon: Star,      count: therapistPlans.length },
+              { id: "empresas",      label: "Planos de Empresa",      icon: Building2, count: companyPlans.length   },
+              { id: "profissionais", label: "Planos de Profissional",  icon: Star,      count: therapistPlans.length },
             ] as const).map((t) => (
               <button
                 key={t.id}
@@ -991,7 +991,7 @@ export default function AdminPlans() {
           )}
 
           {/* Therapist Plans */}
-          {tab === "terapeutas" && (
+          {tab === "profissionais" && (
             <div className="space-y-4">
               <div className="bg-amber-900/20 border border-amber-700/40 rounded-xl p-4 flex items-start gap-3">
                 <Zap className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />

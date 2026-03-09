@@ -546,7 +546,7 @@ export default function CompanySettings() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const inviteLink = `https://zenhub.com.br/cadastro?invite=${companyData?.inviteCode ?? ""}`;
+  const inviteLink = `https://zenhub.online/cadastro?invite=${companyData?.inviteCode ?? ""}`;
 
   const copyInviteLink = () => {
     navigator.clipboard.writeText(inviteLink);

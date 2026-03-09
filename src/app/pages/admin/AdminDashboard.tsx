@@ -61,7 +61,7 @@ function TabGeral({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Empresas Cadastradas", value: stats.totalCompanies, sub: `${stats.activeCompanies} ativas`, icon: Building2, color: "#7C3AED" },
-          { label: "Terapeutas",           value: stats.totalTherapists, sub: "na plataforma",              icon: Star,     color: "#0D9488" },
+          { label: "Profissionais",        value: stats.totalTherapists, sub: "na plataforma",              icon: Star,     color: "#0D9488" },
           { label: "Clientes",             value: stats.totalClients,    sub: "cadastrados",                icon: Users,    color: "#3B82F6" },
           { label: "Taxa de Atividade",    value: stats.totalCompanies > 0 ? `${Math.round((stats.activeCompanies / stats.totalCompanies) * 100)}%` : "—", sub: "empresas ativas", icon: Activity, color: "#10B981" },
         ].map((k) => (
@@ -80,22 +80,22 @@ function TabGeral({
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Terapeutas por empresa */}
+        {/* Profissionais por empresa */}
         <div className="lg:col-span-2 bg-gray-800 rounded-xl border border-gray-700 p-6">
-          <h3 className="text-white mb-1">Terapeutas por Empresa</h3>
-          <p className="text-gray-400 text-xs mb-4">Top 10 empresas com mais terapeutas</p>
+          <h3 className="text-white mb-1">Profissionais por Empresa</h3>
+          <p className="text-gray-400 text-xs mb-4">Top 10 empresas com mais profissionais</p>
           {topCompanies.length === 0 ? (
             <div className="flex items-center justify-center h-[200px] text-gray-500 text-sm">
               {loading ? "Carregando..." : "Sem dados"}
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={topCompanies.map((c) => ({ name: c.name.split(" ")[0], terapeutas: c.therapistsCount || 0, clientes: c.clientsCount || 0 }))} barSize={16}>
+              <BarChart data={topCompanies.map((c) => ({ name: c.name.split(" ")[0], profissionais: c.therapistsCount || 0, clientes: c.clientsCount || 0 }))} barSize={16}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="name" stroke="#6B7280" tick={{ fontSize: 11 }} />
                 <YAxis stroke="#6B7280" tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }} />
-                <Bar dataKey="terapeutas" fill="#0D9488" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Terapeutas" />
+                <Bar dataKey="profissionais" fill="#0D9488" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Profissionais" />
                 <Bar dataKey="clientes"   fill="#3B82F6" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Clientes" />
               </BarChart>
             </ResponsiveContainer>
@@ -151,7 +151,7 @@ function TabGeral({
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-700 text-left">
-                  {["Empresa", "Plano", "Terapeutas", "Clientes (total)", "Unidades", "Status"].map((h) => (
+                  {["Empresa", "Plano", "Profissionais", "Clientes (total)", "Unidades", "Status"].map((h) => (
                     <th key={h} className="text-xs text-gray-400 pb-3 pr-4 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -278,8 +278,8 @@ function TabPlataforma({
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "MRR Empresas",     value: fmt(companyMRR),    sub: "assinaturas de empresa",    icon: Building2,   color: "#7C3AED" },
-          { label: "MRR Terapeutas",   value: fmt(therapistMRR),  sub: "assinaturas de terapeuta",  icon: Star,        color: "#0D9488" },
+          { label: "MRR Empresas",      value: fmt(companyMRR),    sub: "assinaturas de empresa",       icon: Building2,   color: "#7C3AED" },
+          { label: "MRR Profissionais", value: fmt(therapistMRR),  sub: "assinaturas de profissional",  icon: Star,        color: "#0D9488" },
           { label: "MRR Total",        value: fmt(totalMRR),      sub: "receita recorrente mensal",  icon: DollarSign,  color: "#F59E0B" },
           { label: "ARR Projetado",    value: fmt(projectedARR),  sub: "receita anual projetada",    icon: TrendingUp,  color: "#3B82F6" },
         ].map((k) => (
@@ -302,7 +302,7 @@ function TabPlataforma({
         <div>
           <p className="text-violet-300 text-sm" style={{ fontWeight: 600 }}>Dois tipos de receita no ZEN HUB</p>
           <p className="text-violet-300/70 text-xs mt-0.5">
-            <strong className="text-violet-300">Receita da Plataforma (MRR)</strong> — o que empresas e terapeutas pagam ao ZEN HUB pelas assinaturas de planos. &nbsp;|&nbsp;
+            <strong className="text-violet-300">Receita da Plataforma (MRR)</strong> — o que empresas e profissionais pagam ao ZEN HUB pelas assinaturas de planos. &nbsp;|&nbsp;
             <strong className="text-violet-300">Receita Operacional</strong> — o que as empresas movimentam com seus clientes (R$ {operationalMRR.toLocaleString("pt-BR")}/mês no total).
           </p>
         </div>
@@ -341,9 +341,9 @@ function TabPlataforma({
           </div>
         </div>
 
-        {/* Breakdown por plano — terapeutas */}
+        {/* Breakdown por plano — profissionais */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
-          <h3 className="text-white mb-1">Assinaturas de Terapeutas</h3>
+          <h3 className="text-white mb-1">Assinaturas de Profissionais</h3>
           <p className="text-gray-400 text-xs mb-4">Por plano · MRR gerado à plataforma</p>
           <div className="space-y-3">
             {therapistPlanRevenue.map((row) => (
@@ -352,7 +352,7 @@ function TabPlataforma({
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm text-gray-300">{row.name}</span>
-                    <span className="text-xs text-gray-400">{row.count} terapeuta{row.count !== 1 ? "s" : ""} · {fmt(row.mrr)}/mês</span>
+                    <span className="text-xs text-gray-400">{row.count} profissional{row.count !== 1 ? "is" : ""} · {fmt(row.mrr)}/mês</span>
                   </div>
                   <div className="h-1.5 bg-gray-700 rounded-full">
                     <div
@@ -368,7 +368,7 @@ function TabPlataforma({
             ))}
           </div>
           <div className="mt-4 pt-4 border-t border-gray-700 flex items-center justify-between">
-            <span className="text-xs text-gray-400">MRR total de terapeutas</span>
+            <span className="text-xs text-gray-400">MRR total de profissionais</span>
             <span className="text-sm text-white" style={{ fontWeight: 700 }}>{fmt(therapistMRR)}</span>
           </div>
         </div>

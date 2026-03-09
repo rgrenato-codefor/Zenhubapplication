@@ -87,12 +87,12 @@ export default function TherapistProfile() {
 
   const handleCopyLink = () => {
     const username = therapist.username ?? user?.therapistId ?? "";
-    navigator.clipboard.writeText(`https://zenhub.com.br/${username}`).catch(() => {});
+    navigator.clipboard.writeText(`https://zenhub.online/${username}`).catch(() => {});
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const publicUrl = `zenhub.com.br/${therapist.username ?? user?.therapistId}`;
+  const publicUrl = `zenhub.online/${therapist.username ?? user?.therapistId}`;
 
   return (
     <div className="space-y-4">

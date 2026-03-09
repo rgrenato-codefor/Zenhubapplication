@@ -137,7 +137,7 @@ export default function AdminCompanies() {
                   <Users className="w-3 h-3 text-teal-400" />
                 </div>
                 <p className="text-lg text-white" style={{ fontWeight: 700 }}>{company.therapistsCount || 0}</p>
-                <p className="text-xs text-gray-400">Terapeutas</p>
+                <p className="text-xs text-gray-400">Profissionais</p>
               </div>
               <div className="bg-gray-700/50 rounded-lg p-3 text-center">
                 <div className="flex items-center justify-center gap-1 mb-1">

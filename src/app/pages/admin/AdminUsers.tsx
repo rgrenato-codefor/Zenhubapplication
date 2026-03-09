@@ -7,7 +7,7 @@ const roleConfig: Record<string, { label: string; color: string; icon: React.Ele
   super_admin: { label: "Super Admin", color: "bg-violet-100 text-violet-700", icon: Shield },
   company_admin: { label: "Admin Empresa", color: "bg-teal-100 text-teal-700", icon: Building2 },
   sales: { label: "Vendas", color: "bg-blue-100 text-blue-700", icon: UserCircle },
-  therapist: { label: "Terapeuta", color: "bg-orange-100 text-orange-700", icon: Star },
+  therapist: { label: "Profissional", color: "bg-orange-100 text-orange-700", icon: Star },
   client: { label: "Cliente", color: "bg-pink-100 text-pink-700", icon: UserCircle },
 };
 
@@ -54,7 +54,7 @@ export default function AdminUsers() {
           <p className="text-gray-400 text-sm mt-0.5">
             {loading
               ? "Carregando..."
-              : `${allAdminTherapists.length} terapeutas · ${allAdminClients.length} clientes`}
+              : `${allAdminTherapists.length} profissionais · ${allAdminClients.length} clientes`}
           </p>
         </div>
         <button

@@ -27,7 +27,7 @@ const getFlatItems = (role: string) => {
   const base = [
     { path: "/empresa/agenda",       icon: CalendarDays, label: "Agenda" },
     { path: "/empresa/clientes",     icon: UserCircle,   label: "Clientes" },
-    { path: "/empresa/terapeutas",   icon: Users,        label: "Terapeutas" },
+    { path: "/empresa/terapeutas",   icon: Users,        label: "Profissionais" },
     { path: "/empresa/salas",        icon: DoorOpen,     label: "Salas" },
     { path: "/empresa/terapias",     icon: Sparkles,     label: "Terapias" },
   ];

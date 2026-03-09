@@ -169,14 +169,8 @@ export default function Login() {
 
           <p className="text-center text-gray-500 text-sm mt-5">
             Ainda não tem conta?{" "}
-            <Link to="/cadastro" className="text-violet-600 hover:text-violet-700" style={{ fontWeight: 600 }}>
-              Cadastrar empresa
-            </Link>
-          </p>
-          <p className="text-center text-gray-400 text-xs mt-2">
-            É terapeuta?{" "}
-            <Link to="/cadastro/terapeuta" className="text-teal-500 hover:text-teal-600" style={{ fontWeight: 600 }}>
-              Criar perfil de terapeuta
+            <Link to="/cadastro" className="text-violet-500 hover:text-violet-400 transition-colors" style={{ fontWeight: 600 }}>
+              Cadastre-se aqui
             </Link>
           </p>
         </div>
