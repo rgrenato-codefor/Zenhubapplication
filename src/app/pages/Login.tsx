@@ -91,13 +91,6 @@ export default function Login() {
           {/* Google - temporariamente oculto */}
           {/* <GoogleButton onClick={handleGoogle} label="Continuar com Google" variant="light" /> */}
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-gray-400 text-xs">ou entre com e-mail</span>
-            <div className="flex-1 h-px bg-gray-200" />
-          </div>
-
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-sm text-gray-700 mb-2" style={{ fontWeight: 600 }}>

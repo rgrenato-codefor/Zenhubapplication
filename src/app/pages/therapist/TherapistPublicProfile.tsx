@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router";
 import {
   Star, MapPin, Clock, CheckCircle, ArrowLeft, Share2,
-  Calendar, Sparkles, Award, Copy, Check, X,
-  ChevronLeft, ChevronRight, User, Building2, Grid,
+  Calendar, Sparkles, Award, X,
+  User, Building2, Grid,
   ListBullet, InformationCircle, Send,
 } from "../../components/shared/icons";
 import { getTherapistByUsername, getTherapiesByCompany, getCompany, getCatalogByTherapist } from "../../../lib/firestore";
@@ -18,6 +18,191 @@ const DAYS_MAP: Record<string, string> = {
 
 type Tab = "fotos" | "servicos" | "sobre";
 
+// ── Story Viewer ─────────────────────────────────────────────────────────────
+function StoryViewer({
+  photos,
+  initialIndex,
+  onClose,
+  therapist,
+}: {
+  photos: string[];
+  initialIndex: number;
+  onClose: () => void;
+  therapist: any;
+}) {
+  const [index, setIndex] = useState(initialIndex);
+  const [progress, setProgress] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const DURATION = 6000;
+  const rafRef = useRef<number | null>(null);
+  const startRef = useRef<number>(0);
+  const touchStartX = useRef<number | null>(null);
+
+  const goNext = () => {
+    if (index < photos.length - 1) setIndex((i) => i + 1);
+    else onClose();
+  };
+
+  const goPrev = () => {
+    if (index > 0) setIndex((i) => i - 1);
+    else setProgress(0);
+  };
+
+  // Auto-advance with rAF progress
+  useEffect(() => {
+    setProgress(0);
+    if (paused) return;
+    startRef.current = performance.now();
+
+    const tick = (now: number) => {
+      const elapsed = now - startRef.current;
+      const pct = Math.min((elapsed / DURATION) * 100, 100);
+      setProgress(pct);
+      if (pct < 100) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        if (index < photos.length - 1) setIndex((i) => i + 1);
+        else onClose();
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, paused]);
+
+  // Keyboard nav
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") goNext();
+      else if (e.key === "ArrowLeft") goPrev();
+      else if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
+
+  // Touch swipe
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    setPaused(true);
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    setPaused(false);
+    if (touchStartX.current === null) return;
+    const diff = e.changedTouches[0].clientX - touchStartX.current;
+    if (diff < -50) goNext();
+    else if (diff > 50) goPrev();
+    touchStartX.current = null;
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black z-[60] flex flex-col select-none"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Progress bars */}
+      <div className="absolute top-0 left-0 right-0 z-30 flex gap-1 px-3 pt-3">
+        {photos.map((_, i) => (
+          <div key={i} className="flex-1 h-[3px] bg-white/30 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-white rounded-full"
+              style={{
+                width: i < index ? "100%" : i === index ? `${progress}%` : "0%",
+                transition: "none",
+              }}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Header */}
+      <div className="absolute top-7 left-0 right-0 z-30 flex items-center justify-between px-4 py-2">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-9 h-9 rounded-full p-[2px] shrink-0"
+            style={{ background: "linear-gradient(135deg,#7C3AED,#6366F1,#0D9488)" }}
+          >
+            <img
+              src={therapist.avatar}
+              alt={therapist.name}
+              className="w-full h-full rounded-full object-cover border-[1.5px] border-black"
+            />
+          </div>
+          <div>
+            <p className="text-white text-sm leading-none" style={{ fontWeight: 700 }}>
+              {therapist.name}
+            </p>
+            <p className="text-white/50 text-xs mt-0.5" style={{ fontWeight: 500 }}>
+              @{therapist.username}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white/70 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Photo */}
+      <img
+        src={photos[index]}
+        alt={`Foto ${index + 1}`}
+        className="absolute inset-0 w-full h-full object-contain"
+        draggable={false}
+      />
+
+      {/* Tap areas */}
+      <div className="absolute inset-0 z-20 flex">
+        {/* Left tap → prev */}
+        <button
+          className="w-1/3 h-full"
+          onMouseDown={() => setPaused(true)}
+          onMouseUp={() => { setPaused(false); }}
+          onClick={goPrev}
+        />
+        {/* Center hold → pause */}
+        <button
+          className="w-1/3 h-full"
+          onMouseDown={() => setPaused(true)}
+          onMouseUp={() => setPaused(false)}
+        />
+        {/* Right tap → next */}
+        <button
+          className="w-1/3 h-full"
+          onMouseDown={() => setPaused(true)}
+          onMouseUp={() => { setPaused(false); }}
+          onClick={goNext}
+        />
+      </div>
+
+      {/* Bottom dots + counter */}
+      <div className="absolute bottom-8 left-0 right-0 z-30 flex flex-col items-center gap-2">
+        <div className="flex gap-1.5">
+          {photos.map((_, i) => (
+            <div
+              key={i}
+              className="rounded-full transition-all duration-300"
+              style={{
+                width: i === index ? 18 : 6,
+                height: 6,
+                background: i === index ? "#fff" : "rgba(255,255,255,0.35)",
+              }}
+            />
+          ))}
+        </div>
+        <p className="text-white/30 text-xs" style={{ fontWeight: 500 }}>
+          {index + 1} / {photos.length}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export default function TherapistPublicProfile() {
   const { username } = useParams<{ username: string }>();
   const [copied, setCopied] = useState(false);
@@ -36,7 +221,7 @@ export default function TherapistPublicProfile() {
     if (!username) return;
     const load = async () => {
       setLoadingProfile(true);
-      let t = await getTherapistByUsername(username);
+      const t = await getTherapistByUsername(username);
       if (t) {
         setTherapist(t);
         const catalogItems = await getCatalogByTherapist(t.id);
@@ -130,7 +315,7 @@ export default function TherapistPublicProfile() {
     ? (therapist as any).address ?? "Endereço a confirmar"
     : company?.address ?? "";
 
-  // Gallery is stored as MediaItem[] in therapist.gallery
+  // Gallery stored as MediaItem[] in therapist.gallery
   const galleryItems: any[] = (therapist as any).gallery ?? [];
   const photos: string[] = galleryItems
     .filter((item: any) => item.type === "image" || !item.type)
@@ -150,7 +335,6 @@ export default function TherapistPublicProfile() {
     setBookingForm({ name: "", phone: "", therapyId: "", date: "", time: "" });
   };
 
-  // Tabs available
   const tabs: Tab[] = ["fotos", "servicos", "sobre"];
   const effectiveTab = tabs.includes(activeTab) ? activeTab : tabs[0];
 
@@ -164,7 +348,7 @@ export default function TherapistPublicProfile() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
 
-      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
+      {/* Top bar */}
       <div className="bg-white border-b border-gray-100 px-4 py-3 sticky top-0 z-20">
         <div className="max-w-[480px] mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors">
@@ -182,25 +366,21 @@ export default function TherapistPublicProfile() {
         </div>
       </div>
 
-      {/* ── Scrollable content ─────────────────────────────────────────────── */}
+      {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto pb-24">
         <div className="max-w-[480px] mx-auto">
 
-          {/* ── Profile header ──────────────────────────────────────────────── */}
+          {/* Profile header */}
           <div className="px-5 pt-5 pb-4 bg-white">
-
-            {/* Avatar + Stats row */}
             <div className="flex items-center justify-between mb-4">
-              {/* Avatar with gradient ring */}
+              {/* Avatar */}
               <div className="relative shrink-0">
-                <div className="w-20 h-20 rounded-full p-[2.5px]"
-                  style={{ background: "linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #0D9488 100%)" }}>
+                <div
+                  className="w-20 h-20 rounded-full p-[2.5px]"
+                  style={{ background: "linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #0D9488 100%)" }}
+                >
                   <div className="w-full h-full rounded-full bg-white p-[2px]">
-                    <img
-                      src={therapist.avatar}
-                      alt={therapist.name}
-                      className="w-full h-full rounded-full object-cover"
-                    />
+                    <img src={therapist.avatar} alt={therapist.name} className="w-full h-full rounded-full object-cover" />
                   </div>
                 </div>
                 <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-white" />
@@ -229,7 +409,6 @@ export default function TherapistPublicProfile() {
               </div>
             </div>
 
-            {/* Name + username */}
             <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "1.05rem", lineHeight: 1.3 }}>
               {therapist.name}
             </p>
@@ -238,7 +417,7 @@ export default function TherapistPublicProfile() {
             </p>
           </div>
 
-          {/* ── Tab bar ─────────────────────────────────────────────────────── */}
+          {/* Tab bar */}
           <div className="bg-white border-t border-b border-gray-100 sticky top-[53px] z-10">
             <div className="flex max-w-[480px] mx-auto">
               {tabs.map((tab) => {
@@ -262,7 +441,7 @@ export default function TherapistPublicProfile() {
             </div>
           </div>
 
-          {/* ── FOTOS tab ───────────────────────────────────────────────────── */}
+          {/* ── FOTOS tab ─────────────────────────────────────────────────── */}
           {effectiveTab === "fotos" && (
             <>
               {photos.length === 0 ? (
@@ -289,7 +468,7 @@ export default function TherapistPublicProfile() {
             </>
           )}
 
-          {/* ── SERVIÇOS tab ────────────────────────────────────────────────── */}
+          {/* ── SERVIÇOS tab ──────────────────────────────────────────────── */}
           {effectiveTab === "servicos" && (
             <div className="bg-white">
               {!isAutonomous && (
@@ -313,14 +492,12 @@ export default function TherapistPublicProfile() {
                 <div className="divide-y divide-gray-50">
                   {displayTherapies.map((therapy) => (
                     <div key={therapy.id} className="flex items-center gap-4 px-5 py-4">
-                      {/* Color dot */}
                       <div
                         className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
                         style={{ background: `${therapy.color}18` }}
                       >
                         <div className="w-2.5 h-2.5 rounded-full" style={{ background: therapy.color }} />
                       </div>
-                      {/* Info */}
                       <div className="flex-1 min-w-0">
                         <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>{therapy.name}</p>
                         <div className="flex items-center gap-2 mt-0.5">
@@ -337,7 +514,6 @@ export default function TherapistPublicProfile() {
                           )}
                         </div>
                       </div>
-                      {/* Price */}
                       <div className="text-right shrink-0">
                         <p className="text-violet-700 text-sm" style={{ fontWeight: 700 }}>
                           R$ {therapy.price?.toFixed(0) ?? "—"}
@@ -351,11 +527,10 @@ export default function TherapistPublicProfile() {
             </div>
           )}
 
-          {/* ── SOBRE tab ───────────────────────────────────────────────────── */}
+          {/* ── SOBRE tab ─────────────────────────────────────────────────── */}
           {effectiveTab === "sobre" && (
             <div className="divide-y divide-gray-100 bg-white">
 
-              {/* Bio */}
               {therapist.bio && (
                 <div className="px-5 py-5">
                   <p className="text-xs text-gray-400 mb-2" style={{ fontWeight: 600, letterSpacing: "0.05em" }}>SOBRE</p>
@@ -363,7 +538,6 @@ export default function TherapistPublicProfile() {
                 </div>
               )}
 
-              {/* Specialty + stats */}
               <div className="px-5 py-5 space-y-3">
                 <p className="text-xs text-gray-400 mb-1" style={{ fontWeight: 600, letterSpacing: "0.05em" }}>INFORMAÇÕES</p>
 
@@ -399,7 +573,10 @@ export default function TherapistPublicProfile() {
                     <p className="text-xs text-gray-400">Avaliação</p>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       {stars.map((s) => (
-                        <Star key={s} className={`w-3 h-3 ${s <= Math.floor(therapist.rating ?? 0) ? "fill-yellow-400 text-yellow-400" : "text-gray-200 fill-gray-200"}`} />
+                        <Star
+                          key={s}
+                          className={`w-3 h-3 ${s <= Math.floor(therapist.rating ?? 0) ? "fill-yellow-400 text-yellow-400" : "text-gray-200 fill-gray-200"}`}
+                        />
                       ))}
                       <span className="text-sm text-gray-800 ml-0.5" style={{ fontWeight: 700 }}>{therapist.rating ?? "—"}</span>
                       <span className="text-xs text-gray-400">· {therapist.totalSessions ?? 0} atendimentos</span>
@@ -407,7 +584,6 @@ export default function TherapistPublicProfile() {
                   </div>
                 </div>
 
-                {/* Company or autonomous */}
                 {company ? (
                   <div className="flex items-center gap-3">
                     <div
@@ -434,7 +610,6 @@ export default function TherapistPublicProfile() {
                 )}
               </div>
 
-              {/* Location */}
               <div className="px-5 py-5">
                 <p className="text-xs text-gray-400 mb-3" style={{ fontWeight: 600, letterSpacing: "0.05em" }}>LOCAL DE ATENDIMENTO</p>
                 <div className="flex items-start gap-3">
@@ -453,7 +628,6 @@ export default function TherapistPublicProfile() {
                 </div>
               </div>
 
-              {/* Availability */}
               {Object.keys(availability).length > 0 && (
                 <div className="px-5 py-5">
                   <p className="text-xs text-gray-400 mb-4" style={{ fontWeight: 600, letterSpacing: "0.05em" }}>DISPONIBILIDADE</p>
@@ -483,7 +657,6 @@ export default function TherapistPublicProfile() {
                 </div>
               )}
 
-              {/* Footer branding */}
               <div className="px-5 py-6 flex flex-col items-center gap-1">
                 <ZenHubLogo variant="full" textColor="#7C3AED" height={13} />
                 <p className="text-gray-400" style={{ fontSize: "0.65rem" }}>Plataforma de gestão de terapias</p>
@@ -494,7 +667,7 @@ export default function TherapistPublicProfile() {
         </div>
       </div>
 
-      {/* ── Fixed bottom CTA ──────────────────────────────────────────────────── */}
+      {/* Fixed bottom CTA */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3 z-30">
         <div className="max-w-[480px] mx-auto">
           <button
@@ -508,44 +681,22 @@ export default function TherapistPublicProfile() {
         </div>
       </div>
 
-      {/* ── Gallery lightbox ──────────────────────────────────────────────────── */}
+      {/* Story Viewer */}
       {galleryIndex !== null && (
-        <div
-          className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center"
-          onClick={() => setGalleryIndex(null)}
-        >
-          <button className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-          <button
-            className="absolute left-3 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
-            onClick={(e) => { e.stopPropagation(); setGalleryIndex((galleryIndex - 1 + photos.length) % photos.length); }}
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <img
-            src={photos[galleryIndex]}
-            alt={`Foto ${galleryIndex + 1}`}
-            className="max-w-full max-h-[85vh] object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <button
-            className="absolute right-3 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
-            onClick={(e) => { e.stopPropagation(); setGalleryIndex((galleryIndex + 1) % photos.length); }}
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-          <p className="absolute bottom-4 text-white/40 text-xs">{galleryIndex + 1} / {photos.length}</p>
-        </div>
+        <StoryViewer
+          photos={photos}
+          initialIndex={galleryIndex}
+          onClose={() => setGalleryIndex(null)}
+          therapist={therapist}
+        />
       )}
 
-      {/* ── Booking Modal ──────────────────────────────────────────────────────── */}
+      {/* Booking Modal */}
       {bookingModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             {bookingStep === "form" ? (
               <>
-                {/* Modal header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10 rounded-t-3xl sm:rounded-t-2xl">
                   <div className="flex items-center gap-3">
                     <img src={therapist.avatar} alt={therapist.name} className="w-9 h-9 rounded-xl object-cover" />
@@ -567,7 +718,6 @@ export default function TherapistPublicProfile() {
                   </button>
                 </div>
 
-                {/* Modal body */}
                 <div className="px-5 py-5 space-y-4">
                   <div className="flex items-start gap-2 p-3 rounded-xl bg-gray-50 border border-gray-100">
                     <MapPin className="w-4 h-4 text-teal-500 shrink-0 mt-0.5" />
@@ -632,9 +782,13 @@ export default function TherapistPublicProfile() {
                         onChange={(e) => setBookingForm((p) => ({ ...p, time: e.target.value }))}
                       >
                         <option value="">Selecione</option>
-                        {Object.values(availability).flat().filter((v, i, a) => a.indexOf(v) === i).sort().map((slot) => (
-                          <option key={slot} value={slot}>{slot}</option>
-                        ))}
+                        {Object.values(availability)
+                          .flat()
+                          .filter((v, i, a) => a.indexOf(v) === i)
+                          .sort()
+                          .map((slot) => (
+                            <option key={slot} value={slot}>{slot}</option>
+                          ))}
                       </select>
                     </div>
                   </div>
@@ -651,7 +805,6 @@ export default function TherapistPublicProfile() {
                   )}
                 </div>
 
-                {/* Modal footer */}
                 <div className="flex gap-3 px-5 py-4 border-t border-gray-100 sticky bottom-0 bg-white rounded-b-2xl">
                   <button
                     onClick={() => setBookingModal(false)}
