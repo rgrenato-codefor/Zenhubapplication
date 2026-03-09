@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Save, Star, AtSign, Check, Copy, ExternalLink, Clock,
   CheckCircle, LogOut, Sparkles, AlertTriangle, X, Edit2,
@@ -6,6 +6,7 @@ import {
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
+import { uploadMedia, ikFolders, ikAvatar } from "../../../lib/imagekit";
 
 const DAYS_MAP: Record<string, string> = {
   monday: "Seg", tuesday: "Ter", wednesday: "Qua",
@@ -20,6 +21,11 @@ export default function TherapistProfile() {
     mutateMyTherapistProfile,
     mutateLinkToCompany, mutateUnlinkFromCompany,
   } = usePageData();
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarProgress,  setAvatarProgress]  = useState(0);
+  const [avatarError,     setAvatarError]     = useState("");
 
   const [editing,           setEditing]           = useState(false);
   const [copiedLink,        setCopiedLink]        = useState(false);
@@ -94,6 +100,31 @@ export default function TherapistProfile() {
 
   const publicUrl = `zenhub.online/${therapist.username ?? user?.therapistId}`;
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    (e.target as HTMLInputElement).value = "";
+    if (!file || !therapist) return;
+    if (!file.type.startsWith("image/")) { setAvatarError("Apenas imagens são aceitas."); return; }
+    if (file.size > 10 * 1024 * 1024)   { setAvatarError("Máximo 10 MB."); return; }
+
+    setAvatarError("");
+    setAvatarUploading(true);
+    setAvatarProgress(0);
+    try {
+      const item = await uploadMedia(
+        file,
+        ikFolders.therapistAvatar(therapist.id),
+        setAvatarProgress,
+      );
+      await mutateMyTherapistProfile({ avatar: item.url });
+    } catch {
+      setAvatarError("Falha no upload. Tente novamente.");
+    } finally {
+      setAvatarUploading(false);
+      setAvatarProgress(0);
+    }
+  };
+
   return (
     <div className="space-y-4">
 
@@ -103,20 +134,77 @@ export default function TherapistProfile() {
 
         <div className="px-4 md:px-6 pb-5">
           <div className="flex items-end justify-between gap-3 -mt-10 mb-4">
-            {therapist.avatar ? (
-              <img
-                src={therapist.avatar}
-                alt={therapist.name}
-                className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-md shrink-0 relative z-10"
-              />
-            ) : (
-              <div
-                className="w-20 h-20 rounded-2xl bg-violet-100 border-4 border-white shadow-md flex items-center justify-center text-violet-600 text-3xl shrink-0 relative z-10"
-                style={{ fontWeight: 700 }}
+
+            {/* ── Avatar with upload overlay ── */}
+            <div className="relative shrink-0 z-10">
+              {therapist.avatar ? (
+                <img
+                  src={ikAvatar(therapist.avatar, 160)}
+                  alt={therapist.name}
+                  className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-md"
+                />
+              ) : (
+                <div
+                  className="w-20 h-20 rounded-2xl bg-violet-100 border-4 border-white shadow-md flex items-center justify-center text-violet-600 text-3xl"
+                  style={{ fontWeight: 700 }}
+                >
+                  {therapist.name.charAt(0)}
+                </div>
+              )}
+
+              {/* Upload overlay button */}
+              <button
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={avatarUploading}
+                className="absolute inset-0 rounded-2xl flex items-end justify-end pb-1 pr-1 group disabled:cursor-wait"
+                title="Trocar foto de perfil"
               >
-                {therapist.name.charAt(0)}
-              </div>
-            )}
+                {/* Dark overlay on hover */}
+                <span className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/30 group-disabled:bg-black/30 transition-colors rounded-2xl" />
+
+                {/* Camera icon badge */}
+                <span className={`relative w-6 h-6 rounded-full flex items-center justify-center shadow border-2 border-white transition-colors z-10 ${
+                  avatarUploading
+                    ? "bg-violet-500"
+                    : "bg-white group-hover:bg-violet-600"
+                }`}>
+                  {avatarUploading ? (
+                    <div
+                      className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin"
+                    />
+                  ) : (
+                    <Camera className="w-3 h-3 text-gray-500 group-hover:text-white transition-colors" />
+                  )}
+                </span>
+              </button>
+
+              {/* Upload progress ring */}
+              {avatarUploading && (
+                <svg
+                  className="absolute inset-0 w-20 h-20 -rotate-90 pointer-events-none"
+                  viewBox="0 0 80 80"
+                >
+                  <circle cx="40" cy="40" r="36" fill="none" stroke="#7C3AED33" strokeWidth="4" />
+                  <circle
+                    cx="40" cy="40" r="36" fill="none"
+                    stroke="#7C3AED" strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * 36}`}
+                    strokeDashoffset={`${2 * Math.PI * 36 * (1 - avatarProgress / 100)}`}
+                    style={{ transition: "stroke-dashoffset 0.2s" }}
+                  />
+                </svg>
+              )}
+            </div>
+
+            {/* Hidden file input */}
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
 
             {editing ? (
               <div className="flex gap-2 mb-1">
@@ -146,6 +234,22 @@ export default function TherapistProfile() {
               </button>
             )}
           </div>
+
+          {/* Avatar error */}
+          {avatarError && (
+            <div className="flex items-center gap-1.5 mb-3 text-red-500 text-xs">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {avatarError}
+            </div>
+          )}
+
+          {/* Avatar uploading label */}
+          {avatarUploading && (
+            <div className="flex items-center gap-1.5 mb-3 text-violet-600 text-xs">
+              <div className="w-3 h-3 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin" />
+              Enviando foto... {avatarProgress}%
+            </div>
+          )}
 
           <div className="space-y-1 mb-4">
             <h2 className="text-gray-900 text-lg" style={{ fontWeight: 700 }}>{therapist.name}</h2>
