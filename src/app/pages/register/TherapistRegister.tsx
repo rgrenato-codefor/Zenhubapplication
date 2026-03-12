@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router";
 import {
   User, Mail, Phone, Lock, Eye, EyeOff,
@@ -8,6 +8,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { useData } from "../../context/DataContext";
 import { ZenHubLogo } from "../../components/shared/ZenHubLogo";
+import { getTherapistByUsername } from "../../../lib/firestore";
 
 type Step = 1 | 2 | 3;
 
@@ -55,6 +56,11 @@ export default function TherapistRegister() {
   const [codeError, setCodeError] = useState("");
   const [submitError, setSubmitError] = useState("");
 
+  // Username validation state
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const usernameCheckTimeout = useRef<NodeJS.Timeout | null>(null);
+
   // Company search state
   const [searchMode, setSearchMode] = useState<"code" | "name">("code");
   const [nameSearch, setNameSearch] = useState("");
@@ -64,6 +70,32 @@ export default function TherapistRegister() {
   const [candidateUnits, setCandidateUnits] = useState<any[]>([]);
   const [nameResults, setNameResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+
+  // Debounced username validation
+  useEffect(() => {
+    if (form.username.length < 3) {
+      setUsernameAvailable(null);
+      setCheckingUsername(false);
+      return;
+    }
+
+    if (usernameCheckTimeout.current) {
+      clearTimeout(usernameCheckTimeout.current);
+    }
+
+    setCheckingUsername(true);
+    usernameCheckTimeout.current = setTimeout(async () => {
+      const exists = await getTherapistByUsername(form.username);
+      setUsernameAvailable(!exists);
+      setCheckingUsername(false);
+    }, 600);
+
+    return () => {
+      if (usernameCheckTimeout.current) {
+        clearTimeout(usernameCheckTimeout.current);
+      }
+    };
+  }, [form.username]);
 
   const set = (field: keyof Form, value: string) => {
     setForm((p) => ({ ...p, [field]: value }));
@@ -91,18 +123,27 @@ export default function TherapistRegister() {
     return Object.keys(e).length === 0;
   };
 
-  const validateStep2 = () => {
+  const validateStep2 = async () => {
     const e: Partial<Form> = {};
     if (!form.specialty) e.specialty = "Selecione uma especialidade";
     if (!form.username.trim()) e.username = "Obrigatório";
     else if (form.username.length < 3) e.username = "Mínimo 3 caracteres";
+    else if (usernameAvailable === false) e.username = "Este @handle já está em uso";
+    else if (usernameAvailable === null) {
+      // Ainda verificando, vamos esperar
+      setCheckingUsername(true);
+      const exists = await getTherapistByUsername(form.username);
+      setUsernameAvailable(!exists);
+      setCheckingUsername(false);
+      if (exists) e.username = "Este @handle já está em uso";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step === 1 && validateStep1()) setStep(2);
-    if (step === 2 && validateStep2()) setStep(3);
+    if (step === 2 && await validateStep2()) setStep(3);
   };
 
   const handleVerifyCode = async () => {
@@ -202,7 +243,7 @@ export default function TherapistRegister() {
           <p className="text-gray-400 mb-1">
             Seu link público:{" "}
             <span className="text-teal-400" style={{ fontWeight: 600 }}>
-              zenhub.online/@{form.username}
+              zenhub.online/{form.username}
             </span>
           </p>
           {linkedCompany && (
@@ -435,17 +476,45 @@ export default function TherapistRegister() {
                   <div className="relative">
                     <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
-                      className={inputCls(!!errors.username)}
-                      style={{ paddingLeft: "2.5rem" }}
+                      className={inputCls(!!errors.username || usernameAvailable === false)}
+                      style={{ paddingLeft: "2.5rem", paddingRight: "2.5rem" }}
                       placeholder="ana.silva"
                       value={form.username}
                       onChange={(e) => set("username", slugify(e.target.value))}
                     />
+                    {/* Status indicator */}
+                    {form.username.length >= 3 && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {checkingUsername ? (
+                          <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                        ) : usernameAvailable === true ? (
+                          <CheckCircle className="w-4 h-4 text-emerald-400" />
+                        ) : usernameAvailable === false ? (
+                          <X className="w-4 h-4 text-red-400" />
+                        ) : null}
+                      </div>
+                    )}
                   </div>
-                  {form.username.length >= 3 && !errors.username && (
-                    <p className="text-teal-400 text-xs mt-1">
-                      zenhub.online/@{form.username}
-                    </p>
+                  {form.username.length >= 3 && !checkingUsername && (
+                    <>
+                      {usernameAvailable === true && (
+                        <p className="text-emerald-400 text-xs mt-1 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          zenhub.online/{form.username} está disponível!
+                        </p>
+                      )}
+                      {usernameAvailable === false && (
+                        <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          Este @handle já está em uso. Escolha outro.
+                        </p>
+                      )}
+                      {usernameAvailable === null && !checkingUsername && (
+                        <p className="text-teal-400 text-xs mt-1">
+                          zenhub.online/{form.username}
+                        </p>
+                      )}
+                    </>
                   )}
                 </Field>
 
