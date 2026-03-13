@@ -187,6 +187,7 @@ export const X            = XMarkIcon;
 export const XIcon        = XMarkIcon;       // ui components use XIcon
 export const Menu         = Bars3Icon;
 export const Plus         = PlusIcon;
+export const ArrowPath    = ArrowPathIcon;
 export const Search       = MagnifyingGlassIcon;
 export const SearchIcon   = MagnifyingGlassIcon;
 export const Filter       = FunnelIcon;

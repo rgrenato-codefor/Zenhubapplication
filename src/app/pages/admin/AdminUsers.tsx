@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import React from "react";
-import { Search, Plus, Shield, Building2, Star, UserCircle, Edit, Trash2, CheckCircle, AlertCircle } from "../../components/shared/icons";
+import { Search, Plus, Shield, Building2, Star, UserCircle, Edit, Trash2, CheckCircle, AlertCircle, ArrowPath } from "../../components/shared/icons";
 import { useData } from "../../context/DataContext";
 import { getAllUserProfiles, migrateEmailVerifiedField, type UserProfile } from "../../../lib/firestore";
 
@@ -19,21 +19,31 @@ export default function AdminUsers() {
   const [verificationFilter, setVerificationFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Load user profiles to get email verification status
-  useEffect(() => {
-    const loadProfilesAndMigrate = async () => {
-      // Run migration first to ensure all profiles have emailVerified field
-      await migrateEmailVerifiedField();
-      
-      // Then load all profiles
-      const profiles = await getAllUserProfiles();
-      console.log('[AdminUsers] User profiles loaded:', profiles);
-      setUserProfiles(profiles);
-    };
+  const loadProfilesAndMigrate = async () => {
+    // Run migration first to ensure all profiles have emailVerified field
+    await migrateEmailVerifiedField();
     
+    // Then load all profiles
+    const profiles = await getAllUserProfiles();
+    setUserProfiles(profiles);
+  };
+
+  useEffect(() => {
     loadProfilesAndMigrate();
   }, []);
+
+  // Refresh function
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadProfilesAndMigrate();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Build a unified user list from real Firestore data:
   // therapists + clients (company admins aren't stored as separate users in Firestore client SDK)
@@ -58,9 +68,6 @@ export default function AdminUsers() {
     })),
   ];
 
-  console.log('[AdminUsers] All users:', allUsers);
-  console.log('[AdminUsers] User profiles:', userProfiles);
-
   const filtered = allUsers.filter((u) => {
     const matchSearch =
       u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -76,22 +83,10 @@ export default function AdminUsers() {
     const isVerified = profile?.emailVerified === true;
     const isNotVerified = !profile || profile?.emailVerified === false || profile?.emailVerified === undefined;
     
-    console.log(`[AdminUsers] User ${u.name}:`, {
-      userId: u.userId,
-      email: u.email,
-      profile,
-      emailVerified: profile?.emailVerified,
-      isVerified,
-      isNotVerified,
-      verificationFilter
-    });
-    
     const matchVerification =
       verificationFilter === "all" ||
       (verificationFilter === "verified" && isVerified) ||
       (verificationFilter === "unverified" && isNotVerified);
-    
-    console.log(`[AdminUsers] Match verification for ${u.name}:`, matchVerification);
     
     return matchSearch && matchRole && matchVerification;
   });
@@ -107,13 +102,24 @@ export default function AdminUsers() {
               : `${allAdminTherapists.length} profissionais · ${allAdminClients.length} clientes`}
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm transition-colors"
-          style={{ fontWeight: 600 }}
-        >
-          <Plus className="w-4 h-4" /> Novo Usuário
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Atualizar dados"
+          >
+            <ArrowPath className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Atualizando...' : 'Atualizar'}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm transition-colors"
+            style={{ fontWeight: 600 }}
+          >
+            <Plus className="w-4 h-4" /> Novo Usuário
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
