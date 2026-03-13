@@ -3,7 +3,7 @@ import {
   Save, Building2, Bell, Users, Link, Copy, CheckCheck,
   MapPin, Plus, Edit2, Trash2, X, Phone, Mail, Star,
   CheckCircle, AlertCircle, ChevronRight, ToggleLeft, ToggleRight,
-  Download, QrCode, Smartphone, Share2, Camera, Image, Search,
+  Download, QrCode, Smartphone, Share2, Camera, Image, Search, Lock,
 } from "../../components/shared/icons";
 import { useCepLookup } from "../../hooks/useCepLookup";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
@@ -13,6 +13,8 @@ import { type Unit } from "../../context/DataContext";
 import { MediaGallery } from "../../components/shared/MediaGallery";
 import { uploadMedia, deleteMedia, ikFolders } from "../../../lib/imagekit";
 import type { MediaItem } from "../../../lib/imagekit";
+import { useCompanyPlan } from "../../hooks/useCompanyPlan";
+import { PlanLimitBanner } from "../../components/shared/PlanGate";
 
 type UnitStatus = "active" | "inactive";
 type ActiveTab = "company" | "units" | "gallery" | "notifications" | "invites";
@@ -482,6 +484,9 @@ export default function CompanySettings() {
   const companyId = user?.companyId ?? "";
   const primaryColor = companyData?.color || "#0D9488";
 
+  // Plan enforcement
+  const { planConfig, isAtLimit, hasModule } = useCompanyPlan(companyData?.plan);
+
   const [activeTab, setActiveTab] = useState<ActiveTab>("company");
   const [copied, setCopied] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -526,6 +531,8 @@ export default function CompanySettings() {
   };
 
   const handleAddUnit = async (form: Omit<Unit, "id" | "createdAt">) => {
+    // Enforce unit limit from plan
+    if (isAtLimit("units", units.length)) return;
     await mutateAddUnit(form);
     setUnitModal(null);
   };
@@ -783,26 +790,47 @@ export default function CompanySettings() {
                 <h3 className="text-gray-900">Unidades / Filiais</h3>
                 <p className="text-xs text-gray-400 mt-0.5">
                   {units.length} {units.length === 1 ? "unidade cadastrada" : "unidades cadastradas"}
+                  {planConfig?.limits.units !== null && (
+                    <span className="ml-1" style={{ color: primaryColor }}>
+                      / {planConfig?.limits.units} do plano
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {unitModal && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
-                  <CheckCircle className="w-4 h-4" />
-                  <span style={{ fontWeight: 600 }}>Unidade salva com sucesso!</span>
+              {/* Plan limit warning */}
+              {isAtLimit("units", units.length) ? (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm">
+                  <Lock className="w-4 h-4 shrink-0" />
+                  <span style={{ fontWeight: 600 }}>
+                    Limite do plano {planConfig?.name} atingido
+                  </span>
                 </div>
+              ) : (
+                <button
+                  onClick={() => setUnitModal({ mode: "add" })}
+                  className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm hover:opacity-90 transition-opacity"
+                  style={{ background: primaryColor, fontWeight: 600 }}
+                >
+                  <Plus className="w-4 h-4" />
+                  Nova unidade
+                </button>
               )}
-              <button
-                onClick={() => setUnitModal({ mode: "add" })}
-                className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm hover:opacity-90 transition-opacity"
-                style={{ background: primaryColor, fontWeight: 600 }}
-              >
-                <Plus className="w-4 h-4" />
-                Nova unidade
-              </button>
             </div>
           </div>
+
+          {/* Plan limit banner */}
+          {isAtLimit("units", units.length) && planConfig && (
+            <PlanLimitBanner
+              resourceLabel="unidades"
+              current={units.length}
+              limit={planConfig.limits.units!}
+              planName={planConfig.name}
+              planColor={planConfig.color}
+              planBadge={planConfig.badge}
+            />
+          )}
 
           {/* Info banner */}
           <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700">

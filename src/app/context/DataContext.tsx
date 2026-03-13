@@ -534,6 +534,41 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const mutateCompleteSession = useCallback(async (record: SessionRecord) => {
     await fsCreateSessionRecord(record);
     await fsUpdateAppointment(record.appointmentId, { status: "completed" });
+    
+    // Update company revenue if this session has a companyId
+    if (record.companyId && record.totalCharged > 0) {
+      const { doc: fsDoc, updateDoc: fsUpdateDoc, increment: fsIncrement } = await import("firebase/firestore");
+      const { db: fsDb } = await import("../../lib/firebase");
+      await fsUpdateDoc(fsDoc(fsDb, "companies", record.companyId), {
+        monthRevenue: fsIncrement(record.totalCharged),
+        totalRevenue: fsIncrement(record.totalCharged),
+      });
+      
+      // Update local state
+      setCompany((prev) =>
+        prev && prev.id === record.companyId
+          ? {
+              ...prev,
+              monthRevenue: (prev.monthRevenue || 0) + record.totalCharged,
+              totalRevenue: (prev.totalRevenue || 0) + record.totalCharged,
+            }
+          : prev
+      );
+      
+      // Update admin list if exists
+      setAllAdminCompanies((prev) =>
+        prev.map((c) =>
+          c.id === record.companyId
+            ? {
+                ...c,
+                monthRevenue: (c.monthRevenue || 0) + record.totalCharged,
+                totalRevenue: (c.totalRevenue || 0) + record.totalCharged,
+              }
+            : c
+        )
+      );
+    }
+    
     setSessionRecords((prev) => [record, ...prev]);
     setCompletedSessionIds((prev) => new Set([...prev, record.appointmentId]));
     setAppointments((prev) =>

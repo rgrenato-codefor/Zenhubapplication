@@ -1,31 +1,25 @@
-/**
- * Firestore service layer — full CRUD for all ZEN HUB collections.
- */
-
 import {
-  doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, query, where, getDocs, addDoc,
-  serverTimestamp, Timestamp, orderBy, limit, deleteField,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
   onSnapshot,
+  serverTimestamp,
+  increment,
+  Timestamp,
+  type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { CompanyPlan, TherapistPlan } from "../app/lib/planConfig";
 
-// ─── Internal helper ─────────────────────────────────────────────────────────
-/** Strip the `id` (and `createdAt`) fields before writing to Firestore so that
- *  the Firestore document ID is never shadowed by a stale client-generated field. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function stripMeta<T extends object>(data: T): Omit<T, "id" | "createdAt"> {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { id: _id, createdAt: _ca, ...rest } = data as any;
-  return rest;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export type UserRole =
-  | "super_admin" | "company_admin" | "sales"
-  | "therapist" | "client";
+export type UserRole = "super_admin" | "company_admin" | "sales" | "therapist" | "client";
 
 export interface UserProfile {
   uid: string;
@@ -35,28 +29,26 @@ export interface UserProfile {
   companyId?: string;
   therapistId?: string;
   clientId?: string;
-  avatar?: string;
-  emailVerified?: boolean;
   createdAt?: Timestamp;
+  emailVerified?: boolean;
 }
 
 export interface Company {
   id: string;
+  userId: string;
   name: string;
-  logo: string;
-  color: string;
   email: string;
   phone: string;
-  address: string;
-  cnpj?: string;
-  segment?: string;
-  plan: "Starter" | "Business" | "Premium";
+  address?: string;
+  logo?: string | null;
+  color?: string;
+  plan: string;
   status: "active" | "inactive";
   inviteCode: string;
   therapistsCount: number;
   clientsCount: number;
-  totalRevenue: number;
   monthRevenue: number;
+  totalRevenue: number;
   createdAt?: Timestamp;
 }
 
@@ -64,40 +56,26 @@ export interface Unit {
   id: string;
   companyId: string;
   name: string;
-  fullName: string;
   address: string;
-  // Structured address fields (filled via CEP autocomplete)
-  cep?: string;
-  street?: string;
-  number?: string;
-  complement?: string;
-  neighborhood?: string;
-  city?: string;
-  state?: string;
   phone: string;
-  email: string;
+  therapistsCount: number;
+  roomsCount: number;
   status: "active" | "inactive";
-  isMain: boolean;
-  therapistsCount?: number;
-  roomsCount?: number;
   createdAt?: Timestamp;
 }
 
 export interface Therapist {
   id: string;
   companyId?: string;
-  unitId?: string;
   userId?: string;
-  username?: string;
+  unitId?: string;
   name: string;
   email: string;
   phone: string;
-  avatar?: string;
   specialty: string;
+  avatar?: string | null;
   bio?: string;
-  address?: string;
-  photos?: string[];
-  commission: number;
+  username?: string;
   rating: number;
   status: "active" | "inactive";
   therapies: string[];
@@ -138,35 +116,30 @@ export interface Therapy {
   description: string;
   duration: number;
   price: number;
-  category?: string;
-  color: string;
-  status?: "active" | "inactive";
-  active?: boolean;
-  totalBookings?: number;
+  status: "active" | "inactive";
   createdAt?: Timestamp;
 }
 
 export interface Room {
   id: string;
   companyId: string;
-  unitId?: string;
+  unitId: string;
   name: string;
-  description: string;
   color: string;
-  status: "active" | "inactive" | "maintenance";
+  status: "available" | "occupied" | "maintenance";
   createdAt?: Timestamp;
 }
 
 export interface Appointment {
   id: string;
-  companyId?: string;        // optional — autonomous therapists have no company
+  companyId?: string;
   unitId?: string;
-  clientId?: string;         // optional — autonomous therapists use clientName instead
-  clientName?: string;       // ad-hoc client name for autonomous bookings
+  clientId?: string;
+  clientName?: string;
   therapistId: string;
-  therapyId?: string;        // optional — autonomous therapists use catalogItemId
-  therapyName?: string;      // denormalised name for display without a join
-  catalogItemId?: string;    // autonomous: catalog item used
+  therapyId?: string;
+  therapyName?: string;
+  catalogItemId?: string;
   date: string;
   time: string;
   duration: number;
@@ -198,7 +171,6 @@ export interface SessionRecord {
   date: string;
   time: string;
   closedBy: "therapist" | "company";
-  /** Set to true by the company when the commission is paid to the therapist */
   paidByCompany?: boolean;
   createdAt?: Timestamp;
 }
@@ -207,46 +179,71 @@ export interface CatalogItem {
   id: string;
   therapistId: string;
   name: string;
+  description: string;
   duration: number;
-  myPrice: number;
-  category: string;
-  color: string;
-  active: boolean;
+  price: number;
+  status: "active" | "inactive";
+  createdAt?: Timestamp;
 }
 
 export interface TherapistAssociation {
   therapistId: string;
   companyId: string | null;
-  unitId: string | null;
-  commission: number;
-  linkedAt: string | null;
+  associatedAt?: Timestamp;
 }
 
-export interface RoomAssignment {
-  appointmentId: string;
-  roomId: string;
-}
-
-// ─── User Profile ─────────────────────────────────────────────────────────────
+// ─── User Profiles ────────────────────────────────────────────────────────────
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   try {
     const snap = await getDoc(doc(db, "users", uid));
-    if (!snap.exists()) return null;
-    return { uid, ...snap.data() } as UserProfile;
+    return snap.exists() ? ({ ...snap.data(), uid: snap.id } as UserProfile) : null;
   } catch { return null; }
 }
 
-export async function createUserProfile(uid: string, data: Omit<UserProfile, "uid" | "createdAt">): Promise<void> {
-  await setDoc(doc(db, "users", uid), { 
-    ...data, 
-    emailVerified: data.emailVerified ?? false,
-    createdAt: serverTimestamp() 
-  });
+export async function createUserProfile(uid: string, data: Omit<UserProfile, "uid">): Promise<void> {
+  await setDoc(doc(db, "users", uid), { ...data, uid, createdAt: serverTimestamp() });
 }
 
-export async function updateUserProfile(uid: string, data: Partial<Omit<UserProfile, "uid">>): Promise<void> {
+export async function updateUserProfile(uid: string, data: Partial<UserProfile>): Promise<void> {
   await updateDoc(doc(db, "users", uid), data);
+}
+
+export async function getAllUserProfiles(): Promise<UserProfile[]> {
+  try {
+    const snap = await getDocs(collection(db, "users"));
+    return snap.docs.map((d) => ({ ...d.data(), uid: d.id } as UserProfile));
+  } catch { return []; }
+}
+
+/**
+ * Migrate existing user profiles to add emailVerified field from Firebase Auth
+ */
+export async function migrateEmailVerifiedField(): Promise<void> {
+  try {
+    const { auth } = await import("./firebase");
+    const profiles = await getAllUserProfiles();
+    
+    const updates = profiles.map(async (profile) => {
+      // Check if emailVerified field already exists
+      if (profile.emailVerified !== undefined) return;
+      
+      // Get current user from Firebase Auth to check email verification
+      // Note: This only works for the currently logged in user
+      // For a full migration, you'd need Firebase Admin SDK
+      const currentUser = auth.currentUser;
+      if (currentUser && currentUser.uid === profile.uid) {
+        await updateUserProfile(profile.uid, { emailVerified: currentUser.emailVerified });
+      } else {
+        // Default to false for users we can't check
+        await updateUserProfile(profile.uid, { emailVerified: false });
+      }
+    });
+    
+    await Promise.all(updates);
+  } catch (error) {
+    console.error("Failed to migrate emailVerified field:", error);
+  }
 }
 
 // ─── Companies ────────────────────────────────────────────────────────────────
@@ -254,89 +251,156 @@ export async function updateUserProfile(uid: string, data: Partial<Omit<UserProf
 export async function getCompany(id: string): Promise<Company | null> {
   try {
     const snap = await getDoc(doc(db, "companies", id));
-    if (!snap.exists()) return null;
-    return { id, ...snap.data() } as Company;
+    return snap.exists() ? ({ ...snap.data(), id: snap.id } as Company) : null;
   } catch { return null; }
+}
+
+export async function createCompany(data: Omit<Company, "id" | "createdAt">): Promise<string> {
+  const docRef = doc(collection(db, "companies"));
+  await setDoc(docRef, { ...data, createdAt: serverTimestamp() });
+  return docRef.id;
+}
+
+export async function updateCompany(id: string, data: Partial<Company>): Promise<void> {
+  await updateDoc(doc(db, "companies", id), data);
 }
 
 export async function getAllCompanies(): Promise<Company[]> {
   try {
     const snap = await getDocs(collection(db, "companies"));
     return snap.docs.map((d) => ({ ...d.data(), id: d.id } as Company));
-  } catch { return []; }
-}
-
-export async function getAllTherapists(): Promise<Therapist[]> {
-  try {
-    const snap = await getDocs(collection(db, "therapists"));
-    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as Therapist));
-  } catch { return []; }
-}
-
-export async function getAllClients(): Promise<Client[]> {
-  try {
-    const snap = await getDocs(collection(db, "clients"));
-    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as Client));
-  } catch { return []; }
-}
-
-export async function getAllUserProfiles(): Promise<UserProfile[]> {
-  try {
-    const snap = await getDocs(collection(db, "users"));
-    return snap.docs.map((d) => ({ uid: d.id, ...d.data() } as UserProfile));
-  } catch {
+  } catch (err) {
+    console.error("[firestore] getAllCompanies failed:", err);
     return [];
   }
 }
 
-// Migration helper: Initialize emailVerified field for profiles missing it
-export async function migrateEmailVerifiedField(): Promise<void> {
+export async function getCompanyByInviteCode(code: string): Promise<Company | null> {
   try {
-    const profiles = await getAllUserProfiles();
-    const updates: Promise<void>[] = [];
-    
-    for (const profile of profiles) {
-      if (profile.emailVerified === undefined) {
-        console.log(`[Migration] Setting emailVerified=false for user ${profile.email}`);
-        updates.push(updateUserProfile(profile.uid, { emailVerified: false }));
-      }
-    }
-    
-    if (updates.length > 0) {
-      await Promise.all(updates);
-      console.log(`[Migration] Updated ${updates.length} user profiles with emailVerified field`);
-    }
-  } catch (error) {
-    console.error('[Migration] Failed to migrate emailVerified field:', error);
-  }
+    const q = query(collection(db, "companies"), where("inviteCode", "==", code));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    const first = snap.docs[0];
+    return { ...first.data(), id: first.id } as Company;
+  } catch { return null; }
 }
 
-export async function createCompany(data: Omit<Company, "id" | "createdAt">): Promise<string> {
-  const ref = await addDoc(collection(db, "companies"), { ...data, createdAt: serverTimestamp() });
-  return ref.id;
-}
-
-export async function updateCompany(id: string, data: Partial<Omit<Company, "id">>): Promise<void> {
-  await updateDoc(doc(db, "companies", id), data);
-}
-
-export async function searchCompaniesByName(q: string): Promise<Company[]> {
+export async function searchCompaniesByName(searchTerm: string): Promise<Company[]> {
   try {
-    const snap = await getDocs(query(collection(db, "companies"), where("status", "==", "active")));
-    return snap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as Company))
-      .filter((c) => c.name.toLowerCase().includes(q.toLowerCase()));
+    const snap = await getDocs(collection(db, "companies"));
+    const all = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Company));
+    const lower = searchTerm.toLowerCase();
+    return all.filter((c) => c.name.toLowerCase().includes(lower));
   } catch { return []; }
 }
 
-export async function getCompanyByInviteCode(code: string): Promise<Company | null> {
+/**
+ * Recalculate and sync company revenue based on existing session records.
+ * Used for data repair/migration.
+ */
+export async function syncCompanyRevenues(): Promise<void> {
   try {
-    const q = query(collection(db, "companies"), where("inviteCode", "==", code.toUpperCase()));
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    const d = snap.docs[0];
-    return { ...d.data(), id: d.id } as Company;
-  } catch { return null; }
+    console.log("🔄 Starting company revenue sync...");
+    
+    // Get all session records
+    const allRecords = await getAllSessionRecords();
+    console.log(`📊 Found ${allRecords.length} session records`);
+    
+    if (allRecords.length > 0) {
+      console.log("🔍 Sample record:", allRecords[0]);
+    }
+    
+    // Group by companyId and calculate totals
+    const revenueByCompany: Record<string, { month: number; total: number }> = {};
+    
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    console.log(`📅 Current month: ${currentMonth}`);
+    
+    allRecords.forEach((record) => {
+      console.log(`Processing record:`, {
+        id: record.id,
+        companyId: record.companyId,
+        totalCharged: record.totalCharged,
+        completedAt: record.completedAt
+      });
+      
+      if (!record.companyId || !record.totalCharged) {
+        console.log(`⚠️ Skipping record ${record.id} - missing companyId or totalCharged`);
+        return;
+      }
+      
+      if (!revenueByCompany[record.companyId]) {
+        revenueByCompany[record.companyId] = { month: 0, total: 0 };
+      }
+      
+      // Add to total revenue
+      revenueByCompany[record.companyId].total += record.totalCharged;
+      
+      // Add to month revenue if it's from current month
+      const recordDate = new Date(record.completedAt);
+      const recordMonth = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
+      console.log(`  📅 Record month: ${recordMonth}, matches current: ${recordMonth === currentMonth}`);
+      
+      if (recordMonth === currentMonth) {
+        revenueByCompany[record.companyId].month += record.totalCharged;
+      }
+    });
+    
+    console.log("💰 Revenue by company:", revenueByCompany);
+    
+    // Update each company
+    const updates = Object.entries(revenueByCompany).map(([companyId, revenue]) => {
+      console.log(`Updating company ${companyId}:`, revenue);
+      return updateDoc(doc(db, "companies", companyId), {
+        monthRevenue: revenue.month,
+        totalRevenue: revenue.total,
+      });
+    });
+    
+    await Promise.all(updates);
+    
+    console.log(`✅ Synced revenues for ${updates.length} companies`);
+  } catch (error) {
+    console.error("❌ Failed to sync company revenues:", error);
+    throw error;
+  }
+}
+
+/**
+ * Normalize company plan fields: converts plan IDs ("company_free") to plan names ("Gratuito").
+ * Run once to migrate legacy data, safe to run multiple times.
+ */
+export async function syncCompanyPlanNames(): Promise<{ fixed: number; total: number }> {
+  const PLAN_ID_TO_NAME: Record<string, string> = {
+    company_free: "Gratuito",
+    company_starter: "Starter",
+    company_business: "Business",
+    company_premium: "Premium",
+  };
+
+  console.log("🔄 Starting company plan name normalization...");
+  const companies = await getAllCompanies();
+  console.log(`📦 Found ${companies.length} companies`);
+
+  let fixed = 0;
+  const updates: Promise<void>[] = [];
+
+  companies.forEach((c) => {
+    const planIdNormalized = PLAN_ID_TO_NAME[c.plan];
+    if (planIdNormalized) {
+      console.log(`  ✏️ ${c.name}: plan "${c.plan}" → "${planIdNormalized}"`);
+      updates.push(updateDoc(doc(db, "companies", c.id), { plan: planIdNormalized }));
+      fixed++;
+    }
+  });
+
+  if (updates.length > 0) {
+    await Promise.all(updates);
+  }
+
+  console.log(`✅ Plan names normalized: ${fixed} companies updated out of ${companies.length}`);
+  return { fixed, total: companies.length };
 }
 
 // ─── Units ────────────────────────────────────────────────────────────────────
@@ -350,11 +414,12 @@ export async function getUnitsByCompany(companyId: string): Promise<Unit[]> {
 }
 
 export async function createUnit(data: Omit<Unit, "id" | "createdAt">): Promise<string> {
-  const ref = await addDoc(collection(db, "units"), { ...stripMeta(data), createdAt: serverTimestamp() });
-  return ref.id;
+  const docRef = doc(collection(db, "units"));
+  await setDoc(docRef, { ...data, createdAt: serverTimestamp() });
+  return docRef.id;
 }
 
-export async function updateUnit(id: string, data: Partial<Omit<Unit, "id">>): Promise<void> {
+export async function updateUnit(id: string, data: Partial<Unit>): Promise<void> {
   await updateDoc(doc(db, "units", id), data);
 }
 
@@ -372,21 +437,13 @@ export async function getTherapistsByCompany(companyId: string): Promise<Therapi
   } catch { return []; }
 }
 
-export async function getTherapist(id: string): Promise<Therapist | null> {
-  try {
-    const snap = await getDoc(doc(db, "therapists", id));
-    if (!snap.exists()) return null;
-    return { ...snap.data(), id } as Therapist;
-  } catch { return null; }
-}
-
 export async function getTherapistByUserId(userId: string): Promise<Therapist | null> {
   try {
     const q = query(collection(db, "therapists"), where("userId", "==", userId));
     const snap = await getDocs(q);
     if (snap.empty) return null;
-    const d = snap.docs[0];
-    return { ...d.data(), id: d.id } as Therapist;
+    const first = snap.docs[0];
+    return { ...first.data(), id: first.id } as Therapist;
   } catch { return null; }
 }
 
@@ -395,82 +452,52 @@ export async function getTherapistByUsername(username: string): Promise<Therapis
     const q = query(collection(db, "therapists"), where("username", "==", username));
     const snap = await getDocs(q);
     if (snap.empty) return null;
-    const d = snap.docs[0];
-    return { ...d.data(), id: d.id } as Therapist;
+    const first = snap.docs[0];
+    return { ...first.data(), id: first.id } as Therapist;
   } catch { return null; }
 }
 
 export async function createTherapist(data: Omit<Therapist, "id" | "createdAt">): Promise<string> {
-  const ref = await addDoc(collection(db, "therapists"), { ...stripMeta(data), createdAt: serverTimestamp() });
-  return ref.id;
+  const docRef = doc(collection(db, "therapists"));
+  await setDoc(docRef, { ...data, createdAt: serverTimestamp() });
+  return docRef.id;
 }
 
-export async function updateTherapist(id: string, data: Partial<Omit<Therapist, "id">>): Promise<void> {
-  // Firestore ignores `undefined` values in updateDoc — they do NOT delete the field.
-  // Convert any explicit `undefined` value to deleteField() so the field is actually removed.
-  const sanitized: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
-    sanitized[k] = v === undefined ? deleteField() : v;
-  }
-  await updateDoc(doc(db, "therapists", id), sanitized);
+export async function updateTherapist(id: string, data: Partial<Therapist>): Promise<void> {
+  await updateDoc(doc(db, "therapists", id), data);
 }
 
 export async function deleteTherapist(id: string): Promise<void> {
   await deleteDoc(doc(db, "therapists", id));
 }
 
-// ─── Therapist Associations ───────────────────────────────────────────────────
+export async function getAllTherapists(): Promise<Therapist[]> {
+  try {
+    const snap = await getDocs(collection(db, "therapists"));
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as Therapist));
+  } catch (err) {
+    console.error("[firestore] getAllTherapists failed:", err);
+    return [];
+  }
+}
+
+// ─── Therapist Association ────────────────────────────────────────────────────
 
 export async function getTherapistAssociation(therapistId: string): Promise<TherapistAssociation | null> {
   try {
     const snap = await getDoc(doc(db, "therapistAssociations", therapistId));
-    if (!snap.exists()) return null;
-    return snap.data() as TherapistAssociation;
+    return snap.exists() ? (snap.data() as TherapistAssociation) : null;
   } catch { return null; }
 }
 
 export async function setTherapistAssociation(data: TherapistAssociation): Promise<void> {
-  await setDoc(doc(db, "therapistAssociations", data.therapistId), data);
+  await setDoc(doc(db, "therapistAssociations", data.therapistId), {
+    ...data,
+    associatedAt: serverTimestamp(),
+  });
 }
 
-// ─── Therapist Catalog ────────────────────────────────────────────────────────
-
-export async function getCatalogByTherapist(therapistId: string): Promise<CatalogItem[]> {
-  try {
-    const q = query(collection(db, "therapistCatalog"), where("therapistId", "==", therapistId));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as CatalogItem));
-  } catch { return []; }
-}
-
-export async function saveCatalogItem(item: CatalogItem): Promise<string> {
-  if (item.id && item.id !== "new") {
-    await setDoc(doc(db, "therapistCatalog", item.id), item);
-    return item.id;
-  }
-  const ref = await addDoc(collection(db, "therapistCatalog"), item);
-  return ref.id;
-}
-
-export async function deleteCatalogItem(id: string): Promise<void> {
-  await deleteDoc(doc(db, "therapistCatalog", id));
-}
-
-// ─── Therapist Availability ───────────────────────────────────────────────────
-
-export async function getAvailability(therapistId: string): Promise<Record<string, string[]> | null> {
-  try {
-    const snap = await getDoc(doc(db, "therapistAvailability", therapistId));
-    if (!snap.exists()) return null;
-    return snap.data() as Record<string, string[]>;
-  } catch { return null; }
-}
-
-export async function setAvailability(therapistId: string, schedule: Record<string, string[]>): Promise<void> {
-  await setDoc(doc(db, "therapistAvailability", therapistId), schedule);
-}
-
-// ─── Clients ─────────────────────────────────────────────────────────────────
+// ─── Clients ──────────────────────────────────────────────────────────────────
 
 export async function getClientsByCompany(companyId: string): Promise<Client[]> {
   try {
@@ -485,18 +512,29 @@ export async function getClientByUserId(userId: string): Promise<Client | null> 
     const q = query(collection(db, "clients"), where("userId", "==", userId));
     const snap = await getDocs(q);
     if (snap.empty) return null;
-    const d = snap.docs[0];
-    return { ...d.data(), id: d.id } as Client;
+    const first = snap.docs[0];
+    return { ...first.data(), id: first.id } as Client;
   } catch { return null; }
 }
 
 export async function createClient(data: Omit<Client, "id" | "createdAt">): Promise<string> {
-  const ref = await addDoc(collection(db, "clients"), { ...stripMeta(data), createdAt: serverTimestamp() });
-  return ref.id;
+  const docRef = doc(collection(db, "clients"));
+  await setDoc(docRef, { ...data, createdAt: serverTimestamp() });
+  return docRef.id;
 }
 
-export async function updateClient(id: string, data: Partial<Omit<Client, "id">>): Promise<void> {
+export async function updateClient(id: string, data: Partial<Client>): Promise<void> {
   await updateDoc(doc(db, "clients", id), data);
+}
+
+export async function getAllClients(): Promise<Client[]> {
+  try {
+    const snap = await getDocs(collection(db, "clients"));
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as Client));
+  } catch (err) {
+    console.error("[firestore] getAllClients failed:", err);
+    return [];
+  }
 }
 
 // ─── Therapies ────────────────────────────────────────────────────────────────
@@ -510,11 +548,12 @@ export async function getTherapiesByCompany(companyId: string): Promise<Therapy[
 }
 
 export async function createTherapy(data: Omit<Therapy, "id" | "createdAt">): Promise<string> {
-  const ref = await addDoc(collection(db, "therapies"), { ...stripMeta(data), createdAt: serverTimestamp() });
-  return ref.id;
+  const docRef = doc(collection(db, "therapies"));
+  await setDoc(docRef, { ...data, createdAt: serverTimestamp() });
+  return docRef.id;
 }
 
-export async function updateTherapy(id: string, data: Partial<Omit<Therapy, "id">>): Promise<void> {
+export async function updateTherapy(id: string, data: Partial<Therapy>): Promise<void> {
   await updateDoc(doc(db, "therapies", id), data);
 }
 
@@ -533,11 +572,12 @@ export async function getRoomsByCompany(companyId: string): Promise<Room[]> {
 }
 
 export async function createRoom(data: Omit<Room, "id" | "createdAt">): Promise<string> {
-  const ref = await addDoc(collection(db, "rooms"), { ...stripMeta(data), createdAt: serverTimestamp() });
-  return ref.id;
+  const docRef = doc(collection(db, "rooms"));
+  await setDoc(docRef, { ...data, createdAt: serverTimestamp() });
+  return docRef.id;
 }
 
-export async function updateRoom(id: string, data: Partial<Omit<Room, "id">>): Promise<void> {
+export async function updateRoom(id: string, data: Partial<Room>): Promise<void> {
   await updateDoc(doc(db, "rooms", id), data);
 }
 
@@ -571,63 +611,67 @@ export async function getAppointmentsByClient(clientId: string): Promise<Appoint
   } catch { return []; }
 }
 
-// ── Real-time subscriptions ───────────────────────────────────────────────────
-
-/** Subscribe to all appointments for a company. Returns an unsubscribe fn. */
-export function subscribeAppointmentsByCompany(
-  companyId: string,
-  callback: (appointments: Appointment[]) => void,
-): () => void {
-  const q = query(collection(db, "appointments"), where("companyId", "==", companyId));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Appointment)));
-  }, () => { /* silently ignore permission errors */ });
-}
-
-/** Subscribe to all appointments for a therapist. Returns an unsubscribe fn. */
-export function subscribeAppointmentsByTherapist(
-  therapistId: string,
-  callback: (appointments: Appointment[]) => void,
-): () => void {
-  const q = query(collection(db, "appointments"), where("therapistId", "==", therapistId));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Appointment)));
-  }, () => { /* silently ignore permission errors */ });
-}
-
-/** Subscribe to all session records for a company. Returns an unsubscribe fn. */
-export function subscribeSessionRecordsByCompany(
-  companyId: string,
-  callback: (records: SessionRecord[]) => void,
-): () => void {
-  const q = query(collection(db, "sessionRecords"), where("companyId", "==", companyId));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ ...d.data(), id: d.id } as SessionRecord)));
-  }, () => { });
-}
-
-/** Subscribe to all session records for a therapist. Returns an unsubscribe fn. */
-export function subscribeSessionRecordsByTherapist(
-  therapistId: string,
-  callback: (records: SessionRecord[]) => void,
-): () => void {
-  const q = query(collection(db, "sessionRecords"), where("therapistId", "==", therapistId));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ ...d.data(), id: d.id } as SessionRecord)));
-  }, () => { });
-}
-
 export async function createAppointment(data: Omit<Appointment, "id" | "createdAt">): Promise<string> {
-  const ref = await addDoc(collection(db, "appointments"), { ...stripMeta(data), createdAt: serverTimestamp() });
-  return ref.id;
+  const docRef = doc(collection(db, "appointments"));
+  await setDoc(docRef, { ...data, createdAt: serverTimestamp() });
+  return docRef.id;
 }
 
-export async function updateAppointment(id: string, data: Partial<Omit<Appointment, "id">>): Promise<void> {
+export async function updateAppointment(id: string, data: Partial<Appointment>): Promise<void> {
   await updateDoc(doc(db, "appointments", id), data);
 }
 
-export async function deleteAppointment(id: string): Promise<void> {
-  await deleteDoc(doc(db, "appointments", id));
+export function subscribeAppointmentsByCompany(
+  companyId: string,
+  callback: (appointments: Appointment[]) => void
+): Unsubscribe {
+  const q = query(collection(db, "appointments"), where("companyId", "==", companyId));
+  return onSnapshot(q, (snap) => {
+    const appointments = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Appointment));
+    callback(appointments);
+  });
+}
+
+export function subscribeAppointmentsByTherapist(
+  therapistId: string,
+  callback: (appointments: Appointment[]) => void
+): Unsubscribe {
+  const q = query(collection(db, "appointments"), where("therapistId", "==", therapistId));
+  return onSnapshot(q, (snap) => {
+    const appointments = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Appointment));
+    callback(appointments);
+  });
+}
+
+// ─── Catalog (Autonomous Therapist) ───────────────────────────────────────────
+
+export async function getCatalogByTherapist(therapistId: string): Promise<CatalogItem[]> {
+  try {
+    const q = query(collection(db, "catalog"), where("therapistId", "==", therapistId));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as CatalogItem));
+  } catch { return []; }
+}
+
+export async function saveCatalogItem(data: Omit<CatalogItem, "createdAt">): Promise<void> {
+  await setDoc(doc(db, "catalog", data.id), { ...data, createdAt: serverTimestamp() });
+}
+
+export async function deleteCatalogItem(id: string): Promise<void> {
+  await deleteDoc(doc(db, "catalog", id));
+}
+
+// ─── Availability ─────────────────────────────────────────────────────────────
+
+export async function getAvailability(therapistId: string): Promise<Record<string, string[]>> {
+  try {
+    const snap = await getDoc(doc(db, "availability", therapistId));
+    return snap.exists() ? (snap.data() as Record<string, string[]>) : {};
+  } catch { return {}; }
+}
+
+export async function setAvailability(therapistId: string, schedule: Record<string, string[]>): Promise<void> {
+  await setDoc(doc(db, "availability", therapistId), schedule);
 }
 
 // ─── Session Records ──────────────────────────────────────────────────────────
@@ -648,6 +692,13 @@ export async function getSessionRecordsByCompany(companyId: string): Promise<Ses
   } catch { return []; }
 }
 
+export async function getAllSessionRecords(): Promise<SessionRecord[]> {
+  try {
+    const snap = await getDocs(collection(db, "sessionRecords"));
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as SessionRecord));
+  } catch { return []; }
+}
+
 export async function createSessionRecord(data: Omit<SessionRecord, "createdAt">): Promise<void> {
   await setDoc(doc(db, "sessionRecords", data.id), { ...data, createdAt: serverTimestamp() });
 }
@@ -657,6 +708,28 @@ export async function markSessionRecordsPaid(ids: string[]): Promise<void> {
   await Promise.all(
     ids.map((id) => updateDoc(doc(db, "sessionRecords", id), { paidByCompany: true }))
   );
+}
+
+export function subscribeSessionRecordsByCompany(
+  companyId: string,
+  callback: (records: SessionRecord[]) => void
+): Unsubscribe {
+  const q = query(collection(db, "sessionRecords"), where("companyId", "==", companyId));
+  return onSnapshot(q, (snap) => {
+    const records = snap.docs.map((d) => ({ ...d.data(), id: d.id } as SessionRecord));
+    callback(records);
+  });
+}
+
+export function subscribeSessionRecordsByTherapist(
+  therapistId: string,
+  callback: (records: SessionRecord[]) => void
+): Unsubscribe {
+  const q = query(collection(db, "sessionRecords"), where("therapistId", "==", therapistId));
+  return onSnapshot(q, (snap) => {
+    const records = snap.docs.map((d) => ({ ...d.data(), id: d.id } as SessionRecord));
+    callback(records);
+  });
 }
 
 // ─── Room Assignments ─────────────────────────────────────────────────────────
@@ -674,8 +747,16 @@ export async function getRoomAssignmentsByCompany(companyId: string): Promise<Re
   } catch { return {}; }
 }
 
-export async function setRoomAssignment(appointmentId: string, roomId: string, companyId: string): Promise<void> {
-  await setDoc(doc(db, "roomAssignments", appointmentId), { appointmentId, roomId, companyId });
+export async function setRoomAssignment(
+  companyId: string,
+  appointmentId: string,
+  roomId: string
+): Promise<void> {
+  await setDoc(doc(db, "roomAssignments", appointmentId), {
+    companyId,
+    appointmentId,
+    roomId,
+  });
 }
 
 export async function deleteRoomAssignment(appointmentId: string): Promise<void> {
@@ -691,71 +772,109 @@ export async function getCompletedSessionIds(companyId: string): Promise<Set<str
   } catch { return new Set(); }
 }
 
-// ─── Plans ────────────────────────────────────────────────────────────────────
-// Collections: "companyPlans" and "therapistPlans"
-// Each document ID = plan.id (deterministic, enables safe upserts)
+// ─── Notification State ───────────────────────────────────────────────────────
 
-// -- Company Plans --
+export interface NotificationState {
+  readIds: string[];
+  dismissedIds: string[];
+}
+
+export async function getNotificationState(userId: string): Promise<NotificationState> {
+  try {
+    const snap = await getDoc(doc(db, "notificationStates", userId));
+    return snap.exists() 
+      ? (snap.data() as NotificationState) 
+      : { readIds: [], dismissedIds: [] };
+  } catch {
+    return { readIds: [], dismissedIds: [] };
+  }
+}
+
+export async function saveNotificationState(userId: string, state: NotificationState): Promise<void> {
+  await setDoc(doc(db, "notificationStates", userId), state);
+}
+
+// ─── Plans ────────────────────────────────────────────────────────────────────
+
+export interface CompanyPlan {
+  id: string;
+  name: string;
+  price: number;
+  color: string;
+  badge: string;
+  description: string;
+  modules: string[];
+  limits: {
+    therapists: number | null;
+    clients: number | null;
+    units: number | null;
+  };
+  isDefault: boolean;
+  isActive: boolean;
+  order: number;
+}
+
+export interface TherapistPlan {
+  id: string;
+  name: string;
+  price: number;
+  color: string;
+  badge: string;
+  description: string;
+  appointmentsPerMonth: number | null;
+  isDefault: boolean;
+  isActive: boolean;
+  order: number;
+}
 
 export async function getCompanyPlans(): Promise<CompanyPlan[]> {
   try {
-    const snap = await getDocs(query(collection(db, "companyPlans"), orderBy("order")));
+    const snap = await getDocs(collection(db, "companyPlans"));
     return snap.docs.map((d) => ({ ...d.data(), id: d.id } as CompanyPlan));
   } catch { return []; }
 }
 
+export async function getTherapistPlans(): Promise<TherapistPlan[]> {
+  try {
+    const snap = await getDocs(collection(db, "therapistPlans"));
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as TherapistPlan));
+  } catch { return []; }
+}
+
 export async function setCompanyPlan(plan: CompanyPlan): Promise<void> {
-  const { id, ...data } = plan;
-  await setDoc(doc(db, "companyPlans", id), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+  await setDoc(doc(db, "companyPlans", plan.id), plan);
+}
+
+export async function setTherapistPlan(plan: TherapistPlan): Promise<void> {
+  await setDoc(doc(db, "therapistPlans", plan.id), plan);
 }
 
 export async function deleteCompanyPlan(id: string): Promise<void> {
   await deleteDoc(doc(db, "companyPlans", id));
 }
 
-export async function deleteAllCompanyPlans(): Promise<void> {
-  const snap = await getDocs(collection(db, "companyPlans"));
-  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
-}
-
-// -- Therapist Plans --
-
-export async function getTherapistPlans(): Promise<TherapistPlan[]> {
-  try {
-    const snap = await getDocs(query(collection(db, "therapistPlans"), orderBy("order")));
-    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as TherapistPlan));
-  } catch { return []; }
-}
-
-export async function setTherapistPlan(plan: TherapistPlan): Promise<void> {
-  const { id, ...data } = plan;
-  await setDoc(doc(db, "therapistPlans", id), { ...data, updatedAt: serverTimestamp() }, { merge: true });
-}
-
 export async function deleteTherapistPlan(id: string): Promise<void> {
   await deleteDoc(doc(db, "therapistPlans", id));
 }
-
-export async function deleteAllTherapistPlans(): Promise<void> {
-  const snap = await getDocs(collection(db, "therapistPlans"));
-  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
-}
-
-// -- Seed (reset + recreate defaults) --
 
 export async function seedDefaultPlans(
   companyPlans: CompanyPlan[],
   therapistPlans: TherapistPlan[]
 ): Promise<void> {
-  await Promise.all([deleteAllCompanyPlans(), deleteAllTherapistPlans()]);
-  await Promise.all([
-    ...companyPlans.map(setCompanyPlan),
-    ...therapistPlans.map(setTherapistPlan),
-  ]);
+  const batch = [];
+  
+  for (const plan of companyPlans) {
+    batch.push(setCompanyPlan(plan));
+  }
+  
+  for (const plan of therapistPlans) {
+    batch.push(setTherapistPlan(plan));
+  }
+  
+  await Promise.all(batch);
 }
 
 // ─── Platform Settings ────────────────────────────────────────────────────────
-// Single document: settings/platform
 
 export interface PlatformSettings {
   platformName: string;
@@ -773,56 +892,16 @@ export interface PlatformSettings {
   updatedAt?: Timestamp;
 }
 
-const SETTINGS_DOC = doc(db, "settings", "platform");
-
 export async function getPlatformSettings(): Promise<PlatformSettings | null> {
   try {
-    const snap = await getDoc(SETTINGS_DOC);
-    if (!snap.exists()) return null;
-    return snap.data() as PlatformSettings;
+    const snap = await getDoc(doc(db, "platformSettings", "global"));
+    return snap.exists() ? (snap.data() as PlatformSettings) : null;
   } catch { return null; }
 }
 
-export async function savePlatformSettings(data: Omit<PlatformSettings, "updatedAt">): Promise<void> {
-  await setDoc(SETTINGS_DOC, { ...data, updatedAt: serverTimestamp() }, { merge: true });
-}
-
-// ─── Notification State ───────────────────────────────────────────────────────
-// Document per user: notificationStates/{uid}
-// Stores which notification IDs have been read or dismissed.
-
-export interface NotificationState {
-  readIds: string[];
-  dismissedIds: string[];
-}
-
-/** Load the persisted notification state for a user. Returns empty sets if none. */
-export async function getNotificationState(uid: string): Promise<NotificationState> {
-  try {
-    const snap = await getDoc(doc(db, "notificationStates", uid));
-    if (!snap.exists()) return { readIds: [], dismissedIds: [] };
-    const data = snap.data() as Partial<NotificationState>;
-    return {
-      readIds:      data.readIds      ?? [],
-      dismissedIds: data.dismissedIds ?? [],
-    };
-  } catch {
-    return { readIds: [], dismissedIds: [] };
-  }
-}
-
-/** Persist the notification state for a user (merge so partial updates are safe). */
-export async function saveNotificationState(
-  uid: string,
-  state: NotificationState,
-): Promise<void> {
-  try {
-    await setDoc(
-      doc(db, "notificationStates", uid),
-      state,
-      { merge: true },
-    );
-  } catch {
-    // Non-critical — silently swallow write failures
-  }
+export async function savePlatformSettings(settings: Omit<PlatformSettings, "updatedAt">): Promise<void> {
+  await setDoc(doc(db, "platformSettings", "global"), {
+    ...settings,
+    updatedAt: serverTimestamp(),
+  });
 }

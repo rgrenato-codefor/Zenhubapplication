@@ -46,8 +46,21 @@ export default function AdminUsers() {
   };
 
   // Build a unified user list from real Firestore data:
-  // therapists + clients (company admins aren't stored as separate users in Firestore client SDK)
+  // therapists + clients + company admins (from userProfiles)
+  const companyAdmins = userProfiles
+    .filter((p) => p.role === "company_admin")
+    .map((p) => ({
+      id: p.uid,
+      userId: p.uid,
+      name: p.name,
+      email: p.email,
+      role: "company_admin" as const,
+      companyId: p.companyId,
+      status: "active" as const,
+    }));
+
   const allUsers = [
+    ...companyAdmins,
     ...allAdminTherapists.map((t) => ({
       id: t.id,
       userId: t.userId,
@@ -99,7 +112,7 @@ export default function AdminUsers() {
           <p className="text-gray-400 text-sm mt-0.5">
             {loading
               ? "Carregando..."
-              : `${allAdminTherapists.length} profissionais · ${allAdminClients.length} clientes`}
+              : `${companyAdmins.length} admins · ${allAdminTherapists.length} profissionais · ${allAdminClients.length} clientes`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -134,7 +147,7 @@ export default function AdminUsers() {
           />
         </div>
         <div className="flex gap-2 flex-wrap">
-          {["all", "therapist", "client"].map((r) => (
+          {["all", "company_admin", "therapist", "client"].map((r) => (
             <button
               key={r}
               onClick={() => setRoleFilter(r)}

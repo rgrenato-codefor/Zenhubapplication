@@ -228,20 +228,23 @@ export default function CompanySchedule() {
     if (!price || isNaN(Number(price))) { setAptError("Informe o valor."); return; }
 
     // ── Conflict & availability check ──────────────────────────────────────
-    const selectedT = therapists.find((t) => t.id === newApt.therapistId);
-    const { blocked, warn, message } = checkAppointmentConflicts({
-      existing: storeAppointments,
-      availability: (selectedT as any)?.schedule,
-      therapistId: newApt.therapistId,
-      date: newApt.date,
-      time: newApt.time,
-      duration: Number(duration),
-    });
-    if (blocked) { setAptError(message); return; }
-    if (warn && aptError !== message) {
-      // Show warning once — user must click again to confirm
-      setAptError("⚠️ " + message + " Clique em Confirmar novamente para agendar mesmo assim.");
-      return;
+    // Skip validation for "avulso" (generic therapist)
+    if (newApt.therapistId !== "avulso") {
+      const selectedT = therapists.find((t) => t.id === newApt.therapistId);
+      const { blocked, warn, message } = checkAppointmentConflicts({
+        existing: storeAppointments,
+        availability: (selectedT as any)?.schedule,
+        therapistId: newApt.therapistId,
+        date: newApt.date,
+        time: newApt.time,
+        duration: Number(duration),
+      });
+      if (blocked) { setAptError(message); return; }
+      if (warn && aptError !== message) {
+        // Show warning once — user must click again to confirm
+        setAptError("⚠️ " + message + " Clique em Confirmar novamente para agendar mesmo assim.");
+        return;
+      }
     }
     // ──────────────────────────────────────────────────────────────────────
 
@@ -293,17 +296,17 @@ export default function CompanySchedule() {
   const openClosure = (apt: any) => {
     const cl = clients.find((c) => c.id === apt.clientId);
     const therapy = therapies.find((t) => t.id === apt.therapyId);
-    const therapist = therapists.find((t) => t.id === apt.therapistId);
+    const therapist = apt.therapistId === "avulso" ? null : therapists.find((t) => t.id === apt.therapistId);
     // Real mode: commission comes from the therapist record in Firestore (set by
     // the company via mutateUpdateTherapistCommission / mutateApproveAssociation).
     // Demo mode: fall back to the in-memory association store.
-    const assoc = tStore.getAssociation(apt.therapistId);
+    const assoc = apt.therapistId === "avulso" ? { commission: 0 } : tStore.getAssociation(apt.therapistId);
     const commissionPct = therapist?.commission ?? assoc.commission;
     setClosureModal({
       apt,
       clientName: cl?.name ?? "Cliente",
       therapyName: therapy?.name ?? "Terapia",
-      therapistName: therapist?.name ?? "Terapeuta",
+      therapistName: apt.therapistId === "avulso" ? "Avulso" : (therapist?.name ?? "Terapeuta"),
       commissionPct,
     });
     setExtraCharge(0);
@@ -351,11 +354,11 @@ export default function CompanySchedule() {
   const openCancel = (apt: any) => {
     const cl        = clients.find((c) => c.id === apt.clientId);
     const therapy   = therapies.find((t) => t.id === apt.therapyId);
-    const therapist = therapists.find((t) => t.id === apt.therapistId);
+    const therapist = apt.therapistId === "avulso" ? null : therapists.find((t) => t.id === apt.therapistId);
     setCancelModal({
       apt,
       clientName:    cl?.name        ?? apt.clientName   ?? "Cliente",
-      therapistName: therapist?.name ?? "Terapeuta",
+      therapistName: apt.therapistId === "avulso" ? "Avulso" : (therapist?.name ?? "Terapeuta"),
       therapyName:   therapy?.name   ?? apt.therapyName  ?? "Terapia",
     });
   };
@@ -543,7 +546,7 @@ export default function CompanySchedule() {
                 {weekDays.map((day) => {
                   const apt = companyAppointments.find((a) => a.date === day.date && a.time === hour);
                   const cl = apt ? companyClients.find((c) => c.id === apt.clientId) : null;
-                  const therapist = apt ? companyTherapists.find((t) => t.id === apt.therapistId) : null;
+                  const therapist = apt && apt.therapistId !== "avulso" ? companyTherapists.find((t) => t.id === apt.therapistId) : null;
                   const st = apt ? statusConfig[getEffectiveStatus(apt)] : null;
                   return (
                     <div
@@ -558,7 +561,7 @@ export default function CompanySchedule() {
                           style={{ background: st.bg, color: st.color }}
                         >
                           <p style={{ fontWeight: 600 }} className="truncate">{cl?.name}</p>
-                          <p className="opacity-70 truncate">{therapist?.name.split(" ")[0]}</p>
+                          <p className="opacity-70 truncate">{apt.therapistId === "avulso" ? "Avulso" : therapist?.name.split(" ")[0]}</p>
                         </button>
                       )}
                     </div>
@@ -586,7 +589,7 @@ export default function CompanySchedule() {
               <p className="text-gray-400 text-sm text-center py-8">Nenhuma sessão neste dia</p>
             ) : (
               dayAppointments(selectedDay).map((apt: any) => {
-                const therapist = companyTherapists.find((t) => t.id === apt.therapistId);
+                const therapist = apt.therapistId === "avulso" ? null : companyTherapists.find((t) => t.id === apt.therapistId);
                 const cl = companyClients.find((c) => c.id === apt.clientId);
                 const therapy = therapies.find((th) => th.id === apt.therapyId);
                 const effectiveStatus = getEffectiveStatus(apt);
@@ -607,7 +610,7 @@ export default function CompanySchedule() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-900" style={{ fontWeight: 600 }}>{cl?.name}</p>
                       <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                        <p className="text-xs text-gray-500">{therapy?.name} · {therapist?.name}</p>
+                        <p className="text-xs text-gray-500">{therapy?.name} · {apt.therapistId === "avulso" ? "Avulso" : therapist?.name}</p>
                         {room && (
                           <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md" style={{ background: `${room.color}15`, color: room.color, fontWeight: 600 }}>
                             <DoorOpen className="w-3 h-3" />{room.name}
@@ -1056,9 +1059,13 @@ export default function CompanySchedule() {
                   onChange={(e) => setApt("therapistId", e.target.value)}
                 >
                   <option value="">Selecione o terapeuta...</option>
-                  {therapists.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
+                  {therapists.length === 0 ? (
+                    <option value="avulso">Avulso</option>
+                  ) : (
+                    therapists.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))
+                  )}
                 </select>
               </div>
 

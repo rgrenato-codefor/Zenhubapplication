@@ -4,35 +4,50 @@ import {
   LayoutDashboard, Users, Sparkles, CalendarDays, UserCircle,
   DollarSign, BarChart3, Settings, LogOut, Menu, X, Bell,
   ChevronDown, ChevronRight, DoorOpen, MapPin, Check, Building2,
-  UserCircle as UserIcon,
+  UserCircle as UserIcon, Lock,
 } from "../shared/icons";
 import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { CompanyProvider, useCompanyUnit } from "../../context/CompanyContext";
 import { ZenHubLogo } from "../shared/ZenHubLogo";
+import { useCompanyPlan } from "../../hooks/useCompanyPlan";
+import type { ModuleKey } from "../../lib/planConfig";
+
+// ── Module map: route → module key ──────────────────────────────────────────
+
+const ROUTE_MODULE_MAP: Record<string, ModuleKey> = {
+  "/empresa/agenda":      "schedule",
+  "/empresa/clientes":    "clients",
+  "/empresa/terapeutas":  "therapists_multi",
+  "/empresa/salas":       "rooms",
+  "/empresa/terapias":    "services",
+  "/empresa/vendas":      "sales",
+  "/empresa/comissoes":   "commissions",
+  "/empresa/relatorios":  "reports_basic",
+};
 
 // ── Dashboard sub-items ──────────────────────────────────────────────────────
 
 const dashboardChildren = [
-  { path: "/empresa",            label: "Painel Geral",  end: true },
-  { path: "/empresa/vendas",     label: "Vendas" },
-  { path: "/empresa/comissoes",  label: "Comissões" },
-  { path: "/empresa/relatorios", label: "Relatórios" },
+  { path: "/empresa",            label: "Painel Geral",  end: true,  module: "dashboard"      as ModuleKey },
+  { path: "/empresa/vendas",     label: "Vendas",                    module: "sales"          as ModuleKey },
+  { path: "/empresa/comissoes",  label: "Comissões",                 module: "commissions"    as ModuleKey },
+  { path: "/empresa/relatorios", label: "Relatórios",                module: "reports_basic"  as ModuleKey },
 ];
 
 // ── Flat nav items ───────────────────────────────────────────────────────────
 
 const getFlatItems = (role: string) => {
   const base = [
-    { path: "/empresa/agenda",       icon: CalendarDays, label: "Agenda" },
-    { path: "/empresa/clientes",     icon: UserCircle,   label: "Clientes" },
-    { path: "/empresa/terapeutas",   icon: Users,        label: "Profissionais" },
-    { path: "/empresa/salas",        icon: DoorOpen,     label: "Salas" },
-    { path: "/empresa/terapias",     icon: Sparkles,     label: "Terapias" },
+    { path: "/empresa/agenda",     icon: CalendarDays, label: "Agenda",        module: "schedule"         as ModuleKey },
+    { path: "/empresa/clientes",   icon: UserCircle,   label: "Clientes",      module: "clients"          as ModuleKey },
+    { path: "/empresa/terapeutas", icon: Users,        label: "Profissionais", module: "therapists_multi" as ModuleKey },
+    { path: "/empresa/salas",      icon: DoorOpen,     label: "Salas",         module: "rooms"            as ModuleKey },
+    { path: "/empresa/terapias",   icon: Sparkles,     label: "Terapias",      module: "services"         as ModuleKey },
   ];
   if (role === "company_admin") {
-    return [...base, { path: "/empresa/configuracoes", icon: Settings, label: "Configurações" }];
+    return [...base, { path: "/empresa/configuracoes", icon: Settings, label: "Configurações", module: null as any }];
   }
   return base;
 };
@@ -131,6 +146,9 @@ function CompanyLayoutInner() {
   const primaryColor = company?.color || "#0D9488";
   const flatItems = getFlatItems(user?.role ?? "sales");
 
+  // ── Plan enforcement ────────────────────────────────────────────────────────
+  const { hasModule, planConfig } = useCompanyPlan(company?.plan);
+
   const dashActive = dashboardChildren.some((c) =>
     c.end ? location.pathname === c.path : location.pathname.startsWith(c.path)
   );
@@ -194,23 +212,38 @@ function CompanyLayoutInner() {
 
               {dashOpen && (
                 <div className="ml-3 mt-0.5 border-l-2 pl-3 space-y-0.5" style={{ borderColor: `${primaryColor}40` }}>
-                  {dashboardChildren.map((item) => (
-                    <NavLink
-                      key={item.path}
-                      to={item.path}
-                      end={item.end}
-                      className={({ isActive }) =>
-                        `flex items-center px-2 py-2 rounded-lg text-sm transition-colors ${
-                          isActive ? "text-white" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                        }`
-                      }
-                      style={({ isActive }) =>
-                        isActive ? { background: primaryColor, fontWeight: 600 } : {}
-                      }
-                    >
-                      {item.label}
-                    </NavLink>
-                  ))}
+                  {dashboardChildren.map((item) => {
+                    const locked = item.module && !hasModule(item.module);
+                    if (locked) {
+                      return (
+                        <div
+                          key={item.path}
+                          className="flex items-center justify-between px-2 py-2 rounded-lg text-sm text-gray-300 cursor-not-allowed select-none"
+                          title={`Disponível a partir do plano Starter`}
+                        >
+                          <span>{item.label}</span>
+                          <Lock className="w-3 h-3 text-gray-300 shrink-0" />
+                        </div>
+                      );
+                    }
+                    return (
+                      <NavLink
+                        key={item.path}
+                        to={item.path}
+                        end={item.end}
+                        className={({ isActive }) =>
+                          `flex items-center px-2 py-2 rounded-lg text-sm transition-colors ${
+                            isActive ? "text-white" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                          }`
+                        }
+                        style={({ isActive }) =>
+                          isActive ? { background: primaryColor, fontWeight: 600 } : {}
+                        }
+                      >
+                        {item.label}
+                      </NavLink>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -231,23 +264,68 @@ function CompanyLayoutInner() {
           <div className="h-px bg-gray-100 my-1" />
 
           {/* ── Flat items ────────────────────────────────────────────────── */}
-          {flatItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                  isActive ? "text-white" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                }`
-              }
-              style={({ isActive }) =>
-                isActive ? { background: primaryColor } : {}
-              }
+          {flatItems.map((item) => {
+            const locked = item.module && !hasModule(item.module);
+
+            if (locked) {
+              return (
+                <div
+                  key={item.path}
+                  title={`Disponível a partir do plano Starter — plano atual: ${planConfig?.name}`}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 cursor-not-allowed select-none"
+                >
+                  <item.icon className="w-5 h-5 shrink-0 text-gray-300" />
+                  {sidebarOpen && (
+                    <div className="flex items-center justify-between flex-1 min-w-0">
+                      <span className="text-sm truncate">{item.label}</span>
+                      <Lock className="w-3.5 h-3.5 shrink-0 ml-1" />
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                    isActive ? "text-white" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                  }`
+                }
+                style={({ isActive }) =>
+                  isActive ? { background: primaryColor } : {}
+                }
+              >
+                <item.icon className="w-5 h-5 shrink-0" />
+                {sidebarOpen && <span className="text-sm">{item.label}</span>}
+              </NavLink>
+            );
+          })}
+
+          {/* ── Plan badge ────────────────────────────────────────────────── */}
+          {sidebarOpen && planConfig && (
+            <div
+              className="mt-3 mx-1 rounded-xl p-3 border"
+              style={{
+                background: `${planConfig.color}0D`,
+                borderColor: `${planConfig.color}25`,
+              }}
             >
-              <item.icon className="w-5 h-5 shrink-0" />
-              {sidebarOpen && <span className="text-sm">{item.label}</span>}
-            </NavLink>
-          ))}
+              <div className="flex items-center gap-2">
+                <span className="text-base">{planConfig.badge}</span>
+                <div className="min-w-0">
+                  <p className="text-xs truncate" style={{ color: planConfig.color, fontWeight: 700 }}>
+                    Plano {planConfig.name}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate">
+                    {planConfig.price === 0 ? "Gratuito" : `R$ ${planConfig.price}/mês`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </nav>
 
         {/* User */}
@@ -393,7 +471,7 @@ function CompanyLayoutInner() {
         </header>
 
         <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
-          <Outlet />
+          <Outlet context={{ planConfig, hasModule }} />
         </main>
       </div>
     </div>

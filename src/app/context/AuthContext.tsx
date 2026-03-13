@@ -149,6 +149,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const recoverProfileFromSubCollections = useCallback(
     async (uid: string, email: string): Promise<import("../../lib/firestore").UserProfile | null> => {
       try {
+        // First check if this is a super admin by checking known admin emails
+        const SUPER_ADMIN_EMAILS = [
+          "admin@zenhub.online",
+          "superadmin@zenhub.online",
+          "renato@xp-solucoes.com.br",
+        ];
+        
+        if (email && SUPER_ADMIN_EMAILS.includes(email.toLowerCase())) {
+          const recovered = {
+            uid,
+            name: "Super Admin",
+            email: email,
+            role: "super_admin" as UserRole,
+          };
+          await createUserProfile(uid, recovered);
+          console.info("[AuthContext] Recovered missing profile as super_admin for uid:", uid);
+          return recovered;
+        }
+
         const [therapist, client] = await Promise.all([
           getTherapistByUserId(uid),
           getClientByUserId(uid),
@@ -336,8 +355,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ─── registerCompany ──────────────────────────────────────────────────────
 
   const registerCompany = useCallback(async (params: RegisterCompanyParams): Promise<void> => {
-    // plan is passed by name directly (e.g. "Business", "Premium") from the registration form
-    const plan = params.plan || "Business";
+    // plan is passed by name directly (e.g. "Gratuito", "Business", "Premium") from the registration form
+    const plan = params.plan || "Gratuito";
 
     // Tell the onAuthStateChanged listener to skip the next event so we can
     // set the user ourselves after all Firestore writes complete.

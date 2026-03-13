@@ -10,7 +10,7 @@ import {
 import { useData } from "../../context/DataContext";
 import {
   DEFAULT_COMPANY_PLANS, DEFAULT_THERAPIST_PLANS,
-  companyPlanMRR,
+  companyPlanMRR, normalizePlanName,
 } from "../../lib/planConfig";
 
 const PIE_COLORS = ["#6B7280", "#3B82F6", "#8B5CF6", "#F59E0B", "#10B981", "#EC4899"];
@@ -42,7 +42,8 @@ function TabGeral({
   const planDist = useMemo(() => {
     const counts: Record<string, number> = {};
     companies.forEach((c) => {
-      const key = c.plan || "Gratuito";
+      // Normalize plan key: "company_free" → "Gratuito"
+      const key = normalizePlanName(c.plan || "Gratuito");
       counts[key] = (counts[key] || 0) + 1;
     });
     return Object.entries(counts).map(([name, value], i) => ({
@@ -171,8 +172,8 @@ function TabGeral({
                       </div>
                     </td>
                     <td className="py-3 pr-4">
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${planColors[c.plan] || planColors.Gratuito}`}>
-                        {c.plan || "Gratuito"}
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${planColors[normalizePlanName(c.plan)] || planColors.Gratuito}`}>
+                        {normalizePlanName(c.plan) || "Gratuito"}
                       </span>
                     </td>
                     <td className="py-3 pr-4 text-sm text-gray-300">{c.therapistsCount || 0}</td>
@@ -203,6 +204,44 @@ function TabPlataforma({
   therapists: ReturnType<typeof useData>["allAdminTherapists"];
   loading: boolean;
 }) {
+  const [syncing, setSyncing] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const { refresh } = useData();
+  
+  const handleSyncRevenues = async () => {
+    console.log("🚀 Sync button clicked");
+    setSyncing(true);
+    try {
+      console.log("📦 Importing syncCompanyRevenues...");
+      const { syncCompanyRevenues } = await import("../../../lib/firestore");
+      console.log("✅ Import successful, calling function...");
+      await syncCompanyRevenues();
+      console.log("✅ Sync completed, refreshing data...");
+      refresh();
+      alert("✅ Receitas sincronizadas com sucesso!");
+    } catch (error) {
+      console.error("❌ Erro ao sincronizar receitas:", error);
+      alert("❌ Erro ao sincronizar receitas. Verifique o console.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleMigratePlans = async () => {
+    setMigrating(true);
+    try {
+      const { syncCompanyPlanNames } = await import("../../../lib/firestore");
+      const result = await syncCompanyPlanNames();
+      refresh();
+      alert(`✅ Migração concluída! ${result.fixed} empresa(s) atualizada(s) de ${result.total} total.`);
+    } catch (error) {
+      console.error("❌ Erro ao migrar planos:", error);
+      alert("❌ Erro ao migrar planos. Verifique o console.");
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   // MRR from companies (subscription fees paid to ZEN HUB)
   const companyMRR = useMemo(
     () => companies.reduce((s, c) => s + companyPlanMRR(c.plan), 0),
@@ -230,8 +269,9 @@ function TabPlataforma({
   const companyPlanRevenue = useMemo(() => {
     const breakdown: Record<string, { count: number; mrr: number }> = {};
     companies.forEach((c) => {
-      const key = c.plan || "Gratuito";
-      const price = companyPlanMRR(key);
+      // Normalize: handles both plan IDs ("company_free") and names ("Gratuito")
+      const key = normalizePlanName(c.plan || "Gratuito");
+      const price = companyPlanMRR(c.plan || "Gratuito");
       if (!breakdown[key]) breakdown[key] = { count: 0, mrr: 0 };
       breakdown[key].count++;
       breakdown[key].mrr += price;
@@ -299,13 +339,30 @@ function TabPlataforma({
       {/* Aviso: receita operacional vs plataforma */}
       <div className="bg-violet-900/20 border border-violet-700/40 rounded-xl p-4 flex items-start gap-3">
         <CreditCard className="w-4 h-4 text-violet-400 mt-0.5 shrink-0" />
-        <div>
+        <div className="flex-1">
           <p className="text-violet-300 text-sm" style={{ fontWeight: 600 }}>Dois tipos de receita no ZEN HUB</p>
           <p className="text-violet-300/70 text-xs mt-0.5">
             <strong className="text-violet-300">Receita da Plataforma (MRR)</strong> — o que empresas e profissionais pagam ao ZEN HUB pelas assinaturas de planos. &nbsp;|&nbsp;
             <strong className="text-violet-300">Receita Operacional</strong> — o que as empresas movimentam com seus clientes (R$ {operationalMRR.toLocaleString("pt-BR")}/mês no total).
           </p>
         </div>
+        <button
+          onClick={handleSyncRevenues}
+          disabled={syncing || migrating}
+          className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-600 text-white text-xs rounded-lg transition-colors shrink-0"
+          style={{ fontWeight: 600 }}
+        >
+          {syncing ? "Sincronizando..." : "🔄 Sincronizar Receitas"}
+        </button>
+        <button
+          onClick={handleMigratePlans}
+          disabled={syncing || migrating}
+          title="Converte IDs de plano (ex: company_free) para nomes (ex: Gratuito) no Firestore"
+          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white text-xs rounded-lg transition-colors shrink-0"
+          style={{ fontWeight: 600 }}
+        >
+          {migrating ? "Migrando..." : "🔧 Migrar Planos"}
+        </button>
       </div>
 
       {/* Breakdown por plano — empresas */}

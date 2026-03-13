@@ -13,6 +13,8 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
+import { useCompanyPlan } from "../../hooks/useCompanyPlan";
+import { PlanGate } from "../../components/shared/PlanGate";
 
 type Tab = "earnings" | "settings";
 type PayStatus = "pending" | "paid";
@@ -75,6 +77,11 @@ export default function CompanyCommissions() {
   const navigate = useNavigate();
   const primaryColor = company?.color || "#0D9488";
   const companyId = user?.companyId ?? "";
+
+  const { planConfig, hasModule } = useCompanyPlan(company?.plan);
+  if (!hasModule("commissions")) {
+    return <PlanGate module="commissions" planConfig={planConfig} primaryColor={primaryColor} />;
+  }
 
   const [tab, setTab] = useState<Tab>("earnings");
   const [monthIdx, setMonthIdx] = useState(MONTHS.length - 1); // Mar 2026

@@ -108,7 +108,8 @@ export default function CompanyRegister() {
         // Auto-select: prefer the paid plan in the middle, else first active plan
         const paid = active.filter((p) => p.price > 0);
         const recommended = paid[Math.floor(paid.length / 2)] ?? active[0];
-        if (recommended) setForm((prev) => ({ ...prev, plan: recommended.id }));
+        // Store plan NAME (e.g. "Gratuito") not plan ID (e.g. "company_free")
+        if (recommended) setForm((prev) => ({ ...prev, plan: recommended.name }));
       } finally {
         setPlansLoading(false);
       }
@@ -734,7 +735,7 @@ export default function CompanyRegister() {
                     </div>
                   ) : (
                     plans.map((plan, idx) => {
-                      const selected = form.plan === plan.id;
+                      const selected = form.plan === plan.id || form.plan === plan.name;
                       // "Recommended" badge for the middle paid plan
                       const paidPlans = plans.filter((p) => p.price > 0);
                       const midIndex = Math.floor(paidPlans.length / 2);
@@ -759,7 +760,7 @@ export default function CompanyRegister() {
                         <button
                           key={plan.id}
                           type="button"
-                          onClick={() => setForm((p) => ({ ...p, plan: plan.id }))}
+                          onClick={() => setForm((p) => ({ ...p, plan: plan.name }))}
                           className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
                             selected
                               ? "border-violet-500 bg-violet-500/10"

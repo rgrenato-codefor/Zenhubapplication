@@ -188,7 +188,26 @@ export function getCompanyPlanByName(name: string): CompanyPlan | undefined {
   );
 }
 
-/** Estimated MRR contribution from a company based on its plan name. */
+/**
+ * Resolve a company plan by EITHER its display name ("Gratuito") OR its ID ("company_free").
+ * This handles legacy data that stored plan IDs instead of names.
+ */
+export function getCompanyPlanConfig(nameOrId: string): CompanyPlan | undefined {
+  const lower = (nameOrId || "").toLowerCase();
+  return DEFAULT_COMPANY_PLANS.find(
+    (p) => p.name.toLowerCase() === lower || p.id.toLowerCase() === lower
+  );
+}
+
+/**
+ * Normalize a plan name-or-ID to the canonical display name.
+ * e.g. "company_free" → "Gratuito", "Gratuito" → "Gratuito"
+ */
+export function normalizePlanName(nameOrId: string): string {
+  return getCompanyPlanConfig(nameOrId)?.name ?? nameOrId ?? "Gratuito";
+}
+
+/** Estimated MRR contribution from a company based on its plan name or ID. */
 export function companyPlanMRR(planName: string): number {
-  return getCompanyPlanByName(planName)?.price ?? 0;
+  return getCompanyPlanConfig(planName)?.price ?? 0;
 }

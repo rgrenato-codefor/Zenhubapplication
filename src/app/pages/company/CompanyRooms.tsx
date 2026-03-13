@@ -7,6 +7,8 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
+import { useCompanyPlan } from "../../hooks/useCompanyPlan";
+import { PlanGate } from "../../components/shared/PlanGate";
 
 type RoomStatus = "active" | "inactive" | "maintenance";
 type Room = { id: string; companyId: string; unitId?: string; name: string; description: string; color: string; status: RoomStatus };
@@ -19,6 +21,11 @@ export default function CompanyRooms() {
     mutateAssignRoom, mutateUnassignRoom } = usePageData();
   const { selectedUnitId } = useCompanyUnit();
   const primaryColor = company?.color || "#0D9488";
+
+  const { planConfig, hasModule } = useCompanyPlan(company?.plan);
+  if (!hasModule("rooms")) {
+    return <PlanGate module="rooms" planConfig={planConfig} primaryColor={primaryColor} />;
+  }
   const companyId = user?.companyId ?? "";
 
   const companyRooms = firestoreRooms as Room[];

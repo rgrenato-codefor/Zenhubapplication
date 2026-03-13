@@ -2,13 +2,15 @@ import { useState, useMemo, useCallback } from "react";
 import {
   UserPlus, Clock, Search, Star, Percent, Mail, Edit2, Link2Off,
   Link2, X, AlertCircle, Check, CheckCircle, ArrowLeft, Loader2,
-  MapPin, Building2,
+  MapPin, Building2, Lock,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
 import { getTherapistByUsername } from "../../../lib/firestore";
 import { useTherapistStore } from "../../store/therapistStore";
+import { useCompanyPlan } from "../../hooks/useCompanyPlan";
+import { PlanGate, PlanLimitBanner } from "../../components/shared/PlanGate";
 
 export default function CompanyTherapists() {
   const { user } = useAuth();
@@ -21,6 +23,12 @@ export default function CompanyTherapists() {
     mutateApproveAssociation, mutateRejectAssociation } = usePageData();
   const { selectedUnitId, companyUnits } = useCompanyUnit();
   const primaryColor = company?.color || "#0D9488";
+
+  // Plan enforcement
+  const { planConfig, hasModule, isAtLimit } = useCompanyPlan(company?.plan);
+  if (!hasModule("therapists_multi")) {
+    return <PlanGate module="therapists_multi" planConfig={planConfig} primaryColor={primaryColor} />;
+  }
 
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<"add" | "edit_commission" | "dissociate" | "approve" | null>(null);
@@ -156,22 +164,50 @@ export default function CompanyTherapists() {
   // Pending association requests (therapist-initiated, awaiting company approval)
   const pendingRequests = store.getPendingForCompany(user?.companyId ?? "");
 
+  const atTherapistLimit = isAtLimit("therapists", companyTherapists.length);
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-gray-900">Profissionais</h1>
-          <p className="text-gray-500 text-sm mt-0.5">{companyTherapists.length} profissionais na equipe</p>
+          <p className="text-gray-500 text-sm mt-0.5">
+            {companyTherapists.length} profissionais na equipe
+            {planConfig.limits.therapists !== null && (
+              <span className="ml-1 text-xs" style={{ color: primaryColor }}>
+                / {planConfig.limits.therapists} do plano
+              </span>
+            )}
+          </p>
         </div>
-        <button
-          onClick={() => { setModal("add"); setInviteCode(""); setInviteError(""); setNewCommission(50); }}
-          className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm transition-colors"
-          style={{ background: primaryColor, fontWeight: 600 }}
-        >
-          <UserPlus className="w-4 h-4" /> Associar Profissional
-        </button>
+        {atTherapistLimit ? (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm">
+            <Lock className="w-4 h-4 shrink-0" />
+            <span style={{ fontWeight: 600 }}>Limite do plano {planConfig.name}</span>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setModal("add"); setInviteCode(""); setInviteError(""); setNewCommission(50); }}
+            className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm transition-colors"
+            style={{ background: primaryColor, fontWeight: 600 }}
+          >
+            <UserPlus className="w-4 h-4" /> Associar Profissional
+          </button>
+        )}
       </div>
+
+      {/* Therapist limit banner */}
+      {atTherapistLimit && (
+        <PlanLimitBanner
+          resourceLabel="profissionais"
+          current={companyTherapists.length}
+          limit={planConfig.limits.therapists!}
+          planName={planConfig.name}
+          planColor={planConfig.color}
+          planBadge={planConfig.badge}
+        />
+      )}
 
       {/* ── Pending requests ────────────────────────────────────────────────── */}
       {pendingRequests.length > 0 && (

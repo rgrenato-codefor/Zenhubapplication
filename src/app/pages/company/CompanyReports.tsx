@@ -1,11 +1,8 @@
-import { useState } from "react";
-import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from "recharts";
 import { Download, TrendingUp } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
+import { useCompanyPlan } from "../../hooks/useCompanyPlan";
+import { PlanGate } from "../../components/shared/PlanGate";
 
 const therapyColors = ["#7C3AED","#0D9488","#D97706","#DC2626","#059669","#3B82F6"];
 
@@ -13,6 +10,11 @@ export default function CompanyReports() {
   const { user } = useAuth();
   const { company, revenueData, weeklyData, therapies, appointments } = usePageData();
   const primaryColor = company?.color || "#0D9488";
+
+  const { planConfig, hasModule } = useCompanyPlan(company?.plan);
+  if (!hasModule("reports_basic")) {
+    return <PlanGate module="reports_basic" planConfig={planConfig} primaryColor={primaryColor} />;
+  }
 
   // Compute therapy distribution from real appointments
   const therapyDistribution = therapies.map((t, i) => ({

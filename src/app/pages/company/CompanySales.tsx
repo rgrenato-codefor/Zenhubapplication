@@ -8,11 +8,18 @@ import {
 } from "../../components/shared/icons";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
+import { useCompanyPlan } from "../../hooks/useCompanyPlan";
+import { PlanGate } from "../../components/shared/PlanGate";
 
 export default function CompanySales() {
   const { company, clients, appointments, therapists, revenueData, unitRevenueData } = usePageData();
   const { selectedUnitId, selectedUnit, companyUnits } = useCompanyUnit();
   const primaryColor = company?.color || "#0D9488";
+
+  const { planConfig, hasModule } = useCompanyPlan(company?.plan);
+  if (!hasModule("sales")) {
+    return <PlanGate module="sales" planConfig={planConfig} primaryColor={primaryColor} />;
+  }
 
   // ── Filter all data by selected unit ─────────────────────────────────────
   /**

@@ -4,12 +4,9 @@ import {
   Edit, Trash2, Eye, CheckCircle, XCircle, Filter, TrendingUp,
 } from "../../components/shared/icons";
 import { useData } from "../../context/DataContext";
-
-const planColors: Record<string, string> = {
-  Premium: "bg-violet-100 text-violet-700 border-violet-200",
-  Business: "bg-blue-100 text-blue-700 border-blue-200",
-  Starter: "bg-gray-100 text-gray-600 border-gray-200",
-};
+import type { Company } from "../../context/DataContext";
+import { CompanyDetailModal } from "../../components/admin/CompanyDetailModal";
+import { normalizePlanName } from "../../lib/planConfig";
 
 export default function AdminCompanies() {
   const { allAdminCompanies, loading } = useData();
@@ -17,6 +14,7 @@ export default function AdminCompanies() {
   const [filter, setFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [detailCompany, setDetailCompany] = useState<Company | null>(null);
 
   const filtered = allAdminCompanies.filter((c) => {
     const matchSearch =
@@ -25,7 +23,8 @@ export default function AdminCompanies() {
     const matchFilter =
       filter === "all" ||
       c.status === filter ||
-      (c.plan || "").toLowerCase() === filter;
+      (c.plan || "").toLowerCase() === filter ||
+      normalizePlanName(c.plan).toLowerCase() === filter;
     return matchSearch && matchFilter;
   });
 
@@ -83,7 +82,9 @@ export default function AdminCompanies() {
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-12 text-center">
           <Building2 className="w-10 h-10 text-gray-600 mx-auto mb-3" />
           <p className="text-gray-400 text-sm">
-            {search || filter !== "all" ? "Nenhuma empresa encontrada com esses filtros" : "Nenhuma empresa cadastrada"}
+            {search || filter !== "all"
+              ? "Nenhuma empresa encontrada com esses filtros"
+              : "Nenhuma empresa cadastrada"}
           </p>
         </div>
       )}
@@ -93,7 +94,11 @@ export default function AdminCompanies() {
         {filtered.map((company) => (
           <div
             key={company.id}
-            className="bg-gray-800 rounded-xl border border-gray-700 p-6 hover:border-gray-600 transition-colors"
+            className="bg-gray-800 rounded-xl border border-gray-700 p-6 hover:border-violet-600/50 transition-colors cursor-pointer group"
+            onClick={() => {
+              setActiveMenu(null);
+              setDetailCompany(company);
+            }}
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
@@ -104,11 +109,15 @@ export default function AdminCompanies() {
                   {company.logo || company.name.charAt(0)}
                 </div>
                 <div>
-                  <h3 className="text-white">{company.name}</h3>
+                  <h3 className="text-white group-hover:text-violet-300 transition-colors">
+                    {company.name}
+                  </h3>
                   <p className="text-xs text-gray-400">{company.address || company.email}</p>
                 </div>
               </div>
-              <div className="relative">
+
+              {/* Context menu — stop propagation so card click doesn't fire */}
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => setActiveMenu(activeMenu === company.id ? null : company.id)}
                   className="text-gray-400 hover:text-white p-1 rounded"
@@ -117,7 +126,10 @@ export default function AdminCompanies() {
                 </button>
                 {activeMenu === company.id && (
                   <div className="absolute right-0 top-8 bg-gray-700 border border-gray-600 rounded-lg shadow-xl z-10 w-40 py-1">
-                    <button className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-300 hover:bg-gray-600 hover:text-white">
+                    <button
+                      onClick={() => { setActiveMenu(null); setDetailCompany(company); }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-300 hover:bg-gray-600 hover:text-white"
+                    >
                       <Eye className="w-3.5 h-3.5" /> Ver detalhes
                     </button>
                     <button className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-300 hover:bg-gray-600 hover:text-white">
@@ -131,19 +143,24 @@ export default function AdminCompanies() {
               </div>
             </div>
 
+            {/* Stats row */}
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="bg-gray-700/50 rounded-lg p-3 text-center">
                 <div className="flex items-center justify-center gap-1 mb-1">
                   <Users className="w-3 h-3 text-teal-400" />
                 </div>
-                <p className="text-lg text-white" style={{ fontWeight: 700 }}>{company.therapistsCount || 0}</p>
+                <p className="text-lg text-white" style={{ fontWeight: 700 }}>
+                  {company.therapistsCount || 0}
+                </p>
                 <p className="text-xs text-gray-400">Profissionais</p>
               </div>
               <div className="bg-gray-700/50 rounded-lg p-3 text-center">
                 <div className="flex items-center justify-center gap-1 mb-1">
                   <Building2 className="w-3 h-3 text-blue-400" />
                 </div>
-                <p className="text-lg text-white" style={{ fontWeight: 700 }}>{company.clientsCount || 0}</p>
+                <p className="text-lg text-white" style={{ fontWeight: 700 }}>
+                  {company.clientsCount || 0}
+                </p>
                 <p className="text-xs text-gray-400">Clientes</p>
               </div>
               <div className="bg-gray-700/50 rounded-lg p-3 text-center">
@@ -157,10 +174,21 @@ export default function AdminCompanies() {
               </div>
             </div>
 
+            {/* Footer row */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className={`text-xs px-2 py-0.5 rounded-full border ${planColors[company.plan] || "bg-gray-700 text-gray-400 border-gray-600"}`}>
-                  {company.plan || "—"}
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full border ${
+                    normalizePlanName(company.plan) === "Premium"
+                      ? "bg-amber-100 text-amber-700 border-amber-200"
+                      : normalizePlanName(company.plan) === "Business"
+                      ? "bg-violet-100 text-violet-700 border-violet-200"
+                      : normalizePlanName(company.plan) === "Starter"
+                      ? "bg-blue-100 text-blue-700 border-blue-200"
+                      : "bg-gray-700 text-gray-400 border-gray-600"
+                  }`}
+                >
+                  {normalizePlanName(company.plan) || "—"}
                 </span>
                 {company.status === "active" ? (
                   <div className="flex items-center gap-1 text-emerald-400">
@@ -185,11 +213,16 @@ export default function AdminCompanies() {
             <div className="mt-3 pt-3 border-t border-gray-700">
               <div className="flex items-center justify-between text-xs text-gray-500">
                 <span>
-                  Código: <span className="text-violet-400 font-mono">{company.inviteCode || "—"}</span>
+                  Código:{" "}
+                  <span className="text-violet-400 font-mono">{company.inviteCode || "—"}</span>
                 </span>
                 <span>
                   {company.createdAt
-                    ? `Desde ${new Date((company.createdAt as any).seconds ? (company.createdAt as any).seconds * 1000 : company.createdAt as any).toLocaleDateString("pt-BR")}`
+                    ? `Desde ${new Date(
+                        (company.createdAt as any).seconds
+                          ? (company.createdAt as any).seconds * 1000
+                          : (company.createdAt as any)
+                      ).toLocaleDateString("pt-BR")}`
                     : "—"}
                 </span>
               </div>
@@ -245,6 +278,12 @@ export default function AdminCompanies() {
           </div>
         </div>
       )}
+
+      {/* Company Detail Drawer */}
+      <CompanyDetailModal
+        company={detailCompany}
+        onClose={() => setDetailCompany(null)}
+      />
     </div>
   );
 }
