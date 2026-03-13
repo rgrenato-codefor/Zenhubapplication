@@ -96,8 +96,8 @@ function TabGeral({
                 <XAxis dataKey="name" stroke="#6B7280" tick={{ fontSize: 11 }} />
                 <YAxis stroke="#6B7280" tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }} />
-                <Bar dataKey="profissionais" fill="#0D9488" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Profissionais" />
-                <Bar dataKey="clientes"   fill="#3B82F6" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Clientes" />
+                <Bar key="bar-profissionais" dataKey="profissionais" fill="#0D9488" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Profissionais" />
+                <Bar key="bar-clientes"   fill="#3B82F6" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Clientes" dataKey="clientes" />
               </BarChart>
             </ResponsiveContainer>
           )}
