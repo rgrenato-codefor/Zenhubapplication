@@ -807,6 +807,7 @@ export interface CompanyPlan {
   limits: {
     therapists: number | null;
     clients: number | null;
+    appointments_monthly: number | null; // atendimentos/mês; null = ilimitado
     units: number | null;
   };
   isDefault: boolean;

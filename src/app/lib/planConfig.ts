@@ -39,8 +39,9 @@ export interface CompanyPlan {
   description: string;
   modules: ModuleKey[];
   limits: {
-    therapists: number | null;  // null = ilimitado
-    clients: number | null;
+    therapists: number | null;        // null = ilimitado
+    clients: number | null;           // sempre null — cadastro de clientes é ilimitado
+    appointments_monthly: number | null; // atendimentos/mês; null = ilimitado
     units: number | null;
   };
   isDefault: boolean;      // true = plano gratuito aplicado no cadastro
@@ -72,7 +73,7 @@ export const DEFAULT_COMPANY_PLANS: CompanyPlan[] = [
     badge: "🆓",
     description: "Para começar a explorar a plataforma sem compromisso.",
     modules: ["dashboard", "schedule", "clients", "services"],
-    limits: { therapists: 1, clients: 50, units: 1 },
+    limits: { therapists: 1, clients: null, appointments_monthly: 20, units: 1 },
     isDefault: true,
     isActive: true,
     order: 0,
@@ -85,7 +86,7 @@ export const DEFAULT_COMPANY_PLANS: CompanyPlan[] = [
     badge: "🚀",
     description: "Ideal para estúdios pequenos em crescimento.",
     modules: ["dashboard", "schedule", "clients", "services", "therapists_multi", "sales", "reports_basic"],
-    limits: { therapists: 5, clients: 200, units: 1 },
+    limits: { therapists: 5, clients: null, appointments_monthly: 60, units: 1 },
     isDefault: false,
     isActive: true,
     order: 1,
@@ -102,7 +103,7 @@ export const DEFAULT_COMPANY_PLANS: CompanyPlan[] = [
       "therapists_multi", "sales", "commissions",
       "units", "rooms", "reports_basic", "reports_advanced",
     ],
-    limits: { therapists: 20, clients: 1000, units: 3 },
+    limits: { therapists: 20, clients: null, appointments_monthly: 150, units: 3 },
     isDefault: false,
     isActive: true,
     order: 2,
@@ -119,7 +120,7 @@ export const DEFAULT_COMPANY_PLANS: CompanyPlan[] = [
       "therapists_multi", "sales", "commissions",
       "units", "rooms", "reports_basic", "reports_advanced", "api",
     ],
-    limits: { therapists: null, clients: null, units: null },
+    limits: { therapists: null, clients: null, appointments_monthly: null, units: null },
     isDefault: false,
     isActive: true,
     order: 3,

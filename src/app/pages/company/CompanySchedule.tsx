@@ -9,6 +9,7 @@ import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
 import type { SessionRecord } from "../../context/DataContext";
 import { checkAppointmentConflicts } from "../../lib/appointmentConflicts";
+import { useCompanyPlan } from "../../hooks/useCompanyPlan";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type ClosureModal = {
@@ -77,6 +78,19 @@ export default function CompanySchedule() {
   } = usePageData();
   const { selectedUnitId } = useCompanyUnit();
   const primaryColor = company?.color || "#0D9488";
+
+  // ── Plan enforcement: monthly appointment limit ────────────────────────────
+  const { planConfig, getLimit, isAtLimit } = useCompanyPlan(company?.plan);
+
+  // Count appointments in the current calendar month for this company
+  const now = new Date();
+  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthAppointmentCount = storeAppointments.filter(
+    (a) => a.date?.startsWith(currentYearMonth)
+  ).length;
+
+  const apptLimit = getLimit("appointments_monthly");
+  const apptAtLimit = isAtLimit("appointments_monthly", monthAppointmentCount);
 
   const [view, setView] = useState<"week" | "day" | "list">("week");
   const [selectedDay, setSelectedDay] = useState(TODAY_STR);
@@ -222,6 +236,13 @@ export default function CompanySchedule() {
   };
 
   const handleConfirmNewApt = async () => {
+    if (apptAtLimit) {
+      setAptError(
+        `Limite do plano ${planConfig.name} atingido: ${apptLimit} atendimento${apptLimit === 1 ? "" : "s"}/mês. ` +
+        `Faça upgrade para continuar agendando.`
+      );
+      return;
+    }
     if (!newApt.clientId) { setAptError("Selecione ou cadastre um cliente."); return; }
     if (!newApt.therapistId) { setAptError("Selecione o terapeuta."); return; }
     if (!newApt.therapyId) { setAptError("Selecione a terapia."); return; }
@@ -439,13 +460,27 @@ export default function CompanySchedule() {
               </button>
             ))}
           </div>
-          <button
-            onClick={openNewModal}
-            className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm"
-            style={{ background: primaryColor, fontWeight: 600 }}
-          >
-            <Plus className="w-4 h-4" /> Agendar
-          </button>
+          {apptAtLimit ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm">
+              <Lock className="w-4 h-4 shrink-0" />
+              <span style={{ fontWeight: 600 }}>
+                {monthAppointmentCount}/{apptLimit} atend. — Limite {planConfig.name}
+              </span>
+            </div>
+          ) : (
+            <button
+              onClick={openNewModal}
+              className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm"
+              style={{ background: primaryColor, fontWeight: 600 }}
+            >
+              <Plus className="w-4 h-4" /> Agendar
+              {apptLimit !== null && (
+                <span className="ml-1 text-xs opacity-75">
+                  {monthAppointmentCount}/{apptLimit}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -463,6 +498,61 @@ export default function CompanySchedule() {
           </div>
         ))}
       </div>
+
+      {/* Monthly quota bar (only shown when plan has a limit) */}
+      {apptLimit !== null && (
+        <div
+          className="rounded-xl border px-4 py-3 flex items-center gap-4"
+          style={{
+            background: apptAtLimit ? "#FFF7ED" : "#F9FAFB",
+            borderColor: apptAtLimit ? "#FED7AA" : "#E5E7EB",
+          }}
+        >
+          <div className="shrink-0">
+            {apptAtLimit
+              ? <Lock className="w-4 h-4 text-amber-500" />
+              : <CalendarDays className="w-4 h-4 text-gray-400" />
+            }
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs" style={{ fontWeight: 600, color: apptAtLimit ? "#B45309" : "#6B7280" }}>
+                Cota mensal de atendimentos — Plano {planConfig.name}
+              </p>
+              <span
+                className="text-xs shrink-0 ml-2"
+                style={{ fontWeight: 700, color: apptAtLimit ? "#B45309" : primaryColor }}
+              >
+                {monthAppointmentCount} / {apptLimit}
+              </span>
+            </div>
+            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-1.5 rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min((monthAppointmentCount / apptLimit) * 100, 100)}%`,
+                  background: apptAtLimit
+                    ? "#F59E0B"
+                    : (monthAppointmentCount / apptLimit) >= 0.8
+                    ? "#F59E0B"
+                    : primaryColor,
+                }}
+              />
+            </div>
+          </div>
+          {apptAtLimit && (
+            <a
+              href="https://zenhub.online"
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+              style={{ fontWeight: 600 }}
+            >
+              Fazer upgrade
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Day selector */}
       <div className="grid grid-cols-4 lg:grid-cols-7 gap-3">

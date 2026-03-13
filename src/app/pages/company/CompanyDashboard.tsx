@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
+import type React from "react";
 import {
   ArrowUpRight, CheckCircle, AlertCircle, MoreHorizontal, MapPin,
   Building2, ChevronRight, Star, Users, CalendarDays, DollarSign, TrendingUp,
+  ArrowUp, X,
 } from "../../components/shared/icons";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -157,8 +159,41 @@ export default function CompanyDashboard() {
     ? `${companyUnits.length} unidades`
     : null;
 
+  // ── Plan change notification ───────────────────────────────────────────────
+  const planChanged = !!(company as any)?.planChangedAt;
+  const planChangedFrom = (company as any)?.planChangedFrom as string | undefined;
+  const [dismissedPlanNotif, setDismissedPlanNotif] = useState(false);
+  const showPlanNotif = planChanged && !dismissedPlanNotif;
+
   return (
     <div className="space-y-6">
+      {/* ── Plan-change notification banner ────────────────────────────── */}
+      {showPlanNotif && (
+        <div
+          className="flex items-start gap-3 rounded-xl border px-4 py-3"
+          style={{ background: "#F0FDF4", borderColor: "#86EFAC" }}
+        >
+          <ArrowUp className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-emerald-800" style={{ fontWeight: 600 }}>
+              Seu plano foi atualizado para <strong>{company?.plan}</strong>
+              {planChangedFrom && planChangedFrom !== company?.plan
+                ? ` (anteriormente: ${planChangedFrom})`
+                : ""}
+            </p>
+            <p className="text-xs text-emerald-700 mt-0.5">
+              Novos módulos e limites já estão disponíveis. Explore o menu lateral para ver os recursos desbloqueados.
+            </p>
+          </div>
+          <button
+            onClick={() => setDismissedPlanNotif(true)}
+            className="text-emerald-500 hover:text-emerald-700 shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

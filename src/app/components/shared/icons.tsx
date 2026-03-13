@@ -12,6 +12,7 @@ import {
   // Arrows
   ArrowRightIcon,
   ArrowLeftIcon,
+  ArrowUpIcon,
   ArrowUpRightIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
@@ -175,6 +176,7 @@ export const ChevronRight    = ChevronRightIcon;
 // Arrows
 export const ArrowRight    = ArrowRightIcon;
 export const ArrowLeft     = ArrowLeftIcon;
+export const ArrowUp       = ArrowUpIcon;
 export const ArrowUpRight  = ArrowUpRightIcon;
 export const ExternalLink  = ArrowTopRightOnSquareIcon;
 

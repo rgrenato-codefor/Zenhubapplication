@@ -3,12 +3,9 @@ import {
   Check, AlertCircle, ChevronRight, Copy, CheckCheck,
   Clock, Sparkles, MessageCircle,
   User, Phone, Mail, Calendar, MapPin, DollarSign, Star, Heart, FileText, ArrowLeft,
-  Lock,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
-import { useCompanyPlan } from "../../hooks/useCompanyPlan";
-import { PlanLimitBanner } from "../../components/shared/PlanGate";
 
 /* ─── Types ──────────────────────────────────────────── */
 interface Client {
@@ -467,9 +464,6 @@ export default function CompanyClients() {
   const { company, clients: mockClients, therapists, appointments, mutateAddClient, mutateUpdateClient } = usePageData();
   const primaryColor = company?.color || "#0D9488";
 
-  // Plan enforcement
-  const { planConfig, isAtLimit } = useCompanyPlan(company?.plan);
-
   const [clients, setClients] = useState(() => mockClients as any[]);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
@@ -533,11 +527,6 @@ export default function CompanyClients() {
             <h1 className="text-gray-900">Clientes</h1>
             <p className="text-gray-400 text-sm mt-0.5">
               {clients.length} contatos cadastrados
-              {planConfig.limits.clients !== null && (
-                <span className="ml-1 text-xs" style={{ color: primaryColor }}>
-                  / {planConfig.limits.clients} do plano
-                </span>
-              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -550,32 +539,13 @@ export default function CompanyClients() {
                 {company?.inviteCode}
               </span>
             </button>
-            {isAtLimit("clients", clients.length) ? (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm">
-                <Lock className="w-4 h-4 shrink-0" />
-                <span style={{ fontWeight: 600 }}>Limite {planConfig.name}</span>
-              </div>
-            ) : (
-              <button onClick={() => setShowNewModal(true)}
-                className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm shadow-sm"
-                style={{ background: primaryColor, fontWeight: 600 }}>
-                <Plus className="w-4 h-4" /> Novo Contato
-              </button>
-            )}
+            <button onClick={() => setShowNewModal(true)}
+              className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm shadow-sm"
+              style={{ background: primaryColor, fontWeight: 600 }}>
+              <Plus className="w-4 h-4" /> Novo Contato
+            </button>
           </div>
         </div>
-
-        {/* Client limit banner */}
-        {isAtLimit("clients", clients.length) && (
-          <PlanLimitBanner
-            resourceLabel="clientes"
-            current={clients.length}
-            limit={planConfig.limits.clients!}
-            planName={planConfig.name}
-            planColor={planConfig.color}
-            planBadge={planConfig.badge}
-          />
-        )}
       </div>
 
       {/* ── Two-pane layout ────────────────────────────────── */}
@@ -697,7 +667,7 @@ export default function CompanyClients() {
         )}
       </div>
 
-      {/* ── New Client Modal ─────��─────────────────────────── */}
+      {/* ── New Client Modal ──────────────────────────────── */}
       {showNewModal && (
         <NewClientModal
           companyId={user?.companyId ?? ""}

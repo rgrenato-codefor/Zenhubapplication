@@ -3,7 +3,7 @@
  * Slide-in drawer showing full statistical details for a company in the Super Admin view.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   X,
   Building2,
@@ -19,11 +19,15 @@ import {
   Calendar,
   CreditCard,
   Activity,
+  ChevronRight,
+  ArrowUp,
+  Loader2,
 } from "../shared/icons";
 import type { Company } from "../../context/DataContext";
 import { useCompanyPlan } from "../../hooks/useCompanyPlan";
 import {
   COMPANY_MODULES,
+  DEFAULT_COMPANY_PLANS,
   type ModuleKey,
 } from "../../lib/planConfig";
 
@@ -82,12 +86,37 @@ function StatCard({ label, value, sub, icon: Icon, color }: StatCardProps) {
 interface Props {
   company: Company | null;
   onClose: () => void;
+  /** Real therapist count (from allAdminTherapists) */
+  therapistsCount?: number;
+  /** Callback to change the company plan */
+  onPlanChange?: (companyId: string, newPlan: string) => Promise<void>;
+  /** True while the plan change is being saved */
+  planChanging?: boolean;
 }
 
-export function CompanyDetailModal({ company, onClose }: Props) {
-  // Use the same hook as the company panel — resolves from Firestore first
-  // Must be called before any early returns (rules of hooks)
+export function CompanyDetailModal({
+  company,
+  onClose,
+  therapistsCount,
+  onPlanChange,
+  planChanging = false,
+}: Props) {
   const { planConfig, hasModule, getLimit } = useCompanyPlan(company?.plan);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState("");
+  const [upgraded, setUpgraded] = useState(false);
+
+  const upgradablePlans = DEFAULT_COMPANY_PLANS.filter(
+    (p) => p.name !== planConfig.name
+  );
+
+  const handleConfirmUpgrade = async () => {
+    if (!company || !selectedPlan || !onPlanChange) return;
+    await onPlanChange(company.id, selectedPlan);
+    setUpgraded(true);
+    setUpgradeOpen(false);
+    setTimeout(() => setUpgraded(false), 5000);
+  };
 
   const allModules = useMemo(
     () =>
@@ -168,7 +197,7 @@ export function CompanyDetailModal({ company, onClose }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <StatCard
                 label="Profissionais"
-                value={company.therapistsCount || 0}
+                value={therapistsCount || company.therapistsCount || 0}
                 sub="vinculados"
                 icon={Star}
                 color="#0D9488"
@@ -221,9 +250,9 @@ export function CompanyDetailModal({ company, onClose }: Props) {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-400">Limite de clientes</p>
+                <p className="text-xs text-gray-400">Atend./mês incluídos</p>
                 <p className="text-white mt-0.5">
-                  {getLimit("clients") === null ? "Ilimitado" : getLimit("clients")}
+                  {getLimit("appointments_monthly") === null ? "Ilimitado" : getLimit("appointments_monthly")}
                 </p>
               </div>
               <div>
@@ -248,16 +277,16 @@ export function CompanyDetailModal({ company, onClose }: Props) {
               {getLimit("therapists") !== null && (
                 <UsageBar
                   label="Profissionais"
-                  current={company.therapistsCount || 0}
+                  current={therapistsCount ?? company.therapistsCount ?? 0}
                   max={getLimit("therapists")!}
                   color="#0D9488"
                 />
               )}
-              {getLimit("clients") !== null && (
+              {getLimit("appointments_monthly") !== null && (
                 <UsageBar
-                  label="Clientes"
-                  current={company.clientsCount || 0}
-                  max={getLimit("clients")!}
+                  label="Atendimentos este mês"
+                  current={(company as any).monthAppointmentsCount || 0}
+                  max={getLimit("appointments_monthly")!}
                   color="#3B82F6"
                 />
               )}
@@ -269,11 +298,95 @@ export function CompanyDetailModal({ company, onClose }: Props) {
                   color="#8B5CF6"
                 />
               )}
-              {getLimit("therapists") === null && getLimit("clients") === null && getLimit("units") === null && (
+              {getLimit("therapists") === null && getLimit("appointments_monthly") === null && getLimit("units") === null && (
                 <p className="text-xs text-gray-500">Plano sem limites — todos os recursos estão liberados.</p>
               )}
             </div>
           </div>
+
+          {/* ── Plan change action ── */}
+          {onPlanChange && (
+            <div className="bg-gray-800/60 rounded-xl border border-gray-700/60 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <ArrowUp className="w-4 h-4 text-amber-400" />
+                <p className="text-sm text-white" style={{ fontWeight: 600 }}>Alterar Plano</p>
+              </div>
+
+              {/* Success confirmation banner */}
+              {upgraded && (
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2 mb-3">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <p className="text-xs text-emerald-300">
+                    Plano alterado com sucesso. A empresa será notificada ao fazer login.
+                  </p>
+                </div>
+              )}
+
+              {!upgradeOpen ? (
+                <button
+                  onClick={() => { setUpgradeOpen(true); setSelectedPlan(""); }}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors"
+                >
+                  <span>Plano atual: <strong className="text-white">{planConfig.name}</strong></span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {upgradablePlans.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => setSelectedPlan(p.name)}
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left transition-all text-sm"
+                        style={
+                          selectedPlan === p.name
+                            ? { background: `${p.color}20`, borderColor: p.color, color: "#fff" }
+                            : { background: "transparent", borderColor: "#374151", color: "#9CA3AF" }
+                        }
+                      >
+                        <span>{p.badge}</span>
+                        <div>
+                          <p style={{ fontWeight: 600 }}>{p.name}</p>
+                          <p className="text-xs opacity-70">{p.price === 0 ? "Grátis" : `R$ ${p.price}/mês`}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedPlan && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 text-xs text-amber-300 flex items-start gap-2">
+                      <span className="mt-0.5">⚠️</span>
+                      <span>
+                        O plano da empresa será alterado para <strong>{selectedPlan}</strong>.
+                        A empresa continuará funcionando normalmente e será notificada da mudança ao fazer login.
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setUpgradeOpen(false)}
+                      className="flex-1 py-2 border border-gray-600 text-gray-400 rounded-lg text-sm hover:bg-gray-700 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleConfirmUpgrade}
+                      disabled={!selectedPlan || planChanging}
+                      className="flex-1 py-2 rounded-lg text-sm text-white flex items-center justify-center gap-2 transition-opacity disabled:opacity-40"
+                      style={{ background: "#7C3AED", fontWeight: 600 }}
+                    >
+                      {planChanging ? (
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</>
+                      ) : (
+                        <>Confirmar alteração</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Modules ── */}
           <div>

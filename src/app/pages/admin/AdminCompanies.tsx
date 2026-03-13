@@ -7,14 +7,37 @@ import { useData } from "../../context/DataContext";
 import type { Company } from "../../context/DataContext";
 import { CompanyDetailModal } from "../../components/admin/CompanyDetailModal";
 import { normalizePlanName } from "../../lib/planConfig";
+import { updateCompany as fsUpdateCompany } from "../../../lib/firestore";
+import { invalidatePlanCache } from "../../hooks/useCompanyPlan";
 
 export default function AdminCompanies() {
-  const { allAdminCompanies, loading } = useData();
+  const { allAdminCompanies, allAdminTherapists, loading } = useData();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [detailCompany, setDetailCompany] = useState<Company | null>(null);
+  const [planChanging, setPlanChanging] = useState(false);
+
+  /** Real therapist count for a company, derived from allAdminTherapists */
+  const getTherapistsCount = (companyId: string) =>
+    allAdminTherapists.filter((t) => t.companyId === companyId).length;
+
+  const handlePlanChange = async (companyId: string, newPlan: string) => {
+    setPlanChanging(true);
+    try {
+      await fsUpdateCompany(companyId, {
+        plan: newPlan,
+        // Store plan change metadata so company can be notified
+        ...(({ planChangedAt: new Date().toISOString(), planChangedFrom: detailCompany?.plan }) as any),
+      });
+      invalidatePlanCache();
+      // Update local state so the modal reflects the change immediately
+      setDetailCompany((prev) => prev ? { ...prev, plan: newPlan } : prev);
+    } finally {
+      setPlanChanging(false);
+    }
+  };
 
   const filtered = allAdminCompanies.filter((c) => {
     const matchSearch =
@@ -150,7 +173,7 @@ export default function AdminCompanies() {
                   <Users className="w-3 h-3 text-teal-400" />
                 </div>
                 <p className="text-lg text-white" style={{ fontWeight: 700 }}>
-                  {company.therapistsCount || 0}
+                  {getTherapistsCount(company.id) || 0}
                 </p>
                 <p className="text-xs text-gray-400">Profissionais</p>
               </div>
@@ -283,6 +306,9 @@ export default function AdminCompanies() {
       <CompanyDetailModal
         company={detailCompany}
         onClose={() => setDetailCompany(null)}
+        therapistsCount={detailCompany ? getTherapistsCount(detailCompany.id) : undefined}
+        onPlanChange={handlePlanChange}
+        planChanging={planChanging}
       />
     </div>
   );

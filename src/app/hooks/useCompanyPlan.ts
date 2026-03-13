@@ -53,6 +53,10 @@ export function useCompanyPlan(planNameOrId: string | null | undefined) {
   const planConfig = useMemo((): CompanyPlan => {
     const key = (planNameOrId || "").toLowerCase();
 
+    // Always resolve the hardcoded default for this plan (used as fallback for missing fields)
+    const hardcoded =
+      getCompanyPlanConfig(planNameOrId || "") ?? DEFAULT_COMPANY_PLANS[0];
+
     // 1. Try Firestore plans
     if (firestorePlans.length > 0) {
       const found = firestorePlans.find(
@@ -60,14 +64,26 @@ export function useCompanyPlan(planNameOrId: string | null | undefined) {
           p.name?.toLowerCase() === key ||
           p.id?.toLowerCase() === key
       );
-      if (found) return found;
+      if (found) {
+        // Deep-merge limits: Firestore wins when the field is explicitly set (including null),
+        // but falls back to the hardcoded default when the field is undefined (legacy doc).
+        return {
+          ...hardcoded,
+          ...found,
+          limits: {
+            ...hardcoded.limits,
+            ...found.limits,
+            appointments_monthly:
+              found.limits?.appointments_monthly !== undefined
+                ? found.limits.appointments_monthly
+                : hardcoded.limits?.appointments_monthly ?? null,
+          },
+        };
+      }
     }
 
     // 2. Fall back to hardcoded defaults
-    return (
-      getCompanyPlanConfig(planNameOrId || "") ??
-      DEFAULT_COMPANY_PLANS[0]
-    );
+    return hardcoded;
   }, [planNameOrId, firestorePlans]);
 
   /** Returns true if the current plan includes a module */
@@ -78,7 +94,7 @@ export function useCompanyPlan(planNameOrId: string | null | undefined) {
    * Returns the numeric limit for a resource, or null if unlimited.
    * null means NO limit. 0 or positive = hard cap.
    */
-  const getLimit = (type: "therapists" | "clients" | "units"): number | null =>
+  const getLimit = (type: "therapists" | "clients" | "appointments_monthly" | "units"): number | null =>
     planConfig.limits?.[type] ?? null;
 
   /**
@@ -86,7 +102,7 @@ export function useCompanyPlan(planNameOrId: string | null | undefined) {
    * If the limit is null (unlimited) always returns false.
    */
   const isAtLimit = (
-    type: "therapists" | "clients" | "units",
+    type: "therapists" | "clients" | "appointments_monthly" | "units",
     current: number
   ): boolean => {
     const lim = getLimit(type);
