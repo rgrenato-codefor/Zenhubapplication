@@ -30,7 +30,13 @@ export default function Login() {
       navigate(route);
     } catch (err: any) {
       const code = err?.code ?? "";
-      if (
+      const emailFromError = err?.email;
+      
+      if (code === "auth/email-not-verified") {
+        // Redirect to verification page
+        navigate(`/verificar-email?email=${encodeURIComponent(emailFromError || email)}`);
+        return;
+      } else if (
         code === "auth/user-not-found" ||
         code === "auth/wrong-password" ||
         code === "auth/invalid-credential"

@@ -7,6 +7,7 @@ import CompanyRegister from "./pages/register/CompanyRegister";
 import ClientRegister from "./pages/register/ClientRegister";
 import TherapistRegister from "./pages/register/TherapistRegister";
 import TherapistPublicProfile from "./pages/therapist/TherapistPublicProfile";
+import VerifyEmail from "./pages/auth/VerifyEmail";
 
 // Layouts
 import AdminLayout from "./components/layouts/AdminLayout";
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
       { path: "/cadastro/cliente", Component: ClientRegister },
       { path: "/cadastro/cliente/:slug", Component: ClientRegister },
       { path: "/cadastro/terapeuta", Component: TherapistRegister },
+      { path: "/verificar-email", Component: VerifyEmail },
 
       // Public therapist profile — friendly URL
       { path: "/:username", Component: TherapistPublicProfile },

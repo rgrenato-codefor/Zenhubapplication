@@ -15,6 +15,7 @@ import {
   getNotificationState,
   saveNotificationState,
 } from "../../lib/firestore";
+import type { Timestamp } from "firebase/firestore";
 
 export type NotifIcon =
   | "calendar"
@@ -39,6 +40,15 @@ export interface AppNotification {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Helper to convert Firestore Timestamp or string to comparable value */
+function getTimeValue(val: Timestamp | string | undefined | null): number {
+  if (!val) return 0;
+  if (typeof val === "string") return new Date(val).getTime();
+  // Firestore Timestamp has .toMillis() method
+  if (typeof val === "object" && "toMillis" in val) return val.toMillis();
+  return 0;
+}
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -367,7 +377,7 @@ export function useNotifications(variant: NotifVariant) {
       }
 
       const latestTherapists = [...data.therapists]
-        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+        .sort((a, b) => getTimeValue(b.createdAt) - getTimeValue(a.createdAt))
         .slice(0, 1);
       latestTherapists.forEach((t) => {
         if (!t.createdAt) return;
@@ -391,7 +401,7 @@ export function useNotifications(variant: NotifVariant) {
       const therapists = data.allAdminTherapists;
 
       const latestCompanies = [...companies]
-        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+        .sort((a, b) => getTimeValue(b.createdAt) - getTimeValue(a.createdAt))
         .slice(0, 2);
       latestCompanies.forEach((co) => {
         notifs.push({
@@ -408,7 +418,7 @@ export function useNotifications(variant: NotifVariant) {
       });
 
       const latestTherapists = [...therapists]
-        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+        .sort((a, b) => getTimeValue(b.createdAt) - getTimeValue(a.createdAt))
         .slice(0, 2);
       latestTherapists.forEach((t) => {
         notifs.push({

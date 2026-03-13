@@ -11,6 +11,7 @@ import {
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  sendEmailVerification,
   type User as FirebaseUser,
 } from "firebase/auth";
 import { auth } from "../../lib/firebase";
@@ -18,6 +19,7 @@ import { signInWithGoogleGIS } from "../../lib/googleGIS";
 import {
   getUserProfile,
   createUserProfile,
+  updateUserProfile,
   createCompany,
   createUnit,
   createTherapist,
@@ -244,6 +246,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const fbUser = cred.user;
 
+      // Check if email is verified
+      if (!fbUser.emailVerified) {
+        await firebaseSignOut(auth);
+        throw Object.assign(
+          new Error("Por favor, verifique seu e-mail antes de fazer login."),
+          { code: "auth/email-not-verified", email: fbUser.email }
+        );
+      }
+
       let profile = await getUserProfile(fbUser.uid);
 
       if (!profile) {
@@ -257,6 +268,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             { code: "auth/user-not-registered" }
           );
         }
+      }
+
+      // Update emailVerified status in Firestore
+      if (fbUser.emailVerified && profile.emailVerified !== true) {
+        await updateUserProfile(fbUser.uid, { emailVerified: true });
       }
 
       const baseUser: AuthUser = {
@@ -331,67 +347,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const cred = await createUserWithEmailAndPassword(auth, params.responsibleEmail, params.password);
     const uid = cred.user.uid;
 
-    // 2. Build invite code
-    const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+    try {
+      // 2. Build invite code
+      const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
 
-    // 3. Create company document
-    const address = [
-      params.street,
-      params.number,
-      params.complement,
-      params.neighborhood ? `- ${params.neighborhood}` : "",
-      `${params.city} - ${params.state}`,
-      params.cep,
-    ].filter(Boolean).join(", ");
+      // 3. Create company document
+      const address = [
+        params.street,
+        params.number,
+        params.complement,
+        params.neighborhood ? `- ${params.neighborhood}` : "",
+        `${params.city} - ${params.state}`,
+        params.cep,
+      ].filter(Boolean).join(", ");
 
-    const companyId = await createCompany({
-      name: params.companyName,
-      logo: "",
-      color: "#0D9488",
-      email: params.responsibleEmail,
-      phone: params.phone,
-      address,
-      cnpj: params.cnpj,
-      segment: params.segment,
-      plan,
-      status: "active",
-      inviteCode,
-      therapistsCount: 0,
-      clientsCount: 0,
-      totalRevenue: 0,
-      monthRevenue: 0,
-    });
+      const companyId = await createCompany({
+        name: params.companyName,
+        logo: "",
+        color: "#0D9488",
+        email: params.responsibleEmail,
+        phone: params.phone,
+        address,
+        cnpj: params.cnpj,
+        segment: params.segment,
+        plan,
+        status: "active",
+        inviteCode,
+        therapistsCount: 0,
+        clientsCount: 0,
+        totalRevenue: 0,
+        monthRevenue: 0,
+      });
 
-    // 4. Create default unit (first location = the address provided)
-    await createUnit({
-      companyId,
-      name: params.city,
-      fullName: `Unidade ${params.city}`,
-      address,
-      phone: params.phone,
-      email: params.responsibleEmail,
-      status: "active",
-      isMain: true,
-    });
+      // 4. Create default unit (first location = the address provided)
+      await createUnit({
+        companyId,
+        name: params.city,
+        fullName: `Unidade ${params.city}`,
+        address,
+        phone: params.phone,
+        email: params.responsibleEmail,
+        status: "active",
+        isMain: true,
+      });
 
-    // 5. Create user profile
-    await createUserProfile(uid, {
-      name: params.responsibleName,
-      email: params.responsibleEmail,
-      role: "company_admin",
-      companyId,
-    });
+      // 5. Create user profile
+      await createUserProfile(uid, {
+        name: params.responsibleName,
+        email: params.responsibleEmail,
+        role: "company_admin",
+        companyId,
+      });
 
-    // 6. Set user state directly — no round-trip needed
-    const newUser: AuthUser = {
-      uid,
-      name: params.responsibleName,
-      email: params.responsibleEmail,
-      role: "company_admin",
-      companyId,
-    };
-    setUser(newUser);
-    setLoading(false);
+      // 6. Send email verification
+      await sendEmailVerification(cred.user);
+
+      // 7. Sign out - user needs to verify email first
+      await firebaseSignOut(auth);
+      setLoading(false);
+    } catch (err) {
+      // Rollback on failure
+      try {
+        await cred.user.delete();
+      } catch (deleteErr) {
+        console.warn("[registerCompany] Could not delete orphaned Auth user:", deleteErr);
+      }
+      skipNextAuthEvent.current = false;
+      throw err;
+    }
   }, []);
 
   // ─── registerTherapist ────────────────────────────────────────────────────
@@ -437,16 +460,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (params.companyId) profileData.companyId = params.companyId;
       await createUserProfile(uid, profileData);
 
-      // 4. Set user state
-      const newUser: AuthUser = {
-        uid,
-        name: params.name,
-        email: params.email,
-        role: "therapist",
-        therapistId,
-        companyId: params.companyId,
-      };
-      setUser(newUser);
+      // 4. Send email verification
+      await sendEmailVerification(cred.user);
+
+      // 5. Sign out - user needs to verify email first
+      await firebaseSignOut(auth);
       setLoading(false);
     } catch (err) {
       // Firestore write(s) failed — delete the Auth user to avoid orphaned account
@@ -496,16 +514,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ...(params.companyId ? { companyId: params.companyId } : {}),
       });
 
-      // 4. Set user state
-      const newUser: AuthUser = {
-        uid,
-        name: params.name,
-        email: params.email,
-        role: "client",
-        clientId,
-        companyId: params.companyId,
-      };
-      setUser(newUser);
+      // 4. Send email verification
+      await sendEmailVerification(cred.user);
+
+      // 5. Sign out - user needs to verify email first
+      await firebaseSignOut(auth);
       setLoading(false);
     } catch (err) {
       // Firestore write(s) failed — rollback Auth user

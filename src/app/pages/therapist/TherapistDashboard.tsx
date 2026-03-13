@@ -92,7 +92,7 @@ export default function TherapistDashboard() {
 
   // ── Chart: build from real records if available, else use mock data ─────────
   const chartData = useMemo(() => {
-    if (myRecords.length === 0) return therapistEarningsData;
+    if (myRecords.length === 0) return therapistEarningsData.map((item, idx) => ({ ...item, id: `mock-${idx}` }));
 
     // Group by "MMM/YY"
     const map: Record<string, { gross: number; net: number; sessions: number }> = {};
@@ -104,7 +104,8 @@ export default function TherapistDashboard() {
       map[key].net += r.therapistEarned;
       map[key].sessions += 1;
     });
-    const built = Object.entries(map).map(([month, v]) => ({
+    const built = Object.entries(map).map(([month, v], idx) => ({
+      id: `chart-${idx}-${month}`,
       month,
       gross: Math.round(v.gross),
       net: Math.round(v.net),
@@ -112,7 +113,7 @@ export default function TherapistDashboard() {
       sessions: v.sessions,
     }));
     // Merge with mock data for the chart (last 6 months mock + real data)
-    return built.length >= 2 ? built : therapistEarningsData;
+    return built.length >= 2 ? built : therapistEarningsData.map((item, idx) => ({ ...item, id: `mock-${idx}` }));
   }, [myRecords, therapistEarningsData]);
 
   if (!therapist) return (
@@ -256,7 +257,7 @@ export default function TherapistDashboard() {
         <h3 className="text-gray-900 mb-1">Histórico de Ganhos</h3>
         <p className="text-gray-400 text-xs mb-4">Valor bruto da sessão vs. seu ganho líquido</p>
         <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={chartData} key={chartData.length}>
+          <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#EDE9FE" />
             <XAxis dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
             <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
@@ -264,8 +265,8 @@ export default function TherapistDashboard() {
               contentStyle={{ background: "#fff", border: "1px solid #C4B5FD", borderRadius: "0.75rem" }}
               formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, ""]}
             />
-            <Bar id="bar-gross" dataKey="gross" fill="#EDE9FE" radius={[4, 4, 0, 0]} name="Valor da sessão" barSize={16} isAnimationActive={false} />
-            <Bar id="bar-net"   dataKey="net"   fill="#7C3AED" radius={[4, 4, 0, 0]} name="Meu ganho"       barSize={16} isAnimationActive={false} />
+            <Bar dataKey="gross" fill="#EDE9FE" radius={[4, 4, 0, 0]} name="Valor da sessão" barSize={16} isAnimationActive={false} />
+            <Bar dataKey="net"   fill="#7C3AED" radius={[4, 4, 0, 0]} name="Meu ganho"       barSize={16} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>

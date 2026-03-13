@@ -11,7 +11,7 @@ import {
 import { useAuth } from "./AuthContext";
 
 // ── Store types (bridges kept for page compatibility) ────────────────────────
-import { therapistStore, type SessionRecord, type CatalogItem } from "../store/therapistStore";
+import { therapistStore } from "../store/therapistStore";
 import type { MediaItem } from "../../lib/imagekit";
 import { unitStore } from "../store/unitStore";
 import { roomStore } from "../store/roomStore";
@@ -44,13 +44,16 @@ import {
   getAllCompanies as fsGetAllCompanies,
   getAllTherapists as fsGetAllTherapists,
   getAllClients as fsGetAllClients,
+  getAllUserProfiles as fsGetAllUserProfiles,
   subscribeAppointmentsByCompany, subscribeAppointmentsByTherapist,
   subscribeSessionRecordsByCompany, subscribeSessionRecordsByTherapist,
   type Company, type Unit, type Therapist, type Client,
-  type Therapy, type Room, type Appointment, type TherapistAssociation,
+  type Therapy, type Room, type Appointment, type SessionRecord,
+  type CatalogItem, type TherapistAssociation,
+  type UserProfile,
 } from "../../lib/firestore";
 
-// ─── Re-export types so pages can import from DataContext ─���───────────────────
+// ─── Re-export types so pages can import from DataContext ────────────────────
 export type { Company, Unit, Therapist, Client, Therapy, Room, Appointment, SessionRecord, CatalogItem, MediaItem };
 
 // ─── Context type ─────────────────────────────────────────────────────────────

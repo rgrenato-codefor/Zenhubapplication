@@ -36,6 +36,7 @@ export interface UserProfile {
   therapistId?: string;
   clientId?: string;
   avatar?: string;
+  emailVerified?: boolean;
   createdAt?: Timestamp;
 }
 
@@ -237,7 +238,11 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 }
 
 export async function createUserProfile(uid: string, data: Omit<UserProfile, "uid" | "createdAt">): Promise<void> {
-  await setDoc(doc(db, "users", uid), { ...data, createdAt: serverTimestamp() });
+  await setDoc(doc(db, "users", uid), { 
+    ...data, 
+    emailVerified: data.emailVerified ?? false,
+    createdAt: serverTimestamp() 
+  });
 }
 
 export async function updateUserProfile(uid: string, data: Partial<Omit<UserProfile, "uid">>): Promise<void> {
@@ -273,6 +278,37 @@ export async function getAllClients(): Promise<Client[]> {
     const snap = await getDocs(collection(db, "clients"));
     return snap.docs.map((d) => ({ ...d.data(), id: d.id } as Client));
   } catch { return []; }
+}
+
+export async function getAllUserProfiles(): Promise<UserProfile[]> {
+  try {
+    const snap = await getDocs(collection(db, "users"));
+    return snap.docs.map((d) => ({ uid: d.id, ...d.data() } as UserProfile));
+  } catch {
+    return [];
+  }
+}
+
+// Migration helper: Initialize emailVerified field for profiles missing it
+export async function migrateEmailVerifiedField(): Promise<void> {
+  try {
+    const profiles = await getAllUserProfiles();
+    const updates: Promise<void>[] = [];
+    
+    for (const profile of profiles) {
+      if (profile.emailVerified === undefined) {
+        console.log(`[Migration] Setting emailVerified=false for user ${profile.email}`);
+        updates.push(updateUserProfile(profile.uid, { emailVerified: false }));
+      }
+    }
+    
+    if (updates.length > 0) {
+      await Promise.all(updates);
+      console.log(`[Migration] Updated ${updates.length} user profiles with emailVerified field`);
+    }
+  } catch (error) {
+    console.error('[Migration] Failed to migrate emailVerified field:', error);
+  }
 }
 
 export async function createCompany(data: Omit<Company, "id" | "createdAt">): Promise<string> {

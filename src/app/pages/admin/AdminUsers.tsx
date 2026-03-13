@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import React from "react";
-import { Search, Plus, Shield, Building2, Star, UserCircle, Edit, Trash2, CheckCircle } from "../../components/shared/icons";
+import { Search, Plus, Shield, Building2, Star, UserCircle, Edit, Trash2, CheckCircle, AlertCircle } from "../../components/shared/icons";
 import { useData } from "../../context/DataContext";
+import { getAllUserProfiles, migrateEmailVerifiedField, type UserProfile } from "../../../lib/firestore";
 
 const roleConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   super_admin: { label: "Super Admin", color: "bg-violet-100 text-violet-700", icon: Shield },
@@ -15,13 +16,31 @@ export default function AdminUsers() {
   const { allAdminTherapists, allAdminClients, allAdminCompanies, loading } = useData();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [verificationFilter, setVerificationFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
+  const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
+
+  // Load user profiles to get email verification status
+  useEffect(() => {
+    const loadProfilesAndMigrate = async () => {
+      // Run migration first to ensure all profiles have emailVerified field
+      await migrateEmailVerifiedField();
+      
+      // Then load all profiles
+      const profiles = await getAllUserProfiles();
+      console.log('[AdminUsers] User profiles loaded:', profiles);
+      setUserProfiles(profiles);
+    };
+    
+    loadProfilesAndMigrate();
+  }, []);
 
   // Build a unified user list from real Firestore data:
   // therapists + clients (company admins aren't stored as separate users in Firestore client SDK)
   const allUsers = [
     ...allAdminTherapists.map((t) => ({
       id: t.id,
+      userId: t.userId,
       name: t.name,
       email: t.email,
       role: "therapist" as const,
@@ -30,6 +49,7 @@ export default function AdminUsers() {
     })),
     ...allAdminClients.map((c) => ({
       id: c.id,
+      userId: c.userId,
       name: c.name,
       email: c.email,
       role: "client" as const,
@@ -38,12 +58,42 @@ export default function AdminUsers() {
     })),
   ];
 
+  console.log('[AdminUsers] All users:', allUsers);
+  console.log('[AdminUsers] User profiles:', userProfiles);
+
   const filtered = allUsers.filter((u) => {
     const matchSearch =
       u.name.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase());
     const matchRole = roleFilter === "all" || u.role === roleFilter;
-    return matchSearch && matchRole;
+    
+    // Find profile by userId first, then fallback to email
+    const profile = u.userId 
+      ? userProfiles.find((p) => p.uid === u.userId)
+      : userProfiles.find((p) => p.email === u.email);
+    
+    // Treat undefined as false (not verified)
+    const isVerified = profile?.emailVerified === true;
+    const isNotVerified = !profile || profile?.emailVerified === false || profile?.emailVerified === undefined;
+    
+    console.log(`[AdminUsers] User ${u.name}:`, {
+      userId: u.userId,
+      email: u.email,
+      profile,
+      emailVerified: profile?.emailVerified,
+      isVerified,
+      isNotVerified,
+      verificationFilter
+    });
+    
+    const matchVerification =
+      verificationFilter === "all" ||
+      (verificationFilter === "verified" && isVerified) ||
+      (verificationFilter === "unverified" && isNotVerified);
+    
+    console.log(`[AdminUsers] Match verification for ${u.name}:`, matchVerification);
+    
+    return matchSearch && matchRole && matchVerification;
   });
 
   return (
@@ -92,13 +142,28 @@ export default function AdminUsers() {
             </button>
           ))}
         </div>
+        <div className="flex gap-2 flex-wrap">
+          {["all", "verified", "unverified"].map((v) => (
+            <button
+              key={v}
+              onClick={() => setVerificationFilter(v)}
+              className={`px-3 py-2 rounded-lg text-xs transition-colors ${
+                verificationFilter === v
+                  ? "bg-violet-600 text-white"
+                  : "bg-gray-800 border border-gray-700 text-gray-400 hover:text-white"
+              }`}
+            >
+              {v === "all" ? "Todos" : v === "verified" ? "Verificados" : "Não verificados"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Table */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
         {filtered.length === 0 && !loading ? (
           <div className="text-center py-12 text-gray-500 text-sm">
-            {search || roleFilter !== "all"
+            {search || roleFilter !== "all" || verificationFilter !== "all"
               ? "Nenhum usuário encontrado com esses filtros"
               : "Nenhum usuário cadastrado"}
           </div>
@@ -117,6 +182,10 @@ export default function AdminUsers() {
               {filtered.map((u) => {
                 const role = roleConfig[u.role];
                 const company = allAdminCompanies.find((c) => c.id === u.companyId);
+                // Find profile by userId first, then fallback to email
+                const profile = u.userId 
+                  ? userProfiles.find((p) => p.uid === u.userId)
+                  : userProfiles.find((p) => p.email === u.email);
                 return (
                   <tr key={u.id} className="hover:bg-gray-750 group">
                     <td className="px-6 py-4">
@@ -127,8 +196,15 @@ export default function AdminUsers() {
                         >
                           {u.name.charAt(0)}
                         </div>
-                        <div>
-                          <p className="text-sm text-white">{u.name}</p>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm text-white">{u.name}</p>
+                            {profile?.emailVerified === true ? (
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" title="E-mail verificado" />
+                            ) : profile?.emailVerified === false ? (
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-400" title="E-mail não verificado" />
+                            ) : null}
+                          </div>
                           <p className="text-xs text-gray-400">{u.email}</p>
                         </div>
                       </div>

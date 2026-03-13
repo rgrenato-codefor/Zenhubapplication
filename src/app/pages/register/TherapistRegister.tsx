@@ -208,7 +208,7 @@ export default function TherapistRegister() {
         commission: linkedCompany ? 50 : 100,
       });
       setDone(true);
-      setTimeout(() => navigate("/terapeuta"), 2500);
+      setTimeout(() => navigate(`/verificar-email?email=${encodeURIComponent(form.email)}`), 2000);
     } catch (err: any) {
       console.error("[TherapistRegister] Erro ao criar perfil:", err);
       const code = err?.code ?? "";
