@@ -18,6 +18,9 @@ export default function CompanyTherapistDetail() {
   const { company, therapists, therapies, sessionRecords, therapistStore: store,
     mutateMarkCommissionPaid } = usePageData();
 
+  // ── Hooks must all be declared before any conditional return ──────────────
+  const [paying, setPaying] = useState(false);
+
   const therapist = therapists.find((t) => t.id === therapistId);
   const therapistRecords = (sessionRecords as any[]).filter((r) => r.therapistId === therapistId);
   const primaryColor = company?.color || "#0D9488";
@@ -50,7 +53,6 @@ export default function CompanyTherapistDetail() {
   const totalGross    = therapistRecords.reduce((s: number, r: any) => s + (r.totalCharged || 0), 0);
   const companyShare  = totalGross - totalEarned;
 
-  const [paying, setPaying] = useState(false);
   const handlePayAll = async () => {
     if (unpaidRecords.length === 0) return;
     setPaying(true);
@@ -195,8 +197,8 @@ export default function CompanyTherapistDetail() {
             <AreaChart data={history}>
               <defs>
                 <linearGradient id="gradNet" x1="0" y1="0" x2="0" y2="1">
-                  <stop key="stop-top"    offset="5%"  stopColor="#10B981" stopOpacity={0.2} />
-                  <stop key="stop-bottom" offset="95%" stopColor="#10B981" stopOpacity={0} />
+                  <stop offset="5%"  stopColor="#10B981" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />

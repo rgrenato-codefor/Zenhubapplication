@@ -16,9 +16,9 @@ export default function CompanySales() {
   const { selectedUnitId, selectedUnit, companyUnits } = useCompanyUnit();
   const primaryColor = company?.color || "#0D9488";
 
-  const { planConfig, hasModule } = useCompanyPlan(company?.plan);
-  if (!hasModule("sales")) {
-    return <PlanGate module="sales" planConfig={planConfig} primaryColor={primaryColor} />;
+  const { planConfig, hasModule, isLoading } = useCompanyPlan(company?.plan);
+  if (isLoading || !hasModule("sales")) {
+    return <PlanGate module="sales" planConfig={planConfig} primaryColor={primaryColor} isLoading={isLoading} />;
   }
 
   // ── Filter all data by selected unit ─────────────────────────────────────

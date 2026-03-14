@@ -2,6 +2,8 @@
  * PlanGate
  * Shows a "upgrade required" overlay when a company tries to access a module
  * that is not included in their current plan.
+ * Pass isLoading=true while plan data is being fetched to show a skeleton
+ * instead of a false-positive locked screen.
  */
 
 import { useNavigate } from "react-router";
@@ -16,11 +18,26 @@ interface PlanGateProps {
   planConfig: CompanyPlan;
   /** Primary brand color */
   primaryColor?: string;
+  /** While true, render a neutral skeleton instead of the lock screen */
+  isLoading?: boolean;
 }
 
-export function PlanGate({ module, planConfig, primaryColor = "#7C3AED" }: PlanGateProps) {
+export function PlanGate({ module, planConfig, primaryColor = "#7C3AED", isLoading = false }: PlanGateProps) {
   const navigate = useNavigate();
   const moduleName = COMPANY_MODULES[module];
+
+  // ── Loading skeleton: never show a false-positive lock during Firestore fetch ──
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <div
+          className="w-12 h-12 rounded-full border-4 border-gray-100 animate-spin"
+          style={{ borderTopColor: primaryColor }}
+        />
+        <p className="text-gray-400 text-sm animate-pulse">Verificando plano...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">

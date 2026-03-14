@@ -40,13 +40,19 @@ export function useCompanyPlan(planNameOrId: string | null | undefined) {
   const [firestorePlans, setFirestorePlans] = useState<CompanyPlan[]>(
     _firestorePlans ?? []
   );
+  // true while the first Firestore fetch is in-flight (null = not yet fetched)
+  const [isLoading, setIsLoading] = useState(_firestorePlans === null);
 
   useEffect(() => {
     if (_firestorePlans !== null) {
       setFirestorePlans(_firestorePlans);
+      setIsLoading(false);
       return;
     }
-    fetchFirestorePlans().then((plans) => setFirestorePlans(plans));
+    fetchFirestorePlans().then((plans) => {
+      setFirestorePlans(plans);
+      setIsLoading(false);
+    });
   }, []);
 
   /** Resolved plan config: Firestore first, then hardcoded defaults */
@@ -160,7 +166,7 @@ export function useCompanyPlan(planNameOrId: string | null | undefined) {
     return current >= lim;
   };
 
-  return { planConfig, allPlans, hasModule, getLimit, isAtLimit };
+  return { planConfig, allPlans, hasModule, getLimit, isAtLimit, isLoading };
 }
 
 /** Invalidate the module-level cache (useful after plan migration) */

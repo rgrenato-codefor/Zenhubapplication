@@ -1,10 +1,27 @@
 import { useMemo } from "react";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 import { TrendingUp, Download, Building2 } from "../../components/shared/icons";
 import { useData } from "../../context/DataContext";
+
+/** Pure-CSS bar — no recharts, no duplicate-key warnings */
+function CssBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-gray-400 text-xs w-16 shrink-0 text-right">{label}</span>
+      <div className="flex-1 bg-gray-700 rounded-full h-5 overflow-hidden">
+        <div
+          className="h-full rounded-full flex items-center justify-end pr-2 transition-all duration-500"
+          style={{ width: `${Math.max(pct, value > 0 ? 8 : 0)}%`, background: color }}
+        >
+          {value > 0 && (
+            <span className="text-white text-xs" style={{ fontWeight: 700, fontSize: 10 }}>{value}</span>
+          )}
+        </div>
+      </div>
+      <span className="text-gray-300 text-xs w-6 text-right" style={{ fontWeight: 600 }}>{value}</span>
+    </div>
+  );
+}
 
 export default function AdminReports() {
   const { allAdminCompanies, loading } = useData();
@@ -20,24 +37,32 @@ export default function AdminReports() {
 
   const maxRevenue = ranked.length > 0 ? ranked[0].monthRevenue || 1 : 1;
 
-  // ── Plan breakdown bar chart ──────────────────────────────────────────────
+  // ── Plan breakdown ────────────────────────────────────────────────────────
   const planBreakdown = useMemo(() => {
     const counts: Record<string, number> = { Starter: 0, Business: 0, Premium: 0 };
     allAdminCompanies.forEach((c) => {
       if (counts[c.plan] !== undefined) counts[c.plan]++;
     });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    return [
+      { name: "Starter",  value: counts.Starter,  color: "#6366F1" },
+      { name: "Business", value: counts.Business, color: "#7C3AED" },
+      { name: "Premium",  value: counts.Premium,  color: "#A855F7" },
+    ];
   }, [allAdminCompanies]);
+
+  const planMax = Math.max(...planBreakdown.map((d) => d.value), 1);
 
   // ── Status breakdown ──────────────────────────────────────────────────────
   const statusData = useMemo(() => {
-    const active = allAdminCompanies.filter((c) => c.status === "active").length;
+    const active   = allAdminCompanies.filter((c) => c.status === "active").length;
     const inactive = allAdminCompanies.filter((c) => c.status !== "active").length;
     return [
-      { name: "Ativas", value: active },
-      { name: "Inativas", value: inactive },
+      { name: "Ativas",   value: active,   color: "#0D9488" },
+      { name: "Inativas", value: inactive, color: "#6B7280" },
     ];
   }, [allAdminCompanies]);
+
+  const statusMax = Math.max(...statusData.map((d) => d.value), 1);
 
   return (
     <div className="space-y-6">
@@ -55,44 +80,30 @@ export default function AdminReports() {
         {/* Plan breakdown */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
           <h3 className="text-white mb-1">Empresas por Plano</h3>
-          <p className="text-gray-400 text-xs mb-4">Distribuição de assinaturas</p>
+          <p className="text-gray-400 text-xs mb-5">Distribuição de assinaturas</p>
           {loading ? (
-            <div className="flex items-center justify-center h-[220px] text-gray-500 text-sm">Carregando...</div>
+            <div className="flex items-center justify-center h-[120px] text-gray-500 text-sm">Carregando...</div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={planBreakdown} barSize={40}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" stroke="#6B7280" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#6B7280" tick={{ fontSize: 12 }} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }}
-                  formatter={(v: number) => [v, "Empresas"]}
-                />
-                <Bar dataKey="value" fill="#7C3AED" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="space-y-3">
+              {planBreakdown.map((d) => (
+                <CssBar key={d.name} label={d.name} value={d.value} max={planMax} color={d.color} />
+              ))}
+            </div>
           )}
         </div>
 
         {/* Status breakdown */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
           <h3 className="text-white mb-1">Status das Empresas</h3>
-          <p className="text-gray-400 text-xs mb-4">Ativas vs. inativas</p>
+          <p className="text-gray-400 text-xs mb-5">Ativas vs. inativas</p>
           {loading ? (
-            <div className="flex items-center justify-center h-[220px] text-gray-500 text-sm">Carregando...</div>
+            <div className="flex items-center justify-center h-[120px] text-gray-500 text-sm">Carregando...</div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={statusData} barSize={60}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" stroke="#6B7280" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#6B7280" tick={{ fontSize: 12 }} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }}
-                  formatter={(v: number) => [v, "Empresas"]}
-                />
-                <Bar dataKey="value" fill="#0D9488" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="space-y-3">
+              {statusData.map((d) => (
+                <CssBar key={d.name} label={d.name} value={d.value} max={statusMax} color={d.color} />
+              ))}
+            </div>
           )}
         </div>
       </div>

@@ -78,10 +78,8 @@ export default function CompanyCommissions() {
   const primaryColor = company?.color || "#0D9488";
   const companyId = user?.companyId ?? "";
 
-  const { planConfig, hasModule } = useCompanyPlan(company?.plan);
-  if (!hasModule("commissions")) {
-    return <PlanGate module="commissions" planConfig={planConfig} primaryColor={primaryColor} />;
-  }
+  // ── All hooks must be declared before any conditional return ──────────────
+  const { planConfig, hasModule, isLoading } = useCompanyPlan(company?.plan);
 
   const [tab, setTab] = useState<Tab>("earnings");
   const [monthIdx, setMonthIdx] = useState(MONTHS.length - 1); // Mar 2026
@@ -94,6 +92,11 @@ export default function CompanyCommissions() {
   );
   const [editing, setEditing] = useState<string | null>(null);
   const [tempRate, setTempRate] = useState(0);
+
+  // ── Plan gate (after all hooks) ───────────────────────────────────────────
+  if (isLoading || !hasModule("commissions")) {
+    return <PlanGate module="commissions" planConfig={planConfig} primaryColor={primaryColor} isLoading={isLoading} />;
+  }
 
   const companyTherapists = allTherapists
     .filter((t) => t.companyId === user?.companyId)
@@ -332,8 +335,8 @@ export default function CompanyCommissions() {
                     name === "net" ? "Comissão (a pagar)" : "Receita bruta",
                   ]}
                 />
-                <Bar key="bar-gross" dataKey="gross" fill={`${primaryColor}30`} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                <Bar key="bar-net" dataKey="net" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                <Bar dataKey="gross" fill={`${primaryColor}30`} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="net" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                   {therapistEarnings.map((e) => (
                     <Cell
                       key={e.therapist.id}

@@ -24,11 +24,8 @@ export default function CompanyTherapists() {
   const { selectedUnitId, companyUnits } = useCompanyUnit();
   const primaryColor = company?.color || "#0D9488";
 
-  // Plan enforcement
-  const { planConfig, hasModule, isAtLimit } = useCompanyPlan(company?.plan);
-  if (!hasModule("therapists_multi")) {
-    return <PlanGate module="therapists_multi" planConfig={planConfig} primaryColor={primaryColor} />;
-  }
+  // ── All hooks must be declared before any conditional return ──────────────
+  const { planConfig, hasModule, isAtLimit, isLoading } = useCompanyPlan(company?.plan);
 
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<"add" | "edit_commission" | "dissociate" | "approve" | null>(null);
@@ -43,6 +40,11 @@ export default function CompanyTherapists() {
   // Two-step association flow
   const [addStep, setAddStep] = useState<"search" | "preview">("search");
   const [previewTherapist, setPreviewTherapist] = useState<typeof allTherapists[0] | null>(null);
+
+  // ── Plan gate (after all hooks) ───────────────────────────────────────────
+  if (isLoading || !hasModule("therapists_multi")) {
+    return <PlanGate module="therapists_multi" planConfig={planConfig} primaryColor={primaryColor} isLoading={isLoading} />;
+  }
 
   // Get company therapists from DataContext (already fetched from Firestore)
   const companyTherapistIds: string[] = allTherapists

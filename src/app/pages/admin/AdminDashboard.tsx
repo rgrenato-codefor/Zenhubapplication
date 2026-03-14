@@ -91,13 +91,26 @@ function TabGeral({
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={topCompanies.map((c) => ({ name: c.name.split(" ")[0], profissionais: c.therapistsCount || 0, clientes: c.clientsCount || 0 }))} barSize={16}>
+              <BarChart
+                data={topCompanies.map((c, idx) => ({
+                  name: c.name.length > 8 ? c.name.slice(0, 7) + "…" : c.name,
+                  nameKey: `${idx}-${c.id}`,
+                  profissionais: c.therapistsCount || 0,
+                  clientes: c.clientsCount || 0,
+                }))}
+                barSize={16}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="name" stroke="#6B7280" tick={{ fontSize: 11 }} />
-                <YAxis stroke="#6B7280" tick={{ fontSize: 11 }} allowDecimals={false} />
+                <YAxis
+                  stroke="#6B7280"
+                  tick={{ fontSize: 11 }}
+                  allowDecimals={false}
+                  domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
+                />
                 <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }} />
-                <Bar key="bar-profissionais" dataKey="profissionais" fill="#0D9488" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Profissionais" />
-                <Bar key="bar-clientes"   fill="#3B82F6" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Clientes" dataKey="clientes" />
+                <Bar dataKey="profissionais" fill="#0D9488" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Profissionais" />
+                <Bar dataKey="clientes" fill="#3B82F6" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Clientes" />
               </BarChart>
             </ResponsiveContainer>
           )}
