@@ -10,6 +10,7 @@ import { useCompanyUnit } from "../../context/CompanyContext";
 import type { SessionRecord } from "../../context/DataContext";
 import { checkAppointmentConflicts } from "../../lib/appointmentConflicts";
 import { useCompanyPlan } from "../../hooks/useCompanyPlan";
+import { DEFAULT_COMPANY_PLANS } from "../../lib/planConfig";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type ClosureModal = {
@@ -91,6 +92,14 @@ export default function CompanySchedule() {
 
   const apptLimit = getLimit("appointments_monthly");
   const apptAtLimit = isAtLimit("appointments_monthly", monthAppointmentCount);
+
+  // Next plan above current (for the consent modal)
+  const nextPlan = DEFAULT_COMPANY_PLANS.find(
+    (p) => p.order === (planConfig.order ?? 0) + 1
+  ) ?? null;
+
+  // ── Limit consent modal ──────────────────────────────────────────────────
+  const [showLimitConsent, setShowLimitConsent] = useState(false);
 
   const [view, setView] = useState<"week" | "day" | "list">("week");
   const [selectedDay, setSelectedDay] = useState(TODAY_STR);
@@ -196,6 +205,15 @@ export default function CompanySchedule() {
     setShowNewModal(true);
   };
 
+  // Opens scheduling: if at limit first ask for consent, otherwise go straight in
+  const handleScheduleClick = () => {
+    if (apptAtLimit) {
+      setShowLimitConsent(true);
+    } else {
+      openNewModal();
+    }
+  };
+
   const handleSelectClient = (id: string, name: string) => {
     setApt("clientId", id);
     setClientSearch(name);
@@ -236,13 +254,6 @@ export default function CompanySchedule() {
   };
 
   const handleConfirmNewApt = async () => {
-    if (apptAtLimit) {
-      setAptError(
-        `Limite do plano ${planConfig.name} atingido: ${apptLimit} atendimento${apptLimit === 1 ? "" : "s"}/mês. ` +
-        `Faça upgrade para continuar agendando.`
-      );
-      return;
-    }
     if (!newApt.clientId) { setAptError("Selecione ou cadastre um cliente."); return; }
     if (!newApt.therapistId) { setAptError("Selecione o terapeuta."); return; }
     if (!newApt.therapyId) { setAptError("Selecione a terapia."); return; }
@@ -460,27 +471,26 @@ export default function CompanySchedule() {
               </button>
             ))}
           </div>
-          {apptAtLimit ? (
+          {apptAtLimit && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm">
-              <Lock className="w-4 h-4 shrink-0" />
+              <AlertCircle className="w-4 h-4 shrink-0" />
               <span style={{ fontWeight: 600 }}>
                 {monthAppointmentCount}/{apptLimit} atend. — Limite {planConfig.name}
               </span>
             </div>
-          ) : (
-            <button
-              onClick={openNewModal}
-              className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm"
-              style={{ background: primaryColor, fontWeight: 600 }}
-            >
-              <Plus className="w-4 h-4" /> Agendar
-              {apptLimit !== null && (
-                <span className="ml-1 text-xs opacity-75">
-                  {monthAppointmentCount}/{apptLimit}
-                </span>
-              )}
-            </button>
           )}
+          <button
+            onClick={handleScheduleClick}
+            className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm"
+            style={{ background: primaryColor, fontWeight: 600 }}
+          >
+            <Plus className="w-4 h-4" /> Agendar
+            {apptLimit !== null && (
+              <span className="ml-1 text-xs opacity-75">
+                {monthAppointmentCount}/{apptLimit}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -510,7 +520,7 @@ export default function CompanySchedule() {
         >
           <div className="shrink-0">
             {apptAtLimit
-              ? <Lock className="w-4 h-4 text-amber-500" />
+              ? <AlertCircle className="w-4 h-4 text-amber-500" />
               : <CalendarDays className="w-4 h-4 text-gray-400" />
             }
           </div>
@@ -541,15 +551,9 @@ export default function CompanySchedule() {
             </div>
           </div>
           {apptAtLimit && (
-            <a
-              href="https://zenhub.online"
-              target="_blank"
-              rel="noreferrer"
-              className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
-              style={{ fontWeight: 600 }}
-            >
-              Fazer upgrade
-            </a>
+            <p className="shrink-0 text-xs text-amber-700 max-w-[150px] text-right leading-tight" style={{ fontWeight: 500 }}>
+              Atendimentos extras serão cobrados no próximo plano
+            </p>
           )}
         </div>
       )}
@@ -945,6 +949,84 @@ export default function CompanySchedule() {
               <button onClick={() => setClosureModal(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm">Cancelar</button>
               <button onClick={handleConfirmClosure} className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2" style={{ background: primaryColor, fontWeight: 700 }}>
                 <CheckCircle className="w-4 h-4" /> Encerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Limit Consent Modal ──────────────────────────────────────────── */}
+      {showLimitConsent && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 flex flex-col gap-4">
+            {/* Icon */}
+            <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center mx-auto">
+              <AlertCircle className="w-6 h-6 text-amber-500" />
+            </div>
+
+            {/* Title */}
+            <div className="text-center">
+              <p className="text-gray-900 text-base" style={{ fontWeight: 700 }}>
+                Limite do plano atingido
+              </p>
+              <p className="text-gray-500 text-sm mt-1">
+                Você usou{" "}
+                <strong className="text-gray-700">{monthAppointmentCount}/{apptLimit}</strong>{" "}
+                atendimentos do plano{" "}
+                <strong className="text-gray-700">{planConfig.name}</strong> este mês.
+              </p>
+            </div>
+
+            {/* Explanation */}
+            <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-amber-800 space-y-1.5">
+              <p>Você pode continuar agendando normalmente — sem interrupção no atendimento aos seus clientes.</p>
+              {nextPlan ? (
+                <p>
+                  Os atendimentos excedentes serão cobrados com base no plano{" "}
+                  <strong>{nextPlan.name} (R$ {nextPlan.price}/mês)</strong> e o valor
+                  ajustado aparecerá na sua próxima fatura.
+                </p>
+              ) : (
+                <p>O excedente será cobrado conforme a tabela vigente na próxima fatura.</p>
+              )}
+            </div>
+
+            {/* Checkbox consent */}
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                id="limit-consent-check"
+                className="mt-0.5 w-4 h-4 shrink-0 accent-amber-500"
+                onChange={(e) => {
+                  const btn = document.getElementById("limit-consent-btn") as HTMLButtonElement | null;
+                  if (btn) btn.disabled = !e.target.checked;
+                }}
+              />
+              <span className="text-sm text-gray-600 leading-snug">
+                Estou ciente e autorizo a cobrança do plano{" "}
+                <strong className="text-gray-700">{nextPlan?.name ?? "superior"}</strong> na próxima fatura.
+              </span>
+            </label>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLimitConsent(false)}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                id="limit-consent-btn"
+                disabled
+                onClick={() => {
+                  setShowLimitConsent(false);
+                  openNewModal();
+                }}
+                className="flex-1 py-2.5 text-white rounded-xl text-sm transition-all disabled:opacity-40 hover:opacity-90"
+                style={{ background: primaryColor, fontWeight: 600 }}
+              >
+                Continuar agendando
               </button>
             </div>
           </div>

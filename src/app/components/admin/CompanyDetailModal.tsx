@@ -3,7 +3,7 @@
  * Slide-in drawer showing full statistical details for a company in the Super Admin view.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   X,
   Building2,
@@ -27,7 +27,6 @@ import type { Company } from "../../context/DataContext";
 import { useCompanyPlan } from "../../hooks/useCompanyPlan";
 import {
   COMPANY_MODULES,
-  DEFAULT_COMPANY_PLANS,
   type ModuleKey,
 } from "../../lib/planConfig";
 
@@ -101,12 +100,34 @@ export function CompanyDetailModal({
   onPlanChange,
   planChanging = false,
 }: Props) {
-  const { planConfig, hasModule, getLimit } = useCompanyPlan(company?.plan);
+  const { planConfig, allPlans, hasModule, getLimit } = useCompanyPlan(company?.plan);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState("");
   const [upgraded, setUpgraded] = useState(false);
 
-  const upgradablePlans = DEFAULT_COMPANY_PLANS.filter(
+  // ── Fetch monthly appointment count for this company ──────────────────────
+  const [monthApptCount, setMonthApptCount] = useState<number>(0);
+  const [apptLoading, setApptLoading] = useState(false);
+
+  useEffect(() => {
+    if (!company) return;
+    setMonthApptCount(0);
+    setApptLoading(true);
+    const yearMonth = (() => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    })();
+    import("../../../lib/firestore")
+      .then(({ getAppointmentsByCompany }) => getAppointmentsByCompany(company.id))
+      .then((apts: any[]) => {
+        const count = apts.filter((a) => (a.date as string)?.startsWith(yearMonth)).length;
+        setMonthApptCount(count);
+      })
+      .catch(() => setMonthApptCount(0))
+      .finally(() => setApptLoading(false));
+  }, [company?.id]);
+
+  const upgradablePlans = allPlans.filter(
     (p) => p.name !== planConfig.name
   );
 
@@ -284,8 +305,8 @@ export function CompanyDetailModal({
               )}
               {getLimit("appointments_monthly") !== null && (
                 <UsageBar
-                  label="Atendimentos este mês"
-                  current={(company as any).monthAppointmentsCount || 0}
+                  label={`Atendimentos este mês${apptLoading ? " (carregando…)" : ""}`}
+                  current={monthApptCount}
                   max={getLimit("appointments_monthly")!}
                   color="#3B82F6"
                 />
@@ -348,6 +369,9 @@ export function CompanyDetailModal({
                         <div>
                           <p style={{ fontWeight: 600 }}>{p.name}</p>
                           <p className="text-xs opacity-70">{p.price === 0 ? "Grátis" : `R$ ${p.price}/mês`}</p>
+                          {p.limits.appointments_monthly !== null && (
+                            <p className="text-xs opacity-50">{p.limits.appointments_monthly} atend./mês</p>
+                          )}
                         </div>
                       </button>
                     ))}

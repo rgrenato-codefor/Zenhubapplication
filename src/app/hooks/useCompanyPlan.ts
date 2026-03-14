@@ -86,6 +86,35 @@ export function useCompanyPlan(planNameOrId: string | null | undefined) {
     return hardcoded;
   }, [planNameOrId, firestorePlans]);
 
+  /**
+   * Full list of company plans, with Firestore values merged over hardcoded defaults.
+   * Any plan not found in Firestore keeps its hardcoded definition.
+   */
+  const allPlans = useMemo((): CompanyPlan[] => {
+    if (firestorePlans.length === 0) return DEFAULT_COMPANY_PLANS;
+
+    return DEFAULT_COMPANY_PLANS.map((hardcoded) => {
+      const found = firestorePlans.find(
+        (p) =>
+          p.name?.toLowerCase() === hardcoded.name.toLowerCase() ||
+          p.id?.toLowerCase() === hardcoded.id.toLowerCase()
+      );
+      if (!found) return hardcoded;
+      return {
+        ...hardcoded,
+        ...found,
+        limits: {
+          ...hardcoded.limits,
+          ...found.limits,
+          appointments_monthly:
+            found.limits?.appointments_monthly !== undefined
+              ? found.limits.appointments_monthly
+              : hardcoded.limits?.appointments_monthly ?? null,
+        },
+      };
+    });
+  }, [firestorePlans]);
+
   /** Returns true if the current plan includes a module */
   const hasModule = (key: ModuleKey): boolean =>
     (planConfig.modules ?? []).includes(key);
@@ -110,7 +139,7 @@ export function useCompanyPlan(planNameOrId: string | null | undefined) {
     return current >= lim;
   };
 
-  return { planConfig, hasModule, getLimit, isAtLimit };
+  return { planConfig, allPlans, hasModule, getLimit, isAtLimit };
 }
 
 /** Invalidate the module-level cache (useful after plan migration) */

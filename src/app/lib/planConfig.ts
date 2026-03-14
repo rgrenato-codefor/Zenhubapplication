@@ -73,7 +73,7 @@ export const DEFAULT_COMPANY_PLANS: CompanyPlan[] = [
     badge: "🆓",
     description: "Para começar a explorar a plataforma sem compromisso.",
     modules: ["dashboard", "schedule", "clients", "services"],
-    limits: { therapists: 1, clients: null, appointments_monthly: 20, units: 1 },
+    limits: { therapists: 1, clients: null, appointments_monthly: 10, units: 1 },
     isDefault: true,
     isActive: true,
     order: 0,
