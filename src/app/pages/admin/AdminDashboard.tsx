@@ -1,9 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
-} from "recharts";
-import {
   Building2, Users, TrendingUp, DollarSign, Activity, Star,
   CheckCircle, XCircle, LayoutGrid, CreditCard, ChevronRight,
 } from "../../components/shared/icons";
@@ -21,6 +17,59 @@ const planColors: Record<string, string> = {
   Starter:  "bg-blue-100 text-blue-700 border-blue-200",
   Gratuito: "bg-gray-100 text-gray-600 border-gray-200",
 };
+
+// ─── Pure-CSS/SVG chart helpers (no recharts → no duplicate-key warnings) ─────
+
+/** Horizontal grouped bar for two series */
+function GroupedBar({
+  label, v1, v2, max, c1, c2,
+}: { label: string; v1: number; v2: number; max: number; c1: string; c2: string }) {
+  const pct = (v: number) => max > 0 ? Math.max((v / max) * 100, v > 0 ? 4 : 0) : 0;
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-gray-400 w-16 shrink-0 truncate text-right" title={label}>{label}</span>
+      <div className="flex-1 space-y-1">
+        <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${pct(v1)}%`, background: c1 }} />
+        </div>
+        <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${pct(v2)}%`, background: c2 }} />
+        </div>
+      </div>
+      <span className="text-gray-400 w-12 text-right shrink-0">{v1} / {v2}</span>
+    </div>
+  );
+}
+
+/** SVG donut chart */
+function DonutChart({ data }: { data: { name: string; value: number; color: string }[] }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return null;
+  const R = 40;
+  const circ = 2 * Math.PI * R;
+  let offset = 0;
+  const segs = data.map((d) => {
+    const len = (d.value / total) * circ;
+    const seg = { ...d, dash: len - 1.5, offset, circ };
+    offset += len;
+    return seg;
+  });
+  return (
+    <svg viewBox="0 0 100 100" className="w-[120px] h-[120px] -rotate-90">
+      {segs.map((s) => (
+        <circle
+          key={s.name}
+          cx="50" cy="50" r={R}
+          fill="none"
+          stroke={s.color}
+          strokeWidth="12"
+          strokeDasharray={`${s.dash} ${circ - s.dash}`}
+          strokeDashoffset={-s.offset}
+        />
+      ))}
+    </svg>
+  );
+}
 
 // ─── Tab: Visão Geral ─────────────────────────────────────────────────────────
 
@@ -90,29 +139,28 @@ function TabGeral({
               {loading ? "Carregando..." : "Sem dados"}
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart
-                data={topCompanies.map((c, idx) => ({
-                  name: c.name.length > 8 ? c.name.slice(0, 7) + "…" : c.name,
-                  nameKey: `${idx}-${c.id}`,
-                  profissionais: c.therapistsCount || 0,
-                  clientes: c.clientsCount || 0,
-                }))}
-                barSize={16}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" stroke="#6B7280" tick={{ fontSize: 11 }} />
-                <YAxis
-                  stroke="#6B7280"
-                  tick={{ fontSize: 11 }}
-                  allowDecimals={false}
-                  domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
-                />
-                <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }} />
-                <Bar dataKey="profissionais" fill="#0D9488" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Profissionais" />
-                <Bar dataKey="clientes" fill="#3B82F6" radius={[3, 3, 0, 0]} isAnimationActive={false} name="Clientes" />
-              </BarChart>
-            </ResponsiveContainer>
+            <>
+              <div className="flex items-center gap-4 mb-3">
+                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-teal-500" /><span className="text-xs text-gray-400">Profissionais</span></div>
+                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-xs text-gray-400">Clientes</span></div>
+              </div>
+              <div className="space-y-2">
+                {(() => {
+                  const maxVal = Math.max(...topCompanies.map((c) => Math.max(c.therapistsCount || 0, c.clientsCount || 0)), 1);
+                  return topCompanies.map((c) => (
+                    <GroupedBar
+                      key={c.id}
+                      label={c.name.length > 10 ? c.name.slice(0, 9) + "…" : c.name}
+                      v1={c.therapistsCount || 0}
+                      v2={c.clientsCount || 0}
+                      max={maxVal}
+                      c1="#0D9488"
+                      c2="#3B82F6"
+                    />
+                  ));
+                })()}
+              </div>
+            </>
           )}
         </div>
 
@@ -125,26 +173,21 @@ function TabGeral({
               {loading ? "Carregando..." : "Sem dados"}
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={140}>
-              <PieChart>
-                <Pie data={planDist} cx="50%" cy="50%" innerRadius={34} outerRadius={60} paddingAngle={3} dataKey="value" isAnimationActive={false}>
-                  {planDist.map((e, i) => <Cell key={i} fill={e.color} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "0.75rem", color: "#F9FAFB" }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-          <div className="space-y-1.5 mt-2">
-            {planDist.map((item) => (
-              <div key={item.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} />
-                  <span className="text-xs text-gray-400">{item.name}</span>
-                </div>
-                <span className="text-xs text-white" style={{ fontWeight: 600 }}>{item.value}</span>
+            <div className="flex items-center gap-4">
+              <DonutChart data={planDist} />
+              <div className="space-y-1.5 flex-1">
+                {planDist.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} />
+                      <span className="text-xs text-gray-400">{item.name}</span>
+                    </div>
+                    <span className="text-xs text-white" style={{ fontWeight: 600 }}>{item.value}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
