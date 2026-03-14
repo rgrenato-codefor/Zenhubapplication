@@ -9,8 +9,7 @@ import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
 import type { SessionRecord } from "../../context/DataContext";
 import { checkAppointmentConflicts } from "../../lib/appointmentConflicts";
-import { useCompanyPlan } from "../../hooks/useCompanyPlan";
-import { DEFAULT_COMPANY_PLANS } from "../../lib/planConfig";
+import { useCompanyPlan, invalidatePlanCache } from "../../hooks/useCompanyPlan";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type ClosureModal = {
@@ -81,7 +80,7 @@ export default function CompanySchedule() {
   const primaryColor = company?.color || "#0D9488";
 
   // ── Plan enforcement: monthly appointment limit ────────────────────────────
-  const { planConfig, getLimit, isAtLimit } = useCompanyPlan(company?.plan);
+  const { planConfig, allPlans, getLimit, isAtLimit } = useCompanyPlan(company?.plan);
 
   // Count appointments in the current calendar month for this company
   const now = new Date();
@@ -93,13 +92,15 @@ export default function CompanySchedule() {
   const apptLimit = getLimit("appointments_monthly");
   const apptAtLimit = isAtLimit("appointments_monthly", monthAppointmentCount);
 
-  // Next plan above current (for the consent modal)
-  const nextPlan = DEFAULT_COMPANY_PLANS.find(
+  // Next plan above current (for the consent modal) — uses Firestore-first allPlans
+  const nextPlan = allPlans.find(
     (p) => p.order === (planConfig.order ?? 0) + 1
   ) ?? null;
 
   // ── Limit consent modal ──────────────────────────────────────────────────
   const [showLimitConsent, setShowLimitConsent] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [upgradingPlan, setUpgradingPlan] = useState(false);
 
   const [view, setView] = useState<"week" | "day" | "list">("week");
   const [selectedDay, setSelectedDay] = useState(TODAY_STR);
@@ -208,8 +209,29 @@ export default function CompanySchedule() {
   // Opens scheduling: if at limit first ask for consent, otherwise go straight in
   const handleScheduleClick = () => {
     if (apptAtLimit) {
+      setConsentChecked(false);
       setShowLimitConsent(true);
     } else {
+      openNewModal();
+    }
+  };
+
+  // Upgrades the company plan to nextPlan in Firestore, then opens the schedule modal
+  const handleConsentConfirm = async () => {
+    if (!nextPlan || !company) return;
+    setUpgradingPlan(true);
+    try {
+      const { updateCompany } = await import("../../../lib/firestore");
+      await updateCompany(company.id, {
+        plan: nextPlan.name,
+        planChangedAt: new Date().toISOString(),
+      } as any);
+      invalidatePlanCache();
+    } catch (err) {
+      console.error("Erro ao atualizar plano:", err);
+    } finally {
+      setUpgradingPlan(false);
+      setShowLimitConsent(false);
       openNewModal();
     }
   };
@@ -995,12 +1017,9 @@ export default function CompanySchedule() {
             <label className="flex items-start gap-3 cursor-pointer select-none">
               <input
                 type="checkbox"
-                id="limit-consent-check"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
                 className="mt-0.5 w-4 h-4 shrink-0 accent-amber-500"
-                onChange={(e) => {
-                  const btn = document.getElementById("limit-consent-btn") as HTMLButtonElement | null;
-                  if (btn) btn.disabled = !e.target.checked;
-                }}
               />
               <span className="text-sm text-gray-600 leading-snug">
                 Estou ciente e autorizo a cobrança do plano{" "}
@@ -1012,21 +1031,22 @@ export default function CompanySchedule() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowLimitConsent(false)}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors"
+                disabled={upgradingPlan}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors disabled:opacity-40"
               >
                 Cancelar
               </button>
               <button
-                id="limit-consent-btn"
-                disabled
-                onClick={() => {
-                  setShowLimitConsent(false);
-                  openNewModal();
-                }}
-                className="flex-1 py-2.5 text-white rounded-xl text-sm transition-all disabled:opacity-40 hover:opacity-90"
+                disabled={!consentChecked || upgradingPlan}
+                onClick={handleConsentConfirm}
+                className="flex-1 py-2.5 text-white rounded-xl text-sm transition-all disabled:opacity-40 hover:opacity-90 flex items-center justify-center gap-2"
                 style={{ background: primaryColor, fontWeight: 600 }}
               >
-                Continuar agendando
+                {upgradingPlan ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Atualizando...</>
+                ) : (
+                  "Continuar agendando"
+                )}
               </button>
             </div>
           </div>

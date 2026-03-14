@@ -99,9 +99,9 @@ function CompanyPlanCard({
       {/* Limits */}
       <div className="px-5 pb-3 flex gap-2 flex-wrap">
         {[
-          { label: "Terapeutas", v: plan.limits.therapists },
-          { label: "Clientes",   v: plan.limits.clients   },
-          { label: "Unidades",   v: plan.limits.units     },
+          { label: "Terapeutas",  v: plan.limits.therapists           },
+          { label: "Atend./mês",  v: plan.limits.appointments_monthly },
+          { label: "Unidades",    v: plan.limits.units                },
         ].map((l) => (
           <div
             key={l.label}
@@ -244,7 +244,7 @@ function CompanyPlanModal({
   const [badge, setBadge]   = useState(initial?.badge || "🆓");
   const [mods, setMods]     = useState<ModuleKey[]>(initial?.modules || []);
   const [limT, setLimT]     = useState(initial?.limits.therapists == null ? "" : String(initial.limits.therapists));
-  const [limC, setLimC]     = useState(initial?.limits.clients == null ? "" : String(initial.limits.clients));
+  const [limA, setLimA]     = useState(initial?.limits.appointments_monthly == null ? "" : String(initial.limits.appointments_monthly));
   const [limU, setLimU]     = useState(initial?.limits.units == null ? "" : String(initial.limits.units));
   const [active, setActive] = useState(initial?.isActive ?? true);
   const [isDef, setIsDef]   = useState(initial?.isDefault ?? false);
@@ -263,9 +263,10 @@ function CompanyPlanModal({
       badge,
       modules: mods,
       limits: {
-        therapists: limT === "" ? null : Number(limT),
-        clients:    limC === "" ? null : Number(limC),
-        units:      limU === "" ? null : Number(limU),
+        therapists:           limT === "" ? null : Number(limT),
+        clients:              null,
+        appointments_monthly: limA === "" ? null : Number(limA),
+        units:                limU === "" ? null : Number(limU),
       },
       isDefault: isDef,
       isActive: active,
@@ -357,7 +358,7 @@ function CompanyPlanModal({
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: "Terapeutas", val: limT, set: setLimT },
-                { label: "Clientes",   val: limC, set: setLimC },
+                { label: "Atend./mês", val: limA, set: setLimA },
                 { label: "Unidades",   val: limU, set: setLimU },
               ].map((f) => (
                 <div key={f.label}>
@@ -967,7 +968,7 @@ export default function AdminPlans() {
             <div className="space-y-4">
               {/* Summary strip */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {companyPlans.map((p) => (
+                {[...companyPlans].sort((a, b) => a.price - b.price || (a.order ?? 99) - (b.order ?? 99)).map((p) => (
                   <div key={p.id} className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex items-center gap-3">
                     <span className="text-2xl">{p.badge}</span>
                     <div>
@@ -978,7 +979,7 @@ export default function AdminPlans() {
                 ))}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {companyPlans.map((p) => (
+                {[...companyPlans].sort((a, b) => a.price - b.price || (a.order ?? 99) - (b.order ?? 99)).map((p) => (
                   <CompanyPlanCard
                     key={p.id}
                     plan={p}
@@ -1003,7 +1004,7 @@ export default function AdminPlans() {
 
               {/* Summary strip */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {therapistPlans.map((p) => (
+                {[...therapistPlans].sort((a, b) => a.price - b.price || (a.order ?? 99) - (b.order ?? 99)).map((p) => (
                   <div key={p.id} className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex items-center gap-3">
                     <span className="text-2xl">{p.badge}</span>
                     <div>
@@ -1015,7 +1016,7 @@ export default function AdminPlans() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {therapistPlans.map((p) => (
+                {[...therapistPlans].sort((a, b) => a.price - b.price || (a.order ?? 99) - (b.order ?? 99)).map((p) => (
                   <TherapistPlanCard
                     key={p.id}
                     plan={p}
@@ -1029,7 +1030,7 @@ export default function AdminPlans() {
               <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
                 <h3 className="text-white mb-4">Progressão de Tiers</h3>
                 <div className="flex items-stretch gap-0 overflow-x-auto pb-2">
-                  {therapistPlans.map((p, i) => (
+                  {[...therapistPlans].sort((a, b) => a.price - b.price || (a.order ?? 99) - (b.order ?? 99)).map((p, i) => (
                     <div key={p.id} className="flex items-center flex-1 min-w-[120px]">
                       <div className="flex-1 bg-gray-700/50 rounded-xl p-4 text-center border border-gray-700">
                         <div className="text-2xl mb-1.5">{p.badge}</div>

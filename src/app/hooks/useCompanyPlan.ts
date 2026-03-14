@@ -87,32 +87,53 @@ export function useCompanyPlan(planNameOrId: string | null | undefined) {
   }, [planNameOrId, firestorePlans]);
 
   /**
-   * Full list of company plans, with Firestore values merged over hardcoded defaults.
-   * Any plan not found in Firestore keeps its hardcoded definition.
+   * Full list of company plans — Firestore is the source of truth.
+   * Each Firestore plan is deep-merged with its hardcoded counterpart (for missing fields).
+   * Plans existing only in the hardcoded defaults are appended as fallback.
+   * Final list is sorted by price then order.
    */
   const allPlans = useMemo((): CompanyPlan[] => {
-    if (firestorePlans.length === 0) return DEFAULT_COMPANY_PLANS;
-
-    return DEFAULT_COMPANY_PLANS.map((hardcoded) => {
-      const found = firestorePlans.find(
-        (p) =>
-          p.name?.toLowerCase() === hardcoded.name.toLowerCase() ||
-          p.id?.toLowerCase() === hardcoded.id.toLowerCase()
+    if (firestorePlans.length === 0) {
+      return [...DEFAULT_COMPANY_PLANS].sort(
+        (a, b) => a.price - b.price || (a.order ?? 99) - (b.order ?? 99)
       );
-      if (!found) return hardcoded;
+    }
+
+    // Build merged list starting from Firestore (source of truth)
+    const merged: CompanyPlan[] = firestorePlans.map((fp) => {
+      const hardcoded = DEFAULT_COMPANY_PLANS.find(
+        (p) =>
+          p.name?.toLowerCase() === fp.name?.toLowerCase() ||
+          p.id?.toLowerCase() === fp.id?.toLowerCase()
+      );
+      if (!hardcoded) return fp; // pure Firestore plan, no default counterpart
       return {
         ...hardcoded,
-        ...found,
+        ...fp,
         limits: {
           ...hardcoded.limits,
-          ...found.limits,
+          ...fp.limits,
           appointments_monthly:
-            found.limits?.appointments_monthly !== undefined
-              ? found.limits.appointments_monthly
+            fp.limits?.appointments_monthly !== undefined
+              ? fp.limits.appointments_monthly
               : hardcoded.limits?.appointments_monthly ?? null,
         },
       };
     });
+
+    // Append hardcoded defaults not represented in Firestore (safety fallback)
+    for (const hardcoded of DEFAULT_COMPANY_PLANS) {
+      const alreadyIn = merged.some(
+        (p) =>
+          p.name?.toLowerCase() === hardcoded.name.toLowerCase() ||
+          p.id?.toLowerCase() === hardcoded.id.toLowerCase()
+      );
+      if (!alreadyIn) merged.push(hardcoded);
+    }
+
+    return merged.sort(
+      (a, b) => a.price - b.price || (a.order ?? 99) - (b.order ?? 99)
+    );
   }, [firestorePlans]);
 
   /** Returns true if the current plan includes a module */
