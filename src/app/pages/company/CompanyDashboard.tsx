@@ -159,8 +159,18 @@ export default function CompanyDashboard() {
   // ── Plan change notification ───────────────────────────────────────────────
   const planChanged = !!(company as any)?.planChangedAt;
   const planChangedFrom = (company as any)?.planChangedFrom as string | undefined;
-  const [dismissedPlanNotif, setDismissedPlanNotif] = useState(false);
+  const planChangedAt  = (company as any)?.planChangedAt  as string | undefined;
+  // Key is tied to planChangedAt so a future plan change shows the banner again
+  const dismissKey = `zen_plan_notif_dismissed_${planChangedAt ?? ""}`;
+  const [dismissedPlanNotif, setDismissedPlanNotif] = useState(
+    () => typeof sessionStorage !== "undefined" && !!sessionStorage.getItem(dismissKey)
+  );
   const showPlanNotif = planChanged && !dismissedPlanNotif;
+
+  const handleDismissPlanNotif = () => {
+    sessionStorage.setItem(dismissKey, "1");
+    setDismissedPlanNotif(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -183,7 +193,7 @@ export default function CompanyDashboard() {
             </p>
           </div>
           <button
-            onClick={() => setDismissedPlanNotif(true)}
+            onClick={handleDismissPlanNotif}
             className="text-emerald-500 hover:text-emerald-700 shrink-0"
           >
             <X className="w-4 h-4" />
