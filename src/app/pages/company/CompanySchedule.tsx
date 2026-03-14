@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import {
   CalendarDays, Clock, CheckCircle, AlertCircle, XCircle, CalendarCheck,
   DollarSign, Building2, X, DoorOpen, Search, UserPlus, Loader2, Plus,
-  ChevronLeft, ChevronRight, RefreshCw,
+  ChevronLeft, ChevronRight, RefreshCw, Info,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
@@ -112,6 +112,7 @@ export default function CompanySchedule() {
   const [closureSuccess, setClosureSuccess] = useState(false);
   const [cancelModal, setCancelModal]     = useState<CancelModal>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [statsDrawerOpen, setStatsDrawerOpen] = useState(false);
 
   // ── Week navigation ────────────────────────────────────────────────────────
   const [weekOffset, setWeekOffset] = useState(0); // in days (shifts center)
@@ -458,6 +459,17 @@ export default function CompanySchedule() {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </button>
+          {/* Stats info button */}
+          <button
+            onClick={() => setStatsDrawerOpen(true)}
+            title="Resumo da semana"
+            className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all relative"
+          >
+            <Info className="w-4 h-4" />
+            {apptAtLimit && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400" />
+            )}
+          </button>
           {/* Week nav */}
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
             <button
@@ -516,69 +528,138 @@ export default function CompanySchedule() {
         </div>
       </div>
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: "Sessões hoje",  value: activeAppointments.filter((a) => a.date === TODAY_STR).length.toString(), color: primaryColor },
-          { label: "Total semana",  value: activeAppointments.length.toString(), color: "#8B5CF6" },
-          { label: "Receita bruta", value: `R$ ${totalGross.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, color: "#059669" },
-          { label: "Receita líquida", value: `R$ ${totalNet.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, color: "#D97706" },
-        ].map((s) => (
-          <div key={s.label} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-            <p className="text-xs text-gray-400">{s.label}</p>
-            <p className="text-lg mt-0.5" style={{ color: s.color, fontWeight: 700 }}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Monthly quota bar (only shown when plan has a limit) */}
-      {apptLimit !== null && (
+      {/* ── Stats Drawer ──────────────────────────────────────────────────────── */}
+      {/* Backdrop */}
+      {statsDrawerOpen && (
         <div
-          className="rounded-xl border px-4 py-3 flex items-center gap-4"
-          style={{
-            background: apptAtLimit ? "#FFF7ED" : "#F9FAFB",
-            borderColor: apptAtLimit ? "#FED7AA" : "#E5E7EB",
-          }}
-        >
-          <div className="shrink-0">
-            {apptAtLimit
-              ? <AlertCircle className="w-4 h-4 text-amber-500" />
-              : <CalendarDays className="w-4 h-4 text-gray-400" />
-            }
+          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+          onClick={() => setStatsDrawerOpen(false)}
+        />
+      )}
+      {/* Drawer panel */}
+      <div
+        className="fixed top-0 right-0 h-full z-50 w-80 bg-white shadow-2xl flex flex-col transition-transform duration-300"
+        style={{ transform: statsDrawerOpen ? "translateX(0)" : "translateX(100%)" }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Info className="w-5 h-5" style={{ color: primaryColor }} />
+            <span style={{ fontWeight: 700, color: "#111827" }}>Resumo da semana</span>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-xs" style={{ fontWeight: 600, color: apptAtLimit ? "#B45309" : "#6B7280" }}>
-                Cota mensal de atendimentos — Plano {planConfig.name}
+          <button
+            onClick={() => setStatsDrawerOpen(false)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+          {/* Sessões */}
+          <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-400">Sessões hoje</p>
+              <p className="text-2xl mt-1" style={{ color: primaryColor, fontWeight: 700 }}>
+                {activeAppointments.filter((a) => a.date === TODAY_STR).length}
               </p>
-              <span
-                className="text-xs shrink-0 ml-2"
-                style={{ fontWeight: 700, color: apptAtLimit ? "#B45309" : primaryColor }}
-              >
-                {monthAppointmentCount} / {apptLimit}
-              </span>
             </div>
-            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-1.5 rounded-full transition-all duration-500"
-                style={{
-                  width: `${Math.min((monthAppointmentCount / apptLimit) * 100, 100)}%`,
-                  background: apptAtLimit
-                    ? "#F59E0B"
-                    : (monthAppointmentCount / apptLimit) >= 0.8
-                    ? "#F59E0B"
-                    : primaryColor,
-                }}
-              />
+            <div className="w-px self-stretch bg-gray-200 mx-3" />
+            <div>
+              <p className="text-xs text-gray-400">Total semana</p>
+              <p className="text-2xl mt-1" style={{ color: "#8B5CF6", fontWeight: 700 }}>
+                {activeAppointments.length}
+              </p>
             </div>
           </div>
-          {apptAtLimit && (
-            <p className="shrink-0 text-xs text-amber-700 max-w-[150px] text-right leading-tight" style={{ fontWeight: 500 }}>
-              Atendimentos extras serão cobrados no próximo plano
-            </p>
+
+          {/* Receitas */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-gray-500" style={{ fontWeight: 600 }}>Receitas da semana</p>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-400">Bruta</p>
+                <p className="text-xl mt-0.5" style={{ color: "#059669", fontWeight: 700 }}>
+                  R$&nbsp;{totalGross.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-400">Líquida</p>
+                <p className="text-xl mt-0.5" style={{ color: "#D97706", fontWeight: 700 }}>
+                  R$&nbsp;{totalNet.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+            {totalGross > 0 && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-gray-400">Margem líquida</span>
+                  <span className="text-xs" style={{ fontWeight: 600, color: "#D97706" }}>
+                    {Math.round((totalNet / totalGross) * 100)}%
+                  </span>
+                </div>
+                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-1.5 rounded-full"
+                    style={{ width: `${Math.min((totalNet / totalGross) * 100, 100)}%`, background: "#D97706" }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Cota mensal */}
+          {apptLimit !== null && (
+            <div
+              className="rounded-xl p-4"
+              style={{
+                background: apptAtLimit ? "#FFFBF5" : "#F0FDF4",
+                border: `1px solid ${apptAtLimit ? "#FED7AA" : "#BBF7D0"}`,
+              }}
+            >
+              <div className="flex items-center gap-1.5 mb-3">
+                {apptAtLimit
+                  ? <AlertCircle className="w-4 h-4 text-amber-500" />
+                  : <CalendarDays className="w-4 h-4 text-emerald-500" />}
+                <p className="text-xs" style={{ fontWeight: 600, color: apptAtLimit ? "#B45309" : "#065F46" }}>
+                  Cota mensal de atendimentos
+                </p>
+              </div>
+              <div className="flex items-end justify-between mb-2">
+                <p className="text-2xl" style={{ color: apptAtLimit ? "#B45309" : "#059669", fontWeight: 700 }}>
+                  {monthAppointmentCount}
+                  <span className="text-sm ml-1" style={{ fontWeight: 400, color: "#6B7280" }}>/ {apptLimit}</span>
+                </p>
+                <span className="text-xs text-gray-400">Plano {planConfig.name}</span>
+              </div>
+              <div className="h-2 bg-white/70 rounded-full overflow-hidden border border-white">
+                <div
+                  className="h-2 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.min((monthAppointmentCount / apptLimit) * 100, 100)}%`,
+                    background: apptAtLimit ? "#F59E0B" : (monthAppointmentCount / apptLimit) >= 0.8 ? "#F59E0B" : primaryColor,
+                  }}
+                />
+              </div>
+              {apptAtLimit && (
+                <p className="text-xs text-amber-700 mt-2" style={{ fontWeight: 500 }}>
+                  Limite atingido. Atendimentos extras podem gerar cobrança adicional.
+                </p>
+              )}
+            </div>
           )}
         </div>
-      )}
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-gray-100">
+          <p className="text-xs text-gray-400 text-center">
+            Dados referentes à semana atual
+          </p>
+        </div>
+      </div>
 
       {/* Day selector */}
       <div className="grid grid-cols-4 lg:grid-cols-7 gap-3">
