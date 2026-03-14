@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import {
   Edit, Save, X, Info, Percent, CheckCircle,
@@ -78,8 +79,8 @@ export default function CompanyCommissions() {
   const { planConfig, hasModule, isLoading } = useCompanyPlan(company?.plan);
 
   const [tab, setTab] = useState<Tab>("earnings");
-  const [monthIdx, setMonthIdx] = useState(MONTHS.length - 1); // Mar 2026
-  const [paying, setPaying] = useState<string | null>(null); // therapist id being processed
+  const [monthIdx, setMonthIdx] = useState(MONTHS.length - 1);
+  const [paying, setPaying] = useState<string | null>(null);
 
   // ── Settings tab state ──────────────────────────────────────────────────────
   const [globalRate, setGlobalRate] = useState(50);
@@ -89,22 +90,16 @@ export default function CompanyCommissions() {
   const [editing, setEditing] = useState<string | null>(null);
   const [tempRate, setTempRate] = useState(0);
 
-  // ── Plan gate (after all hooks) ───────────────────────────────────────────
-  if (isLoading || !hasModule("commissions")) {
-    return <PlanGate module="commissions" planConfig={planConfig} primaryColor={primaryColor} isLoading={isLoading} />;
-  }
-
   const companyTherapists = allTherapists
     .filter((t) => t.companyId === user?.companyId)
     .filter((t) => !selectedUnitId || (t as any).unitId === selectedUnitId);
   const currentMonth = MONTHS[monthIdx];
 
-  // ── Earnings calculation per therapist ────────────────────────────────────
+  // ── Earnings calculation per therapist — must be before any early return ──
   const therapistEarnings = useMemo(() => {
     return companyTherapists.map((therapist) => {
       const rate = rates[therapist.id] ?? therapist.commission;
 
-      // All session records for this therapist + company + current month
       const monthRecords = (sessionRecords as any[]).filter((r) => {
         if (r.therapistId !== therapist.id) return false;
         if (r.companyId && r.companyId !== companyId) return false;
@@ -119,7 +114,6 @@ export default function CompanyCommissions() {
         }
       });
 
-      // Split paid vs unpaid records
       const paidRecords   = monthRecords.filter((r: any) => r.paidByCompany === true);
       const unpaidRecords = monthRecords.filter((r: any) => r.paidByCompany !== true);
 
@@ -131,19 +125,16 @@ export default function CompanyCommissions() {
         net         = monthRecords.reduce((s: number, r: any) => s + (r.therapistEarned ?? 0), 0);
         alreadyPaid = paidRecords.reduce((s: number, r: any) => s + (r.therapistEarned ?? 0), 0);
       } else {
-        // Fallback to history data for months with no real records
         const hist = HISTORY_DATA[therapist.id]?.find((h) => h.month === currentMonth.key);
         sessions    = hist?.sessions ?? 0;
         gross       = hist?.gross ?? 0;
         net         = hist?.net ?? 0;
-        alreadyPaid = 0; // historic data always shows as pending
+        alreadyPaid = 0;
       }
 
       const companyShare  = gross - net;
       const pendingAmount = net - alreadyPaid;
-      const isPaid        = monthRecords.length > 0
-        ? unpaidRecords.length === 0
-        : false;
+      const isPaid        = monthRecords.length > 0 ? unpaidRecords.length === 0 : false;
       const unpaidIds     = unpaidRecords.map((r: any) => r.id as string);
 
       return {
@@ -153,8 +144,13 @@ export default function CompanyCommissions() {
     });
   }, [companyTherapists, rates, currentMonth, sessionRecords, companyId]);
 
-  const totalNet     = therapistEarnings.reduce((s, e) => s + e.net, 0);
-  const totalGross   = therapistEarnings.reduce((s, e) => s + e.gross, 0);
+  // ── Plan gate — AFTER all hooks ───────────────────────────────────────────
+  if (isLoading || !hasModule("commissions")) {
+    return <PlanGate module="commissions" planConfig={planConfig} primaryColor={primaryColor} isLoading={isLoading} />;
+  }
+
+  const totalNet      = therapistEarnings.reduce((s, e) => s + e.net, 0);
+  const totalGross    = therapistEarnings.reduce((s, e) => s + e.gross, 0);
   const totalSessions = therapistEarnings.reduce((s, e) => s + e.sessions, 0);
   const totalPending  = therapistEarnings.reduce((s, e) => s + e.pendingAmount, 0);
   const pendingCount  = therapistEarnings.filter((e) => !e.isPaid && e.net > 0).length;

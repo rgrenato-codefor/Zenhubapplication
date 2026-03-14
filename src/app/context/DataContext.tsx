@@ -192,7 +192,7 @@ export function useData(): DataContextValue {
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const [company, setCompany] = useState<Company | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -257,6 +257,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // ── Load data ────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    // Wait until Firebase Auth has finished restoring the session.
+    // Without this guard, the effect runs with user=null while auth is still
+    // loading, sets loading:false prematurely, and pages render with empty data.
+    if (authLoading) return;
+
     if (!user) {
       setLoading(false);
       return;
@@ -376,7 +381,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     };
 
     load();
-  }, [user, tick]);
+  }, [user, tick, authLoading]);
 
   // ── Computed values ───────────────────────────────────────────────────────
 

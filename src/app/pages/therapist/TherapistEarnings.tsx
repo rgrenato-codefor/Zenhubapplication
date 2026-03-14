@@ -1,6 +1,6 @@
+import { useMemo } from "react";
 import { SvgAreaChart } from "../../components/shared/CssCharts";
 import { DollarSign, TrendingUp, Calendar, Award, Building2, Sparkles } from "../../components/shared/icons";
-import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 
 export default function TherapistEarnings() {

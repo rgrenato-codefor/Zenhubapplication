@@ -1,4 +1,5 @@
 import type React from "react";
+import { useState, useMemo } from "react";
 import {
   ArrowUpRight, CheckCircle, AlertCircle, MoreHorizontal, MapPin,
   Building2, ChevronRight, Star, Users, CalendarDays, DollarSign, TrendingUp,

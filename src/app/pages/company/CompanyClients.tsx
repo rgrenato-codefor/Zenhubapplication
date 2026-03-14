@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Search, Plus, Edit2 as Edit3, Trash2, X, Users,
   Check, AlertCircle, ChevronRight, Copy, CheckCheck,
@@ -471,6 +471,13 @@ export default function CompanyClients() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Sync context data → local state whenever DataContext finishes loading.
+  // This handles the F5/direct-URL case where the component mounts before
+  // Firestore data is available (mockClients starts as [] and updates later).
+  useEffect(() => {
+    setClients(mockClients as any[]);
+  }, [mockClients]);
 
   const copyCode = () => {
     navigator.clipboard.writeText(company?.inviteCode || "");
