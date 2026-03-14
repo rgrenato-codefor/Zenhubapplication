@@ -1,13 +1,10 @@
+import { SvgAreaChart } from "../../components/shared/CssCharts";
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import {
   ArrowLeft, Star, Users, CalendarDays, Banknote, CheckCircle, MessageSquare,
   Clock, BarChart2, CircleDollarSign, Wallet, TrendingUp, Mail, Phone, Percent,
 } from "../../components/shared/icons";
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 
@@ -193,21 +190,14 @@ export default function CompanyTherapistDetail() {
       {history.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
           <h3 className="text-gray-900 mb-4">Evolução de Ganhos</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={history}>
-              <defs>
-                <linearGradient id="gradNet" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#10B981" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(1)}k`} />
-              <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }} formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, "Comissão"]} />
-              <Area type="monotone" dataKey="net" stroke="#10B981" strokeWidth={2.5} fill="url(#gradNet)" isAnimationActive={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <SvgAreaChart
+            data={history}
+            valueKey="net"
+            labelKey="month"
+            color="#10B981"
+            height={200}
+            formatY={(v) => `R$${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(0)}`}
+          />
         </div>
       )}
 

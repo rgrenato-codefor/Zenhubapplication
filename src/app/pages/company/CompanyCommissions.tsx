@@ -1,4 +1,3 @@
-import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import {
   Edit, Save, X, Info, Percent, CheckCircle,
@@ -6,10 +5,7 @@ import {
   BarChart2, CircleDollarSign, AlertCircle,
   CalendarDays, Banknote, Star, ExternalLink,
 } from "../../components/shared/icons";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell,
-} from "recharts";
+import { SvgBarChart } from "../../components/shared/CssCharts";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
@@ -323,29 +319,21 @@ export default function CompanyCommissions() {
               </div>
               <BarChart2 className="w-5 h-5 text-gray-300" />
             </div>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={therapistEarnings.map((e) => ({ name: e.therapist.name.split(" ")[0], net: e.net, gross: e.gross }))} barSize={28}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                <XAxis dataKey="name" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(1)}k`} />
-                <Tooltip
-                  contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }}
-                  formatter={(v: number, name: string) => [
-                    `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`,
-                    name === "net" ? "Comissão (a pagar)" : "Receita bruta",
-                  ]}
-                />
-                <Bar dataKey="gross" fill={`${primaryColor}30`} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                <Bar dataKey="net" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-                  {therapistEarnings.map((e) => (
-                    <Cell
-                      key={e.therapist.id}
-                      fill={e.isPaid ? "#10B981" : primaryColor}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <SvgBarChart
+              data={therapistEarnings.map((e) => ({
+                name: e.therapist.name.split(" ")[0],
+                net: e.net,
+                gross: e.gross,
+                isPaid: e.isPaid,
+              }))}
+              bars={[
+                { key: "gross", color: `${primaryColor}30` },
+                { key: "net", color: (d: any) => d.isPaid ? "#10B981" : primaryColor },
+              ]}
+              labelKey="name"
+              height={160}
+              formatY={(v) => `R$${(v / 1000).toFixed(1)}k`}
+            />
             <div className="flex items-center gap-4 mt-3 justify-center">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-sm" style={{ background: `${primaryColor}30` }} />

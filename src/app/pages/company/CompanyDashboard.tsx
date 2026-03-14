@@ -1,14 +1,10 @@
-import { useState, useMemo } from "react";
 import type React from "react";
 import {
   ArrowUpRight, CheckCircle, AlertCircle, MoreHorizontal, MapPin,
   Building2, ChevronRight, Star, Users, CalendarDays, DollarSign, TrendingUp,
   ArrowUp, X,
 } from "../../components/shared/icons";
-import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend,
-} from "recharts";
+import { SvgAreaChart, SvgBarChart } from "../../components/shared/CssCharts";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
@@ -357,39 +353,54 @@ export default function CompanyDashboard() {
           {/* Stacked revenue chart comparing units */}
           <div className="mt-5 pt-5 border-t border-gray-100">
             <p className="text-gray-700 text-sm mb-4" style={{ fontWeight: 600 }}>Receita mensal — todas as unidades</p>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart
-                data={revenueData.map((d) => ({
-                  month: d.month,
-                  ...companyUnits.reduce((acc, unit, idx) => {
+            {(() => {
+              const maxRev = Math.max(
+                ...revenueData.map((d) =>
+                  companyUnits.reduce((s, unit) => {
                     const uData = unitRevenueData[unit.id];
                     const match = uData?.find((u) => u.month === d.month);
-                    return { ...acc, [unit.name]: match?.revenue ?? 0 };
-                  }, {}),
-                }))}
-                barSize={14}
-              >
-                <CartesianGrid key="grid" strokeDasharray="3 3" stroke="#F3F4F6" />
-                <XAxis key="x" dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
-                <YAxis key="y" stroke="#9CA3AF" tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip
-                  key="tooltip"
-                  contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }}
-                  formatter={(v: number, name: string) => [`R$ ${v.toLocaleString("pt-BR")}`, name]}
-                />
-                <Legend key="legend" wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                {companyUnits.map((unit, idx) => (
-                  <Bar
-                    key={unit.id}
-                    dataKey={unit.name}
-                    fill={UNIT_COLORS[idx % UNIT_COLORS.length]}
-                    radius={[3, 3, 0, 0]}
-                    stackId="a"
-                    isAnimationActive={false}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
+                    return s + (match?.revenue ?? 0);
+                  }, 0)
+                ),
+                1
+              );
+              return (
+                <div className="space-y-2">
+                  {revenueData.map((d) => {
+                    const total = companyUnits.reduce((s, unit) => {
+                      const match = unitRevenueData[unit.id]?.find((u) => u.month === d.month);
+                      return s + (match?.revenue ?? 0);
+                    }, 0);
+                    return (
+                      <div key={d.month} className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-400 w-8 shrink-0">{d.month}</span>
+                        <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden flex">
+                          {companyUnits.map((unit, idx) => {
+                            const match = unitRevenueData[unit.id]?.find((u) => u.month === d.month);
+                            const rev = match?.revenue ?? 0;
+                            const pct = maxRev > 0 ? (rev / maxRev) * 100 : 0;
+                            return (
+                              <div
+                                key={unit.id}
+                                className="h-full"
+                                style={{ width: `${pct}%`, background: UNIT_COLORS[idx % UNIT_COLORS.length] }}
+                                title={`${unit.name}: R$${rev.toLocaleString("pt-BR")}`}
+                              />
+                            );
+                          })}
+                        </div>
+                        <span className="text-gray-400 w-16 text-right">
+                          R${(companyUnits.reduce((s, unit) => {
+                            const match = unitRevenueData[unit.id]?.find((u) => u.month === d.month);
+                            return s + (match?.revenue ?? 0);
+                          }, 0) / 1000).toFixed(1)}k
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -414,19 +425,14 @@ export default function CompanyDashboard() {
               <MoreHorizontal className="w-5 h-5" />
             </button>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={activeRevenueData}>
-              <CartesianGrid key="grid" strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis key="x" dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <YAxis key="y" stroke="#9CA3AF" tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip
-                key="tooltip"
-                contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }}
-                formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, "Receita"]}
-              />
-              <Area key="area" type="monotone" dataKey="revenue" stroke={primaryColor} strokeWidth={2} fill={primaryColor} fillOpacity={0.12} isAnimationActive={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <SvgAreaChart
+            data={activeRevenueData}
+            valueKey="revenue"
+            labelKey="month"
+            color={primaryColor}
+            height={200}
+            formatY={(v) => `R$${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v.toFixed(0)}`}
+          />
         </div>
 
         {/* Weekly sessions */}
@@ -438,15 +444,12 @@ export default function CompanyDashboard() {
             )}
           </h3>
           <p className="text-gray-400 text-xs mb-4">Sessões por dia</p>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={activeWeeklyData} barSize={20}>
-              <CartesianGrid key="grid" strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis key="x" dataKey="day" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <YAxis key="y" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <Tooltip key="tooltip" contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }} />
-              <Bar key="bar" dataKey="sessions" fill={primaryColor} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
+          <SvgBarChart
+            data={activeWeeklyData}
+            bars={[{ key: "sessions", color: primaryColor }]}
+            labelKey="day"
+            height={200}
+          />
         </div>
       </div>
 

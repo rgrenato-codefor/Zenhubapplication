@@ -1,7 +1,4 @@
-import { useMemo } from "react";
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from "recharts";
+import { SvgAreaChart } from "../../components/shared/CssCharts";
 import { DollarSign, TrendingUp, Calendar, Award, Building2, Sparkles } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
@@ -256,24 +253,14 @@ export default function TherapistEarnings() {
       <div className="bg-white rounded-xl border border-violet-100 p-6 shadow-sm">
         <h3 className="text-gray-900 mb-1">Evolução dos Ganhos</h3>
         <p className="text-gray-400 text-xs mb-4">Sessões vs. comissão recebida (últimos 6 meses)</p>
-        <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={earningsChartData}>
-            <defs>
-              <linearGradient id="therapistGradEarnings" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#7C3AED" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#7C3AED" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#EDE9FE" />
-            <XAxis dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-            <YAxis stroke="#9CA3AF" tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v}`} />
-            <Tooltip
-              contentStyle={{ background: "#fff", border: "1px solid #C4B5FD", borderRadius: "0.75rem" }}
-              formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, ""]}
-            />
-            <Area type="monotone" dataKey="net" stroke="#7C3AED" strokeWidth={2} fill="url(#therapistGradEarnings)" name="Meu ganho" />
-          </AreaChart>
-        </ResponsiveContainer>
+        <SvgAreaChart
+          data={earningsChartData}
+          valueKey="net"
+          labelKey="month"
+          color="#7C3AED"
+          height={220}
+          formatY={(v) => `R$${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v.toFixed(0)}`}
+        />
       </div>
 
       {/* ── Ganhos por Terapia ─────────────────────────────────────────────────── */}

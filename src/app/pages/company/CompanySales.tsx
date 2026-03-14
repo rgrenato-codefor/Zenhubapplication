@@ -1,11 +1,8 @@
 import { useMemo } from "react";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
-} from "recharts";
-import {
   DollarSign, TrendingUp, ShoppingBag, Download, Calendar, MapPin,
 } from "../../components/shared/icons";
+import { SvgAreaChart, SvgBarChart } from "../../components/shared/CssCharts";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
 import { useCompanyPlan } from "../../hooks/useCompanyPlan";
@@ -192,15 +189,14 @@ export default function CompanySales() {
             )}
           </h3>
           <p className="text-gray-400 text-xs mb-4">Histórico de receita</p>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={activeRevenueData}>
-              <CartesianGrid key="grid" strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis key="x" dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <YAxis key="y" stroke="#9CA3AF" tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip key="tooltip" contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }} formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, "Receita"]} />
-              <Area key="area" type="monotone" dataKey="revenue" stroke={primaryColor} strokeWidth={2} fill={primaryColor} fillOpacity={0.12} isAnimationActive={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <SvgAreaChart
+            data={activeRevenueData}
+            valueKey="revenue"
+            labelKey="month"
+            color={primaryColor}
+            height={200}
+            formatY={(v) => `R$${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v.toLocaleString("pt-BR")}`}
+          />
         </div>
 
         <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
@@ -216,15 +212,12 @@ export default function CompanySales() {
               <p className="text-sm">Nenhum dado para esta unidade</p>
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={salesByTherapist} barSize={30}>
-                <CartesianGrid key="grid" strokeDasharray="3 3" stroke="#F3F4F6" />
-                <XAxis key="x" dataKey="name" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-                <YAxis key="y" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-                <Tooltip key="tooltip" contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }} />
-                <Bar key="bar" dataKey="sessions" fill={primaryColor} radius={[4, 4, 0, 0]} name="Sessões" isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
+            <SvgBarChart
+              data={salesByTherapist}
+              bars={[{ key: "sessions", color: primaryColor }]}
+              labelKey="name"
+              height={200}
+            />
           )}
         </div>
       </div>

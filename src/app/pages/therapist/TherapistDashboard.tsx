@@ -1,11 +1,4 @@
-import { useMemo } from "react";
-import {
-  CalendarDays, DollarSign, Star, TrendingUp, Clock, CheckCircle,
-  AlertCircle, Building2, Sparkles, ArrowRight, CalendarCheck,
-} from "../../components/shared/icons";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from "recharts";
+import { SvgBarChart } from "../../components/shared/CssCharts";
 import { useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
@@ -256,19 +249,20 @@ export default function TherapistDashboard() {
       <div className="bg-white rounded-xl border border-violet-100 p-6 shadow-sm">
         <h3 className="text-gray-900 mb-1">Histórico de Ganhos</h3>
         <p className="text-gray-400 text-xs mb-4">Valor bruto da sessão vs. seu ganho líquido</p>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#EDE9FE" />
-            <XAxis dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
-            <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-            <Tooltip
-              contentStyle={{ background: "#fff", border: "1px solid #C4B5FD", borderRadius: "0.75rem" }}
-              formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, ""]}
-            />
-            <Bar dataKey="gross" fill="#EDE9FE" radius={[4, 4, 0, 0]} name="Valor da sessão" barSize={16} isAnimationActive={false} />
-            <Bar dataKey="net"   fill="#7C3AED" radius={[4, 4, 0, 0]} name="Meu ganho"       barSize={16} isAnimationActive={false} />
-          </BarChart>
-        </ResponsiveContainer>
+        <SvgBarChart
+          data={chartData}
+          bars={[
+            { key: "gross", color: "#EDE9FE" },
+            { key: "net",   color: "#7C3AED" },
+          ]}
+          labelKey="month"
+          height={180}
+          formatY={(v) => `R$${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v.toFixed(0)}`}
+        />
+        <div className="flex items-center gap-4 mt-3 justify-center">
+          <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-violet-100 inline-block" /><span className="text-xs text-gray-400">Valor da sessão</span></div>
+          <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-violet-600 inline-block" /><span className="text-xs text-gray-400">Meu ganho</span></div>
+        </div>
       </div>
 
       {/* ── Recent completed sessions ──────────────────────────────────── */}

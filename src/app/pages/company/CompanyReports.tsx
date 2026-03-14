@@ -1,10 +1,11 @@
-import { Download, TrendingUp } from "../../components/shared/icons";
+import { Download } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyPlan } from "../../hooks/useCompanyPlan";
 import { PlanGate } from "../../components/shared/PlanGate";
+import { SvgAreaChart, SvgBarChart, SvgDonut } from "../../components/shared/CssCharts";
 
-const therapyColors = ["#7C3AED","#0D9488","#D97706","#DC2626","#059669","#3B82F6"];
+const therapyColors = ["#7C3AED", "#0D9488", "#D97706", "#DC2626", "#059669", "#3B82F6"];
 
 export default function CompanyReports() {
   const { user } = useAuth();
@@ -17,11 +18,15 @@ export default function CompanyReports() {
   }
 
   // Compute therapy distribution from real appointments
-  const therapyDistribution = therapies.map((t, i) => ({
-    name: t.name,
-    value: appointments.filter((a) => a.therapyId === t.id).length || Math.floor(Math.random() * 50 + 10),
-    color: therapyColors[i % therapyColors.length],
-  })).filter((t) => t.value > 0);
+  const therapyDistribution = therapies
+    .map((t, i) => ({
+      name: t.name,
+      value:
+        appointments.filter((a) => a.therapyId === t.id).length ||
+        Math.floor(Math.random() * 50 + 10),
+      color: therapyColors[i % therapyColors.length],
+    }))
+    .filter((t) => t.value > 0);
 
   return (
     <div className="space-y-6">
@@ -45,36 +50,26 @@ export default function CompanyReports() {
         {/* Revenue area chart */}
         <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm lg:col-span-2">
           <h3 className="text-gray-900 mb-1">Receita Mensal (últimos 12 meses)</h3>
-          <p className="text-gray-400 text-xs mb-4">Evolução da receita e sessões</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={revenueData}>
-              <defs>
-                <linearGradient id="repRevGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={primaryColor} stopOpacity={0.25} />
-                  <stop offset="95%" stopColor={primaryColor} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis dataKey="month" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <YAxis stroke="#9CA3AF" tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${(v/1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ borderRadius: "0.75rem" }} formatter={(v: number) => [`R$ ${v.toLocaleString("pt-BR")}`, "Receita"]} />
-              <Area type="monotone" dataKey="revenue" stroke={primaryColor} strokeWidth={2.5} fill="url(#repRevGrad)" isAnimationActive={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <p className="text-gray-400 text-xs mb-4">Evolução da receita</p>
+          <SvgAreaChart
+            data={revenueData}
+            valueKey="revenue"
+            labelKey="month"
+            color={primaryColor}
+            height={220}
+            formatY={(v) => `R$${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v.toLocaleString("pt-BR")}`}
+          />
         </div>
 
         {/* Weekly bar chart */}
         <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
           <h3 className="text-gray-900 mb-4">Sessões por Dia</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={weeklyData} barSize={28}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis dataKey="day" stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <YAxis stroke="#9CA3AF" tick={{ fontSize: 12 }} />
-              <Tooltip contentStyle={{ borderRadius: "0.75rem" }} />
-              <Bar dataKey="sessions" fill={primaryColor} radius={[4,4,0,0]} isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
+          <SvgBarChart
+            data={weeklyData}
+            bars={[{ key: "sessions", color: primaryColor }]}
+            labelKey="day"
+            height={200}
+          />
         </div>
 
         {/* Therapy distribution */}
@@ -82,16 +77,9 @@ export default function CompanyReports() {
           <h3 className="text-gray-900 mb-4">Distribuição por Terapia</h3>
           {therapyDistribution.length > 0 ? (
             <>
-              <ResponsiveContainer width="100%" height={180}>
-                <PieChart>
-                  <Pie data={therapyDistribution} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" isAnimationActive={false}>
-                    {therapyDistribution.map((entry, i) => (
-                      <Cell key={`cell-${i}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => [v, "Sessões"]} />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="flex items-center justify-center mb-3">
+                <SvgDonut data={therapyDistribution} size={140} />
+              </div>
               <div className="space-y-2 mt-2">
                 {therapyDistribution.map((t) => (
                   <div key={t.name} className="flex items-center justify-between">
@@ -99,7 +87,9 @@ export default function CompanyReports() {
                       <div className="w-3 h-3 rounded-full" style={{ background: t.color }} />
                       <span className="text-xs text-gray-600">{t.name}</span>
                     </div>
-                    <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>{t.value} sessões</span>
+                    <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>
+                      {t.value} sessões
+                    </span>
                   </div>
                 ))}
               </div>
