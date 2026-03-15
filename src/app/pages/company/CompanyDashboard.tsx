@@ -35,18 +35,28 @@ export default function CompanyDashboard() {
   // ── Filtered by selected unit ─────────────────────────────────────────────
   const companyTherapists = isAllUnits
     ? allTherapists
-    : allTherapists.filter((t) => (t as any).unitId === selectedUnitId);
+    : allTherapists.filter((t) => {
+        if ((t as any).unitId) return (t as any).unitId === selectedUnitId;
+        // Therapists without unitId belong to the only active unit
+        return companyUnits.length === 1 && companyUnits[0].id === selectedUnitId;
+      });
 
   /**
    * Resolve which unit an appointment belongs to:
-   *   1. Use appointment.unitId if present
-   *   2. Fallback: infer from the therapist's unitId
+   *   1. Appointment has its own unitId (new appointments always have this)
+   *   2. Fallback: infer from the therapist's unitId (legacy appointments)
+   *   3. Last resort: if company has exactly one unit, assign to it
    * This handles appointments saved before the unitId field was added.
    */
   const getAppointmentUnitId = (a: typeof appointments[number]) => {
+    // 1. Appointment has its own unitId (new appointments always have this)
     if ((a as any).unitId) return (a as any).unitId as string;
+    // 2. Fallback: infer from the therapist's unitId (legacy appointments)
     const t = allTherapists.find((t) => t.id === a.therapistId);
-    return (t as any)?.unitId as string | undefined;
+    if ((t as any)?.unitId) return (t as any).unitId as string;
+    // 3. Last resort: if company has exactly one unit, assign to it
+    if (companyUnits.length === 1) return companyUnits[0].id;
+    return undefined;
   };
 
   const companyAppointments = isAllUnits

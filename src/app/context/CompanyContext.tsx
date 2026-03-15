@@ -27,14 +27,22 @@ export function CompanyProvider({
   const { units } = useData();
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
 
-  // companyUnits comes from DataContext (already filtered for current company)
-  const companyUnits = units;
+  // companyUnits: only ACTIVE units (inactive units are excluded from
+  // navigation and filtering but remain accessible via DataContext for admin)
+  const companyUnits = units.filter((u) => u.status === "active");
   const selectedUnit = companyUnits.find((u) => u.id === selectedUnitId) ?? null;
 
-  // Reset selected unit if it no longer exists (e.g. deleted)
+  // Reset selected unit if it no longer exists or became inactive
   useEffect(() => {
     if (selectedUnitId && !companyUnits.find((u) => u.id === selectedUnitId)) {
       setSelectedUnitId(null);
+    }
+  }, [companyUnits, selectedUnitId]);
+
+  // Auto-select the only active unit when there is exactly one
+  useEffect(() => {
+    if (!selectedUnitId && companyUnits.length === 1) {
+      setSelectedUnitId(companyUnits[0].id);
     }
   }, [companyUnits, selectedUnitId]);
 

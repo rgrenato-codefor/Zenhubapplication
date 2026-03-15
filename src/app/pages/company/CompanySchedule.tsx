@@ -76,7 +76,7 @@ export default function CompanySchedule() {
     mutateUpdateAppointment,
     refresh, loading,
   } = usePageData();
-  const { selectedUnitId } = useCompanyUnit();
+  const { selectedUnitId, companyUnits } = useCompanyUnit();
   const primaryColor = company?.color || "#0D9488";
 
   // ── Plan enforcement: monthly appointment limit ────────────────────────────
@@ -306,9 +306,16 @@ export default function CompanySchedule() {
     setAptError("");
     setSavingApt(true);
     try {
+      // Resolve unitId: prefer explicit unit selection → fallback to therapist's unit
+      const selectedTherapist = therapists.find((t) => t.id === newApt.therapistId);
+      const resolvedUnitId =
+        selectedUnitId ??
+        (selectedTherapist as any)?.unitId ??
+        undefined;
+
       await mutateAddAppointment({
         companyId: user?.companyId ?? "",
-        unitId: selectedUnitId ?? undefined,
+        unitId: resolvedUnitId,
         clientId: newApt.clientId,
         therapistId: newApt.therapistId,
         therapyId: newApt.therapyId,
@@ -329,13 +336,29 @@ export default function CompanySchedule() {
   };
 
   // ── Data filters ──────────────────────────────────────────────────────────
+  /**
+   * Resolve which active unit an appointment belongs to (same cascade as Dashboard):
+   *   1. appointment.unitId  — new appointments always have this
+   *   2. therapist.unitId    — legacy: infer from the assigned therapist
+   *   3. single active unit  — legacy: company had no multi-unit setup at the time
+   */
+  const resolveAptUnitId = (a: typeof storeAppointments[number]): string | undefined => {
+    if ((a as any).unitId) return (a as any).unitId as string;
+    const t = therapists.find((th) => th.id === a.therapistId);
+    if ((t as any)?.unitId) return (t as any).unitId as string;
+    if (companyUnits.length === 1) return companyUnits[0].id;
+    return undefined;
+  };
+
   const companyAppointments = storeAppointments.filter((a) =>
-    !selectedUnitId || (a as any).unitId === selectedUnitId
+    !selectedUnitId || resolveAptUnitId(a) === selectedUnitId
   );
 
   const companyTherapists = therapists.filter((t) => {
-    const isUnit = !selectedUnitId || (t as any).unitId === selectedUnitId;
-    return isUnit;
+    if (!selectedUnitId) return true;
+    if ((t as any).unitId) return (t as any).unitId === selectedUnitId;
+    // Therapists without unitId are shown when there's only one active unit
+    return companyUnits.length === 1 && companyUnits[0].id === selectedUnitId;
   });
 
   const companyClients = clients;
