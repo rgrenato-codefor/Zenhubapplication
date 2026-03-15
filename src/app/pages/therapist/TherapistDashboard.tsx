@@ -1,8 +1,22 @@
+import { useMemo } from "react";
 import { SvgBarChart } from "../../components/shared/CssCharts";
 import { useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useTherapistStore } from "../../store/therapistStore";
+import {
+  Building2,
+  Sparkles,
+  Star,
+  AlertCircle,
+  CalendarCheck,
+  DollarSign,
+  TrendingUp,
+  CalendarDays,
+  ArrowRight,
+  CheckCircle,
+  Clock,
+} from "../../components/shared/icons";
 
 export default function TherapistDashboard() {
   const { user } = useAuth();
