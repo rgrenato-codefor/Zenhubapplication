@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import {
   CalendarDays, Clock, CheckCircle, AlertCircle, XCircle, CalendarCheck,
   DollarSign, Building2, X, DoorOpen, Search, UserPlus, Loader2, Plus,
-  ChevronLeft, ChevronRight, RefreshCw, Info,
+  ChevronLeft, ChevronRight, RefreshCw, Info, MapPin,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
@@ -148,6 +148,7 @@ export default function CompanySchedule() {
     therapyId: "",
     date: TODAY_STR,
     time: "09:00",
+    unitId: "",  // source-of-truth for multi-unit companies
   };
   const [newApt, setNewApt] = useState(emptyApt);
   const setApt = (k: keyof typeof emptyApt, v: string) =>
@@ -156,6 +157,7 @@ export default function CompanySchedule() {
   // Client selector
   const [clientSearch, setClientSearch] = useState("");
   const [clientDropOpen, setClientDropOpen] = useState(false);
+  const [clientDropPos, setClientDropPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [showQuickClient, setShowQuickClient] = useState(false);
   const quickClientEmpty = { firstName: "", lastName: "", email: "", phone: "" };
   const [quickClient, setQuickClient] = useState(quickClientEmpty);
@@ -163,7 +165,9 @@ export default function CompanySchedule() {
   const [addingClient, setAddingClient] = useState(false);
   const [savingApt, setSavingApt] = useState(false);
   const [aptError, setAptError] = useState("");
+  const [aptStep, setAptStep] = useState<1 | 2 | 3>(1);
   const clientDropRef = useRef<HTMLDivElement>(null);
+  const clientDropListRef = useRef<HTMLDivElement>(null);
 
   // Compute selected client/therapy for display
   const selectedClient = clients.find((c) => c.id === newApt.clientId);
@@ -172,6 +176,8 @@ export default function CompanySchedule() {
   // Auto-fill duration & price when therapy is chosen
   const [duration, setDuration] = useState("60");
   const [price, setPrice] = useState("");
+  const [aptStatus, setAptStatus] = useState<"confirmed" | "pending" | "cancelled">("confirmed");
+  const [aptNotes, setAptNotes] = useState("");
   useEffect(() => {
     if (selectedTherapy) {
       setDuration(String(selectedTherapy.duration ?? 60));
@@ -182,7 +188,9 @@ export default function CompanySchedule() {
   // Close client dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (clientDropRef.current && !clientDropRef.current.contains(e.target as Node)) {
+      const inInput = clientDropRef.current?.contains(e.target as Node);
+      const inList = clientDropListRef.current?.contains(e.target as Node);
+      if (!inInput && !inList) {
         setClientDropOpen(false);
       }
     };
@@ -190,12 +198,24 @@ export default function CompanySchedule() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Recalculate fixed-position coords whenever the dropdown opens
+  useEffect(() => {
+    if (clientDropOpen && clientDropRef.current) {
+      const r = clientDropRef.current.getBoundingClientRect();
+      setClientDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+  }, [clientDropOpen]);
+
   const filteredClients = clients.filter((c) =>
     c.name.toLowerCase().includes(clientSearch.toLowerCase())
   );
 
   const openNewModal = () => {
-    setNewApt(emptyApt);
+    setNewApt({
+      ...emptyApt,
+      // If a unit filter is active, pre-fill the unit so the user doesn't have to re-select
+      unitId: selectedUnitId ?? "",
+    });
     setClientSearch("");
     setClientDropOpen(false);
     setShowQuickClient(false);
@@ -204,6 +224,9 @@ export default function CompanySchedule() {
     setAptError("");
     setDuration("60");
     setPrice("");
+    setAptStatus("confirmed");
+    setAptNotes("");
+    setAptStep(1);
     setShowNewModal(true);
   };
 
@@ -281,6 +304,11 @@ export default function CompanySchedule() {
     if (!newApt.therapistId) { setAptError("Selecione o terapeuta."); return; }
     if (!newApt.therapyId) { setAptError("Selecione a terapia."); return; }
     if (!price || isNaN(Number(price))) { setAptError("Informe o valor."); return; }
+    // Unit is required when the company has more than one unit
+    if (companyUnits.length > 1 && !newApt.unitId) {
+      setAptError("Selecione a unidade para este agendamento.");
+      return;
+    }
 
     // ── Conflict & availability check ──────────────────────────────────────
     // Skip validation for "avulso" (generic therapist)
@@ -306,12 +334,36 @@ export default function CompanySchedule() {
     setAptError("");
     setSavingApt(true);
     try {
-      // Resolve unitId: prefer explicit unit selection → fallback to therapist's unit
       const selectedTherapist = therapists.find((t) => t.id === newApt.therapistId);
-      const resolvedUnitId =
-        selectedUnitId ??
-        (selectedTherapist as any)?.unitId ??
-        undefined;
+
+      /**
+       * unitId resolution — THE FORM is the source of truth.
+       *
+       *  Autonomous profile (no units at all):
+       *    → undefined, never saved. Correct by definition.
+       *
+       *  Company with exactly 1 unit:
+       *    → auto-assign companyUnits[0].id, no user input needed.
+       *
+       *  Company with 2+ units:
+       *    → newApt.unitId (required field in the form).
+       *    → Blocked here if somehow empty (shouldn't reach save, form validates first).
+       *    → The therapist's own unitId is used only as a SUGGESTION in the UI,
+       *      but the form value is what gets persisted.
+       */
+      let resolvedUnitId: string | undefined;
+      if (companyUnits.length === 0) {
+        resolvedUnitId = undefined;
+      } else if (companyUnits.length === 1) {
+        resolvedUnitId = companyUnits[0].id;
+      } else {
+        if (!newApt.unitId) {
+          setAptError("Selecione a unidade para este agendamento.");
+          setSavingApt(false);
+          return;
+        }
+        resolvedUnitId = newApt.unitId;
+      }
 
       await mutateAddAppointment({
         companyId: user?.companyId ?? "",
@@ -323,7 +375,8 @@ export default function CompanySchedule() {
         time: newApt.time,
         duration: Number(duration),
         price: Number(price),
-        status: "confirmed",
+        status: aptStatus,
+        notes: aptNotes || undefined,
       } as any);
       setShowNewModal(false);
       setClosureSuccess(true);
@@ -764,29 +817,33 @@ export default function CompanySchedule() {
               <div key={hour} className="grid border-b border-gray-50 hover:bg-gray-50/50" style={{ gridTemplateColumns: `80px repeat(${weekDays.length}, 1fr)` }}>
                 <div className="p-3 text-xs text-gray-400 text-right pr-4 border-r border-gray-100">{hour}</div>
                 {weekDays.map((day) => {
-                  const apt = companyAppointments.find((a) => a.date === day.date && a.time === hour);
-                  const cl = apt ? companyClients.find((c) => c.id === apt.clientId) : null;
-                  const therapist = apt && apt.therapistId !== "avulso" ? companyTherapists.find((t) => t.id === apt.therapistId) : null;
-                  const st = apt ? statusConfig[getEffectiveStatus(apt)] : null;
+                  // All appointments in this hour slot (supports any time interval and all units)
+                   const cellApts = companyAppointments.filter((a) => {
+                     if (a.date !== day.date || !a.time) return false;
+                     return `${a.time.split(":")[0].padStart(2, "0")}:00` === hour;
+                   });
+                  // (week cell — vars declared inside cellApts.map below)
+                  // therapist lookup is inside cellApts.map below (as `thr`)
+                  // st is also inside cellApts.map below
                   return (
                     <div
                       key={day.date}
-                      className="p-1 border-l border-gray-50 min-h-[52px]"
+                      className="p-1 border-l border-gray-50 min-h-[52px] flex flex-col gap-0.5"
                       style={day.isToday ? { background: `${primaryColor}05` } : {}}
                     >
-                      {apt && st && (
+                      {cellApts.map((_aptX) => { const apt=_aptX; const cl=companyClients.find((c)=>c.id===apt.clientId); const thr=apt.therapistId!=="avulso"?therapists.find((t)=>t.id===apt.therapistId):null; const st=statusConfig[getEffectiveStatus(apt)]; if(!st)return null; return (
                         <button
                           onClick={() => { setSelectedDay(day.date); setView("day"); }}
-                          className="w-full text-left px-2 py-1.5 rounded-lg text-xs"
+                          key={apt.id} className="w-full text-left px-2 py-1.5 rounded-lg text-xs"
                           style={{ background: st.bg, color: st.color }}
                         >
                           <p style={{ fontWeight: 600 }} className="truncate">{cl?.name}</p>
-                          <p className="opacity-70 truncate">{apt.therapistId === "avulso" ? "Avulso" : therapist?.name.split(" ")[0]}</p>
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                          <p className="opacity-70 truncate">{apt.therapistId === "avulso" ? "Avulso" : (thr?.name.split(" ")[0] ?? "")}</p>
+                         </button>
+                       ); })}
+                     </div>
+                   );
+                 })}
               </div>
             ))}
           </div>
@@ -1159,24 +1216,72 @@ export default function CompanySchedule() {
 
       {/* ── New Appointment Modal ─────────────────────────────────────────── */}
       {showNewModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl max-h-[92vh] flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${primaryColor}18` }}>
-                  <CalendarCheck className="w-4 h-4" style={{ color: primaryColor }} />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-6">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[92vh] flex flex-col">
+
+            {/* ── Header ──────────────────────────────────────────────── */}
+            <div className="px-6 pt-6 pb-5 border-b border-gray-100 shrink-0">
+              {/* Title row */}
+              <div className="flex items-start justify-between mb-5">
+                <div className="flex items-center gap-3.5">
+                  <div
+                    className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
+                    style={{ background: `${primaryColor}15` }}
+                  >
+                    <CalendarCheck className="w-5 h-5" style={{ color: primaryColor }} />
+                  </div>
+                  <div>
+                    <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "1rem", lineHeight: "1.375rem" }}>
+                      Novo Agendamento
+                    </p>
+                    <p className="text-gray-400 mt-0.5" style={{ fontSize: "0.8125rem" }}>
+                      {aptStep === 1 && "Passo 1 de 3 — Cliente"}
+                      {aptStep === 2 && "Passo 2 de 3 — Profissional & Terapia"}
+                      {aptStep === 3 && "Passo 3 de 3 — Data, horário e valores"}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>Novo Agendamento</p>
+                <button
+                  onClick={() => setShowNewModal(false)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors shrink-0 -mt-0.5"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <button onClick={() => setShowNewModal(false)}>
-                <X className="w-5 h-5 text-gray-400" />
-              </button>
+
+              {/* Step indicator */}
+              <div className="flex items-center">
+                {([1, 2, 3] as const).map((s, i) => (
+                  <div key={s} className={`flex items-center ${i < 2 ? "flex-1" : ""}`}>
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all"
+                      style={{
+                        background: aptStep >= s ? primaryColor : "transparent",
+                        border: `2px solid ${aptStep >= s ? primaryColor : "#d1d5db"}`,
+                        color: aptStep >= s ? "white" : "#9ca3af",
+                        fontWeight: 600,
+                        fontSize: "0.8125rem",
+                      }}
+                    >
+                      {aptStep > s ? <CheckCircle className="w-3.5 h-3.5" /> : s}
+                    </div>
+                    {i < 2 && (
+                      <div
+                        className="h-px flex-1 mx-2 rounded-full transition-all"
+                        style={{ background: aptStep > s ? primaryColor : "#e5e7eb" }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
-              {/* ── Cliente ─────────────────────────────────────────────── */}
-              <div>
+            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+
+              {/* ══════════════════════════════════════════════════════════
+                  STEP 1 — Cliente
+              ══════════════════════════════════════════════════════════ */}
+              {aptStep === 1 && <div>
                 <label className="block text-sm text-gray-600 mb-1.5" style={{ fontWeight: 600 }}>
                   Cliente *
                 </label>
@@ -1205,8 +1310,21 @@ export default function CompanySchedule() {
                         style={{ ["--tw-ring-color" as string]: `${primaryColor}40` }}
                         placeholder="Buscar cliente pelo nome..."
                         value={clientSearch}
-                        onChange={(e) => { setClientSearch(e.target.value); setClientDropOpen(true); }}
-                        onFocus={() => setClientDropOpen(true)}
+                        onChange={(e) => {
+                          setClientSearch(e.target.value);
+                          if (clientDropRef.current) {
+                            const r = clientDropRef.current.getBoundingClientRect();
+                            setClientDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+                          }
+                          setClientDropOpen(true);
+                        }}
+                        onFocus={() => {
+                          if (clientDropRef.current) {
+                            const r = clientDropRef.current.getBoundingClientRect();
+                            setClientDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+                          }
+                          setClientDropOpen(true);
+                        }}
                       />
                       <button
                         title="Cadastrar novo cliente"
@@ -1219,10 +1337,14 @@ export default function CompanySchedule() {
                     </div>
                   )}
 
-                  {/* Dropdown list */}
-                  {clientDropOpen && !newApt.clientId && (
-                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                      <div className="max-h-44 overflow-y-auto">
+                  {/* Dropdown list — rendered fixed to escape overflow clipping */}
+                  {clientDropOpen && !newApt.clientId && clientDropPos && (
+                    <div
+                      ref={clientDropListRef}
+                      className="fixed z-[300] bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
+                      style={{ top: clientDropPos.top, left: clientDropPos.left, width: clientDropPos.width }}
+                    >
+                      <div className="max-h-64 overflow-y-auto">
                         {filteredClients.length === 0 ? (
                           <p className="text-sm text-gray-400 text-center py-4">Nenhum cliente encontrado</p>
                         ) : (
@@ -1343,7 +1465,10 @@ export default function CompanySchedule() {
                     </button>
                   </div>
                 )}
-              </div>
+              </div>}
+
+              {/* ══ STEP 2 — Terapeuta, Unidade & Terapia ══ */}
+              {aptStep === 2 && <div className="space-y-5">
 
               {/* ── Terapeuta ───────────────────────────────────────────── */}
               <div>
@@ -1352,7 +1477,17 @@ export default function CompanySchedule() {
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2"
                   style={{ ["--tw-ring-color" as string]: `${primaryColor}40` }}
                   value={newApt.therapistId}
-                  onChange={(e) => setApt("therapistId", e.target.value)}
+                  onChange={(e) => {
+                    const tid = e.target.value;
+                    setApt("therapistId", tid);
+                    // Multi-unit: suggest the therapist's default unit when no unit
+                    // is manually set yet (pre-fill as convenience, user can override)
+                    if (companyUnits.length > 1 && !newApt.unitId) {
+                      const t = therapists.find((th) => th.id === tid);
+                      const tUnit = (t as any)?.unitId as string | undefined;
+                      if (tUnit) setApt("unitId", tUnit);
+                    }
+                  }}
                 >
                   <option value="">Selecione o terapeuta...</option>
                   {therapists.length === 0 ? (
@@ -1363,7 +1498,48 @@ export default function CompanySchedule() {
                     ))
                   )}
                 </select>
+
+                {/* Single-unit: just show info badge, no action needed */}
+                {companyUnits.length === 1 && (
+                  <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: primaryColor }}>
+                    <MapPin className="w-3 h-3 shrink-0" />
+                    Unidade: <strong>{companyUnits[0].name}</strong>
+                  </p>
+                )}
               </div>
+
+              {/* ── Unidade (obrigatório quando há mais de uma) ───────────── */}
+              {companyUnits.length > 1 && (
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1.5" style={{ fontWeight: 600 }}>
+                    Unidade *
+                  </label>
+                  <select
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2"
+                    style={{ ["--tw-ring-color" as string]: `${primaryColor}40` }}
+                    value={newApt.unitId}
+                    onChange={(e) => setApt("unitId", e.target.value)}
+                  >
+                    <option value="">Selecione a unidade...</option>
+                    {companyUnits.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}{(u as any).isMain ? " (principal)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {!newApt.unitId ? (
+                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      Obrigatório — define onde o atendimento será registrado.
+                    </p>
+                  ) : (
+                    <p className="text-xs mt-1 flex items-center gap-1" style={{ color: primaryColor }}>
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      {companyUnits.find((u) => u.id === newApt.unitId)?.name}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* ── Terapia ─────────────────────────────────────────────── */}
               <div>
@@ -1381,8 +1557,46 @@ export default function CompanySchedule() {
                 </select>
               </div>
 
+              </div>}
+
+              {/* ══ STEP 3 — Data, Horário & Valores ══ */}
+              {aptStep === 3 && <div className="space-y-5">
+
+              {/* ── Resumo (cliente + profissional + terapia) ───────────── */}
+              <div className="rounded-xl p-3 space-y-2" style={{ background: `${primaryColor}08`, border: `1px solid ${primaryColor}20` }}>
+                <p className="text-xs" style={{ fontWeight: 700, color: primaryColor }}>Resumo</p>
+                <div className="space-y-1 text-xs text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <span className="w-16 text-gray-400" style={{ fontWeight: 600 }}>Cliente</span>
+                    <span style={{ fontWeight: 600 }}>{clients.find((c) => c.id === newApt.clientId)?.name ?? "—"}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-16 text-gray-400" style={{ fontWeight: 600 }}>Terapeuta</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {newApt.therapistId === "avulso"
+                        ? "Avulso"
+                        : therapists.find((t) => t.id === newApt.therapistId)?.name ?? "—"}
+                    </span>
+                  </div>
+                  {(() => {
+                    const uId = newApt.unitId || (companyUnits.length === 1 ? companyUnits[0].id : undefined);
+                    const uName = companyUnits.find((u) => u.id === uId)?.name;
+                    return uName ? (
+                      <div className="flex items-center gap-2">
+                        <span className="w-16 text-gray-400" style={{ fontWeight: 600 }}>Unidade</span>
+                        <span style={{ fontWeight: 600 }}>{uName}</span>
+                      </div>
+                    ) : null;
+                  })()}
+                  <div className="flex items-center gap-2">
+                    <span className="w-16 text-gray-400" style={{ fontWeight: 600 }}>Terapia</span>
+                    <span style={{ fontWeight: 600 }}>{therapies.find((t) => t.id === newApt.therapyId)?.name ?? "—"}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* ── Data + Horário ──────────────────────────────────────── */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-600 mb-1.5" style={{ fontWeight: 600 }}>Data *</label>
                   <input
@@ -1406,8 +1620,8 @@ export default function CompanySchedule() {
                 </div>
               </div>
 
-              {/* ── Duração + Valor ─────────────────────────────────────── */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* ── Duração + Valor + Status ──────────────────────────── */}
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-sm text-gray-600 mb-1.5" style={{ fontWeight: 600 }}>Duração (min)</label>
                   <input
@@ -1430,36 +1644,99 @@ export default function CompanySchedule() {
                     onChange={(e) => setPrice(e.target.value)}
                   />
                 </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1.5" style={{ fontWeight: 600 }}>Status</label>
+                  <select
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2"
+                    style={{ ["--tw-ring-color" as string]: `${primaryColor}40` }}
+                    value={aptStatus}
+                    onChange={(e) => setAptStatus(e.target.value as typeof aptStatus)}
+                  >
+                    <option value="confirmed">Confirmado</option>
+                    <option value="pending">Pendente</option>
+                    <option value="cancelled">Cancelado</option>
+                  </select>
+                </div>
               </div>
 
+              {/* ── Observações ────────────────────────────────────────── */}
+              <div>
+                <label className="block text-sm text-gray-600 mb-1.5" style={{ fontWeight: 600 }}>Observações</label>
+                <textarea
+                  rows={3}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 resize-none"
+                  style={{ ["--tw-ring-color" as string]: `${primaryColor}40` }}
+                  placeholder="Anotações sobre o atendimento..."
+                  value={aptNotes}
+                  onChange={(e) => setAptNotes(e.target.value)}
+                />
+              </div>
+
+              </div>}
+
+            </div>
+
+            {/* ── Footer — step-aware navigation ─────────────────────── */}
+            <div className="px-6 pt-3 pb-5 border-t border-gray-100 shrink-0 space-y-3">
               {aptError && (
                 <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{aptError}</span>
                 </div>
               )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex gap-3 px-6 py-4 border-t border-gray-100 shrink-0">
-              <button
-                onClick={() => setShowNewModal(false)}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleConfirmNewApt}
-                disabled={savingApt}
-                className="flex-1 py-2.5 text-white rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-60 transition-all hover:opacity-90"
-                style={{ background: primaryColor, fontWeight: 600 }}
-              >
-                {savingApt ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+              <div className="flex gap-3">
+                {/* Left button */}
+                {aptStep === 1 ? (
+                  <button
+                    onClick={() => setShowNewModal(false)}
+                    className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
                 ) : (
-                  <><CheckCircle className="w-4 h-4" /> Confirmar</>
+                  <button
+                    onClick={() => { setAptError(""); setAptStep((s) => (s - 1) as 1 | 2 | 3); }}
+                    className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Voltar
+                  </button>
                 )}
-              </button>
+
+                {/* Right button */}
+                {aptStep < 3 ? (
+                  <button
+                    onClick={() => {
+                      setAptError("");
+                      if (aptStep === 1) {
+                        if (!newApt.clientId) { setAptError("Selecione ou cadastre um cliente."); return; }
+                      }
+                      if (aptStep === 2) {
+                        if (!newApt.therapistId) { setAptError("Selecione o terapeuta."); return; }
+                        if (!newApt.therapyId) { setAptError("Selecione a terapia."); return; }
+                        if (companyUnits.length > 1 && !newApt.unitId) { setAptError("Selecione a unidade."); return; }
+                      }
+                      setAptStep((s) => (s + 1) as 1 | 2 | 3);
+                    }}
+                    className="flex-1 py-2.5 text-white rounded-xl text-sm flex items-center justify-center gap-1.5 hover:opacity-90 transition-all"
+                    style={{ background: primaryColor, fontWeight: 600 }}
+                  >
+                    Próximo <ChevronRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleConfirmNewApt}
+                    disabled={savingApt}
+                    className="flex-1 py-2.5 text-white rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-60 transition-all hover:opacity-90"
+                    style={{ background: primaryColor, fontWeight: 600 }}
+                  >
+                    {savingApt ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+                    ) : (
+                      <><CheckCircle className="w-4 h-4" /> Confirmar</>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

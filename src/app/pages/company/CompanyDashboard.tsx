@@ -9,6 +9,7 @@ import { SvgAreaChart, SvgBarChart } from "../../components/shared/CssCharts";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useCompanyUnit } from "../../context/CompanyContext";
+import DateRangePicker, { buildRange, type DateRange } from "../../components/company/DateRangePicker";
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   confirmed: { label: "Confirmado", color: "text-emerald-600 bg-emerald-50", icon: CheckCircle },
@@ -32,48 +33,65 @@ export default function CompanyDashboard() {
   const isAllUnits = !selectedUnitId;
   const hasMultipleUnits = companyUnits.length > 1;
 
+  /**
+   * Resolve which unit an appointment belongs to:
+   *   1. Appointment has its own unitId  (new appointments always have this)
+   *   2. Fallback: infer from the therapist's unitId  (legacy company appointments)
+   *   3. Single active unit → safe to attribute there
+   *   4. Returns undefined for autonomous therapists — intentionally unassigned
+   */
+  const getAppointmentUnitId = (a: typeof appointments[number]) => {
+    if ((a as any).unitId) return (a as any).unitId as string;
+    const t = allTherapists.find((t) => t.id === a.therapistId);
+    if ((t as any)?.unitId) return (t as any).unitId as string;
+    if (companyUnits.length === 1) return companyUnits[0].id;
+    return undefined; // autonomous therapist — does not belong to any unit
+  };
+
+  /** Same cascade logic for therapists. */
+  const getTherapistUnitId = (t: typeof allTherapists[number]) => {
+    if ((t as any).unitId) return (t as any).unitId as string;
+    if (companyUnits.length === 1) return companyUnits[0].id;
+    return undefined; // autonomous — not tied to any unit
+  };
+
+  // ── Date range filter ─────────────────────────────────────────────────────
+  const [dateRange, setDateRange] = useState<DateRange>(() => buildRange("30d"));
+  const todayStr = new Date().toISOString().split("T")[0];
+
   // ── Filtered by selected unit ─────────────────────────────────────────────
   const companyTherapists = isAllUnits
     ? allTherapists
-    : allTherapists.filter((t) => {
-        if ((t as any).unitId) return (t as any).unitId === selectedUnitId;
-        // Therapists without unitId belong to the only active unit
-        return companyUnits.length === 1 && companyUnits[0].id === selectedUnitId;
-      });
+    : allTherapists.filter((t) => getTherapistUnitId(t) === selectedUnitId);
 
-  /**
-   * Resolve which unit an appointment belongs to:
-   *   1. Appointment has its own unitId (new appointments always have this)
-   *   2. Fallback: infer from the therapist's unitId (legacy appointments)
-   *   3. Last resort: if company has exactly one unit, assign to it
-   * This handles appointments saved before the unitId field was added.
-   */
-  const getAppointmentUnitId = (a: typeof appointments[number]) => {
-    // 1. Appointment has its own unitId (new appointments always have this)
-    if ((a as any).unitId) return (a as any).unitId as string;
-    // 2. Fallback: infer from the therapist's unitId (legacy appointments)
-    const t = allTherapists.find((t) => t.id === a.therapistId);
-    if ((t as any)?.unitId) return (t as any).unitId as string;
-    // 3. Last resort: if company has exactly one unit, assign to it
-    if (companyUnits.length === 1) return companyUnits[0].id;
-    return undefined;
-  };
-
+  // Unit-filtered (all dates)
   const companyAppointments = isAllUnits
     ? appointments
     : appointments.filter((a) => getAppointmentUnitId(a) === selectedUnitId);
 
-  const todayAppointments = companyAppointments.filter((a) => a.date === new Date().toISOString().split("T")[0]);
+  // Always-today counter for the header badge
+  const todayAppointments = companyAppointments.filter((a) => a.date === todayStr);
 
-  // ── Revenue from appointments (derived) ───────────────────────────────────
-  const monthRevenue = companyAppointments
+  // ── Date-range filtered appointments ─────────────────────────────────────
+  const rangeAppointments = useMemo(() => {
+    if (!dateRange.start || !dateRange.end) return companyAppointments;
+    return companyAppointments.filter(
+      (a) => a.date >= dateRange.start && a.date <= dateRange.end
+    );
+  }, [companyAppointments, dateRange]);
+
+  // ── KPI derivations from date range ──────────────────────────────────────
+  const periodRevenue = rangeAppointments
     .filter((a) => a.status === "completed" || a.status === "confirmed")
     .reduce((sum, a) => sum + a.price, 0);
 
-  // ── Chart data: derive from real appointments when no static data ─────────
+  const periodSessions = rangeAppointments.filter(
+    (a) => a.status === "confirmed" || a.status === "completed"
+  ).length;
+
+  // ── Chart data: adapt to date range ──────────────────────────────────────
   /**
-   * Build last-7-months labels (e.g. ["Set", "Out", "Nov", "Dez", "Jan", "Fev", "Mar"])
-   * using a fixed reference date so the list is always stable.
+   * Build last-7-months labels for the default monthly trend view.
    */
   const last7Months = useMemo(() => {
     const result: { month: string; year: number; monthNum: number }[] = [];
@@ -87,66 +105,143 @@ export default function CompanyDashboard() {
       result.push({
         month: abbr.charAt(0).toUpperCase() + abbr.slice(1),
         year: d.getFullYear(),
-        monthNum: d.getMonth() + 1, // 1-based
+        monthNum: d.getMonth() + 1,
       });
     }
     return result;
   }, []);
 
-  const activeRevenueData = useMemo(() => {
-    // 1. Demo mode with pre-built mock data → prefer unit-specific then general
+  /**
+   * Build chart groupings based on the selected date range length.
+   *  ≤ 2 days  → by time block (Manhã / Tarde / Noite) — sessions only
+   *  ≤ 14 days → by day (YYYY-MM-DD → DD/MM label)
+   *  ≤ 90 days → by week
+   *  > 90 days → by month
+   */
+  const { activeRevenueData, revenueChartLabel, revenueValueKey } = useMemo(() => {
+    // Demo mode → keep static data
     if (revenueData.length > 0) {
-      if (selectedUnitId && unitRevenueData[selectedUnitId]?.length)
-        return unitRevenueData[selectedUnitId];
-      return revenueData;
+      const data = selectedUnitId && unitRevenueData[selectedUnitId]?.length
+        ? unitRevenueData[selectedUnitId]
+        : revenueData;
+      return { activeRevenueData: data, revenueChartLabel: "Últimos 7 meses", revenueValueKey: "revenue" };
     }
-    // 2. Real user → derive from filtered appointments
-    const byKey: Record<string, number> = {};
-    last7Months.forEach(({ month }) => (byKey[month] = 0));
-    companyAppointments
-      .filter((a) => a.status === "completed" || a.status === "confirmed")
-      .forEach((a) => {
-        if (!a.date) return;
-        const [y, m] = a.date.split("-").map(Number);
-        const entry = last7Months.find((lm) => lm.year === y && lm.monthNum === m);
-        if (entry) byKey[entry.month] = (byKey[entry.month] ?? 0) + (a.price || 0);
+
+    const apts = rangeAppointments.filter(
+      (a) => a.status === "completed" || a.status === "confirmed"
+    );
+
+    const start = dateRange.start;
+    const end   = dateRange.end;
+    if (!start || !end) {
+      return {
+        activeRevenueData: last7Months.map(({ month }) => ({ month, revenue: 0 })),
+        revenueChartLabel: "Últimos 7 meses",
+        revenueValueKey: "revenue",
+      };
+    }
+
+    const startD = new Date(start + "T00:00:00");
+    const endD   = new Date(end   + "T00:00:00");
+    const diffDays = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
+
+    if (diffDays <= 2) {
+      // Group by time block
+      const blocks = [
+        { label: "Manhã",   min: "06:00", max: "11:59" },
+        { label: "Tarde",   min: "12:00", max: "17:59" },
+        { label: "Noite",   min: "18:00", max: "23:59" },
+        { label: "Madrugada", min: "00:00", max: "05:59" },
+      ];
+      const data = blocks.map(({ label, min, max }) => ({
+        month: label,
+        revenue: apts
+          .filter((a) => a.time >= min && a.time <= max)
+          .reduce((s, a) => s + (a.price || 0), 0),
+      }));
+      return { activeRevenueData: data, revenueChartLabel: "Receita por turno", revenueValueKey: "revenue" };
+    }
+
+    if (diffDays <= 31) {
+      // Group by day
+      const days: Record<string, number> = {};
+      for (let i = 0; i < diffDays; i++) {
+        const d = new Date(startD);
+        d.setDate(startD.getDate() + i);
+        const iso = d.toISOString().split("T")[0];
+        days[iso] = 0;
+      }
+      apts.forEach((a) => {
+        if (a.date in days) days[a.date] += a.price || 0;
       });
-    return last7Months.map(({ month }) => ({ month, revenue: byKey[month] }));
-  }, [revenueData, unitRevenueData, selectedUnitId, companyAppointments, last7Months]);
+      const data = Object.entries(days).map(([iso, revenue]) => {
+        const [, m, d] = iso.split("-");
+        return { month: `${d}/${m}`, revenue };
+      });
+      return { activeRevenueData: data, revenueChartLabel: `Receita por dia (${dateRange.label})`, revenueValueKey: "revenue" };
+    }
+
+    if (diffDays <= 91) {
+      // Group by week
+      const weeks: { label: string; revenue: number }[] = [];
+      let cursor = new Date(startD);
+      let wIdx = 1;
+      while (cursor <= endD) {
+        const wEnd = new Date(cursor);
+        wEnd.setDate(cursor.getDate() + 6);
+        if (wEnd > endD) wEnd.setTime(endD.getTime());
+        const label = `Sem ${wIdx}`;
+        const wRevenue = apts
+          .filter((a) => a.date >= cursor.toISOString().split("T")[0] && a.date <= wEnd.toISOString().split("T")[0])
+          .reduce((s, a) => s + (a.price || 0), 0);
+        weeks.push({ label, revenue: wRevenue });
+        cursor.setDate(cursor.getDate() + 7);
+        wIdx++;
+      }
+      return { activeRevenueData: weeks.map(w => ({ month: w.label, revenue: w.revenue })), revenueChartLabel: `Receita por semana (${dateRange.label})`, revenueValueKey: "revenue" };
+    }
+
+    // Group by month (long ranges)
+    const monthMap: Record<string, number> = {};
+    apts.forEach((a) => {
+      if (!a.date) return;
+      const [y, m] = a.date.split("-");
+      const key = `${m}/${y.slice(2)}`;
+      monthMap[key] = (monthMap[key] ?? 0) + (a.price || 0);
+    });
+    const data = Object.entries(monthMap).map(([month, revenue]) => ({ month, revenue }));
+    return { activeRevenueData: data, revenueChartLabel: `Receita por mês (${dateRange.label})`, revenueValueKey: "revenue" };
+  }, [revenueData, unitRevenueData, selectedUnitId, rangeAppointments, dateRange, last7Months]);
 
   const WEEK_DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
   const activeWeeklyData = useMemo(() => {
-    // 1. Demo mode
     if (weeklyData.length > 0) {
       if (selectedUnitId && unitWeeklyData[selectedUnitId]?.length)
         return unitWeeklyData[selectedUnitId];
       return weeklyData;
     }
-    // 2. Real user → count sessions per weekday from filtered appointments
     const byDay: Record<string, number> = {};
     WEEK_DAYS.forEach((d) => (byDay[d] = 0));
-    companyAppointments.forEach((a) => {
+    rangeAppointments.forEach((a) => {
       if (!a.date) return;
       const [y, m, d] = a.date.split("-").map(Number);
       const label = WEEK_DAYS[new Date(y, m - 1, d).getDay()];
       byDay[label] = (byDay[label] ?? 0) + 1;
     });
     return WEEK_DAYS.map((day) => ({ day, sessions: byDay[day] }));
-  }, [weeklyData, unitWeeklyData, selectedUnitId, companyAppointments]);
+  }, [weeklyData, unitWeeklyData, selectedUnitId, rangeAppointments]);
 
-  // ── Per-unit stats for comparison section ─────────────────────────────────
+  // ── Per-unit stats ────────────────────────────────────────────────────────
   const unitStats = companyUnits.map((unit, idx) => {
-    const unitTherapists = allTherapists.filter((t) => (t as any).unitId === unit.id);
-    // Use same therapist-fallback logic for unit appointment resolution
-    const unitAppointments = appointments.filter((a) => {
-      if ((a as any).unitId) return (a as any).unitId === unit.id;
-      const t = allTherapists.find((th) => th.id === a.therapistId);
-      return (t as any)?.unitId === unit.id;
-    });
+    // Use the same cascade helpers so numbers always match the KPI cards
+    const unitTherapists = allTherapists.filter((t) => getTherapistUnitId(t) === unit.id);
+    const unitAppointments = rangeAppointments.filter(
+      (a) => getAppointmentUnitId(a) === unit.id
+    );
     const unitRevenue = unitAppointments
       .filter((a) => a.status === "completed" || a.status === "confirmed")
       .reduce((sum, a) => sum + a.price, 0);
-    const totalRevenue = appointments
+    const totalRevenue = rangeAppointments
       .filter((a) => a.status === "completed" || a.status === "confirmed")
       .reduce((sum, a) => sum + a.price, 0);
     return {
@@ -169,8 +264,7 @@ export default function CompanyDashboard() {
   // ── Plan change notification ───────────────────────────────────────────────
   const planChanged = !!(company as any)?.planChangedAt;
   const planChangedFrom = (company as any)?.planChangedFrom as string | undefined;
-  const planChangedAt  = (company as any)?.planChangedAt  as string | undefined;
-  // Key is tied to planChangedAt so a future plan change shows the banner again
+  const planChangedAt   = (company as any)?.planChangedAt  as string | undefined;
   const dismissKey = `zen_plan_notif_dismissed_${planChangedAt ?? ""}`;
   const [dismissedPlanNotif, setDismissedPlanNotif] = useState(
     () => typeof sessionStorage !== "undefined" && !!sessionStorage.getItem(dismissKey)
@@ -212,10 +306,10 @@ export default function CompanyDashboard() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-gray-900">Olá, {user?.name?.split(" ")[0]}! 👋</h1>
-          <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <p className="text-gray-500 text-sm">
               {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
             </p>
@@ -230,13 +324,31 @@ export default function CompanyDashboard() {
             )}
           </div>
         </div>
-        <div
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm"
-          style={{ background: primaryColor }}
-        >
-          <div className="w-2 h-2 rounded-full bg-white/70 animate-pulse" />
-          <span>{todayAppointments.length} sessões hoje</span>
+
+        {/* Right side: date range + sessions badge */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+          <DateRangePicker
+            value={dateRange}
+            onChange={setDateRange}
+            primaryColor={primaryColor}
+          />
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-white text-sm shrink-0"
+            style={{ background: primaryColor }}
+          >
+            <div className="w-2 h-2 rounded-full bg-white/70 animate-pulse" />
+            <span className="whitespace-nowrap">{todayAppointments.length} sessões hoje</span>
+          </div>
         </div>
+      </div>
+
+      {/* ── Date range summary strip ──────────────────────────────────────── */}
+      <div className="flex items-center gap-3 text-xs text-gray-400">
+        <span>{rangeAppointments.length} atendimentos no período</span>
+        <span className="text-gray-200">·</span>
+        <span className="text-emerald-600" style={{ fontWeight: 600 }}>
+          R$ {periodRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
+        </span>
       </div>
 
       {/* KPI Cards */}
@@ -248,7 +360,7 @@ export default function CompanyDashboard() {
             icon: Star,
             color: primaryColor,
             sub: "ativos",
-            trend: "+1 este mês",
+            trend: "no período",
           },
           {
             title: "Clientes",
@@ -256,23 +368,23 @@ export default function CompanyDashboard() {
             icon: Users,
             color: "#3B82F6",
             sub: "cadastrados",
-            trend: "+5 este mês",
+            trend: "total cadastrados",
           },
           {
             title: "Sessões",
-            value: companyAppointments.filter((a) => a.status === "confirmed" || a.status === "completed").length,
+            value: periodSessions,
             icon: CalendarDays,
             color: "#8B5CF6",
-            sub: "agendadas",
-            trend: "esta semana",
+            sub: "no período",
+            trend: dateRange.label,
           },
           {
-            title: "Receita do Mês",
-            value: `R$ ${monthRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`,
+            title: "Receita do Período",
+            value: `R$ ${periodRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`,
             icon: DollarSign,
             color: "#059669",
             sub: "",
-            trend: isAllUnits ? "+12% vs mês anterior" : `Unidade ${selectedUnit?.name}`,
+            trend: dateRange.label,
           },
         ].map((stat) => (
           <div key={stat.title} className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
@@ -284,7 +396,7 @@ export default function CompanyDashboard() {
             </div>
             <p className="text-gray-500 text-sm">{stat.title}</p>
             <p className="text-2xl text-gray-900 mt-0.5" style={{ fontWeight: 700 }}>{stat.value}</p>
-            <p className="text-xs text-emerald-600 mt-1">{stat.trend}</p>
+            <p className="text-xs text-gray-400 mt-1 truncate">{stat.trend}</p>
           </div>
         ))}
       </div>
@@ -295,7 +407,9 @@ export default function CompanyDashboard() {
           <div className="flex items-center justify-between mb-5">
             <div>
               <h3 className="text-gray-900">Comparativo por Unidade</h3>
-              <p className="text-gray-400 text-xs mt-0.5">Visão geral de todas as unidades · mês atual</p>
+              <p className="text-gray-400 text-xs mt-0.5">
+                {dateRange.label} · todas as unidades
+              </p>
             </div>
             <Building2 className="w-5 h-5 text-gray-300" />
           </div>
@@ -307,7 +421,6 @@ export default function CompanyDashboard() {
                 onClick={() => setSelectedUnitId(unit.id)}
                 className="text-left p-4 rounded-xl border border-gray-100 hover:border-violet-200 hover:shadow-md transition-all group"
               >
-                {/* Header */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2.5">
                     <div
@@ -326,7 +439,6 @@ export default function CompanyDashboard() {
                   <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-violet-400 transition-colors" />
                 </div>
 
-                {/* Stats row */}
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   {[
                     { label: "Profissionais", value: therapistsCount },
@@ -340,7 +452,6 @@ export default function CompanyDashboard() {
                   ))}
                 </div>
 
-                {/* Revenue share bar */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-xs text-gray-400">Participação na receita</p>
@@ -354,7 +465,6 @@ export default function CompanyDashboard() {
                   </div>
                 </div>
 
-                {/* Status badge */}
                 <div className="mt-3">
                   <span
                     className="text-xs px-2 py-0.5 rounded-full"
@@ -373,7 +483,7 @@ export default function CompanyDashboard() {
 
           {/* Stacked revenue chart comparing units */}
           <div className="mt-5 pt-5 border-t border-gray-100">
-            <p className="text-gray-700 text-sm mb-4" style={{ fontWeight: 600 }}>Receita mensal — todas as unidades</p>
+            <p className="text-gray-700 text-sm mb-4" style={{ fontWeight: 600 }}>Receita — todas as unidades</p>
             {(() => {
               const maxRev = Math.max(
                 ...revenueData.map((d) =>
@@ -387,38 +497,32 @@ export default function CompanyDashboard() {
               );
               return (
                 <div className="space-y-2">
-                  {revenueData.map((d) => {
-                    const total = companyUnits.reduce((s, unit) => {
-                      const match = unitRevenueData[unit.id]?.find((u) => u.month === d.month);
-                      return s + (match?.revenue ?? 0);
-                    }, 0);
-                    return (
-                      <div key={d.month} className="flex items-center gap-2 text-xs">
-                        <span className="text-gray-400 w-8 shrink-0">{d.month}</span>
-                        <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden flex">
-                          {companyUnits.map((unit, idx) => {
-                            const match = unitRevenueData[unit.id]?.find((u) => u.month === d.month);
-                            const rev = match?.revenue ?? 0;
-                            const pct = maxRev > 0 ? (rev / maxRev) * 100 : 0;
-                            return (
-                              <div
-                                key={unit.id}
-                                className="h-full"
-                                style={{ width: `${pct}%`, background: UNIT_COLORS[idx % UNIT_COLORS.length] }}
-                                title={`${unit.name}: R$${rev.toLocaleString("pt-BR")}`}
-                              />
-                            );
-                          })}
-                        </div>
-                        <span className="text-gray-400 w-16 text-right">
-                          R${(companyUnits.reduce((s, unit) => {
-                            const match = unitRevenueData[unit.id]?.find((u) => u.month === d.month);
-                            return s + (match?.revenue ?? 0);
-                          }, 0) / 1000).toFixed(1)}k
-                        </span>
+                  {revenueData.map((d) => (
+                    <div key={d.month} className="flex items-center gap-2 text-xs">
+                      <span className="text-gray-400 w-8 shrink-0">{d.month}</span>
+                      <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden flex">
+                        {companyUnits.map((unit, idx) => {
+                          const match = unitRevenueData[unit.id]?.find((u) => u.month === d.month);
+                          const rev = match?.revenue ?? 0;
+                          const pct = maxRev > 0 ? (rev / maxRev) * 100 : 0;
+                          return (
+                            <div
+                              key={unit.id}
+                              className="h-full"
+                              style={{ width: `${pct}%`, background: UNIT_COLORS[idx % UNIT_COLORS.length] }}
+                              title={`${unit.name}: R$${rev.toLocaleString("pt-BR")}`}
+                            />
+                          );
+                        })}
                       </div>
-                    );
-                  })}
+                      <span className="text-gray-400 w-16 text-right">
+                        R${(companyUnits.reduce((s, unit) => {
+                          const match = unitRevenueData[unit.id]?.find((u) => u.month === d.month);
+                          return s + (match?.revenue ?? 0);
+                        }, 0) / 1000).toFixed(1)}k
+                      </span>
+                    </div>
+                  ))}
                 </div>
               );
             })()}
@@ -433,14 +537,14 @@ export default function CompanyDashboard() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-gray-900">
-                Receita Mensal
+                Receita
                 {selectedUnit && (
                   <span className="ml-2 text-sm text-gray-400" style={{ fontWeight: 400 }}>
                     — {selectedUnit.name}
                   </span>
                 )}
               </h3>
-              <p className="text-gray-400 text-xs mt-0.5">Últimos 7 meses</p>
+              <p className="text-gray-400 text-xs mt-0.5">{revenueChartLabel}</p>
             </div>
             <button className="text-gray-400 hover:text-gray-600">
               <MoreHorizontal className="w-5 h-5" />
@@ -448,7 +552,7 @@ export default function CompanyDashboard() {
           </div>
           <SvgAreaChart
             data={activeRevenueData}
-            valueKey="revenue"
+            valueKey={revenueValueKey}
             labelKey="month"
             color={primaryColor}
             height={200}
@@ -459,12 +563,12 @@ export default function CompanyDashboard() {
         {/* Weekly sessions */}
         <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
           <h3 className="text-gray-900 mb-1">
-            Esta Semana
+            Sessões por Dia
             {selectedUnit && (
               <span className="ml-1 text-xs text-gray-400" style={{ fontWeight: 400 }}>· {selectedUnit.name}</span>
             )}
           </h3>
-          <p className="text-gray-400 text-xs mb-4">Sessões por dia</p>
+          <p className="text-gray-400 text-xs mb-4">{dateRange.label}</p>
           <SvgBarChart
             data={activeWeeklyData}
             bars={[{ key: "sessions", color: primaryColor }]}
@@ -474,18 +578,23 @@ export default function CompanyDashboard() {
         </div>
       </div>
 
-      {/* Today's appointments + Top therapists */}
+      {/* Period appointments + Top therapists */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Today */}
+        {/* Period agenda */}
         <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-900">Agenda de Hoje</h3>
+            <div>
+              <h3 className="text-gray-900">
+                {dateRange.preset === "today" ? "Agenda de Hoje" : "Atendimentos do Período"}
+              </h3>
+              <p className="text-gray-400 text-xs mt-0.5">{dateRange.label}</p>
+            </div>
             <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-              {todayAppointments.length} sessões
+              {rangeAppointments.length} sessões
             </span>
           </div>
-          <div className="space-y-3">
-            {todayAppointments.map((apt) => {
+          <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+            {rangeAppointments.slice(0, 20).map((apt) => {
               const therapist = allTherapists.find((t) => t.id === apt.therapistId);
               const client = allClients.find((c) => c.id === apt.clientId);
               const status = statusConfig[apt.status] ?? statusConfig.confirmed;
@@ -493,10 +602,17 @@ export default function CompanyDashboard() {
               return (
                 <div key={apt.id} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
                   <div
-                    className="flex items-center justify-center w-10 h-10 rounded-xl text-white text-xs shrink-0"
+                    className="flex items-center justify-center w-10 h-10 rounded-xl text-white text-xs shrink-0 flex-col gap-0"
                     style={{ background: primaryColor, fontWeight: 700 }}
                   >
-                    {apt.time}
+                    {dateRange.preset !== "today" && dateRange.preset !== "yesterday" ? (
+                      <>
+                        <span className="text-[10px] opacity-80">{apt.date?.slice(5).replace("-", "/")}</span>
+                        <span>{apt.time}</span>
+                      </>
+                    ) : (
+                      <span>{apt.time}</span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-900 truncate" style={{ fontWeight: 600 }}>{client?.name}</p>
@@ -513,8 +629,13 @@ export default function CompanyDashboard() {
                 </div>
               );
             })}
-            {todayAppointments.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-4">Nenhuma sessão hoje</p>
+            {rangeAppointments.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-6">Nenhuma sessão no período</p>
+            )}
+            {rangeAppointments.length > 20 && (
+              <p className="text-xs text-gray-400 text-center pt-2">
+                + {rangeAppointments.length - 20} mais no período
+              </p>
             )}
           </div>
         </div>
@@ -530,6 +651,11 @@ export default function CompanyDashboard() {
           <div className="space-y-3">
             {companyTherapists.map((therapist) => {
               const tUnit = companyUnits.find((u) => u.id === (therapist as any).unitId);
+              // Count sessions in the selected period for this therapist
+              const therapistPeriodSessions = rangeAppointments.filter(
+                (a) => a.therapistId === therapist.id &&
+                  (a.status === "confirmed" || a.status === "completed")
+              ).length;
               return (
                 <div key={therapist.id} className="flex items-center gap-3">
                   <img
@@ -556,7 +682,7 @@ export default function CompanyDashboard() {
                       <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
                       <span className="text-xs text-gray-700" style={{ fontWeight: 600 }}>{therapist.rating}</span>
                     </div>
-                    <p className="text-xs text-gray-500">{therapist.monthSessions} sessões</p>
+                    <p className="text-xs text-gray-500">{therapistPeriodSessions} sessões</p>
                   </div>
                 </div>
               );
