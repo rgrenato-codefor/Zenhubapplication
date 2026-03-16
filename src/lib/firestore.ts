@@ -84,6 +84,8 @@ export interface Therapist {
   monthEarnings: number;
   totalSessions: number;
   totalEarnings: number;
+  commission?: number;   // % do valor da sessão (0–100)
+  plan?: string;         // e.g. "therapist_free" | "therapist_basic" | ...
   createdAt?: Timestamp;
 }
 

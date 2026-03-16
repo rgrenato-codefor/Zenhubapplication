@@ -5,9 +5,12 @@ import {
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
+import { useTherapistPlan, invalidateTherapistPlanCache } from "../../hooks/useTherapistPlan";
+import { TherapistUpgradeModal } from "../../components/therapist/TherapistUpgradeModal";
 import type { SessionRecord, CatalogItem } from "../../context/DataContext";
 import { checkAppointmentConflicts } from "../../lib/appointmentConflicts";
 import { BookingWizard } from "../../components/therapist/BookingWizard";
+import { AvailabilityEditor } from "../../components/therapist/AvailabilityEditor";
 import type { BookingForm } from "../../components/therapist/BookingWizard";
 
 type ClosureModal = {
@@ -90,6 +93,7 @@ export default function TherapistSchedule() {
     therapistStore: store, mutateCompleteSession,
     mutateAddAppointment,
     mutateMyAvailability,
+    mutateMyTherapistProfile,
     refresh, loading,
     sessionRecords,
     completedSessionIds,
@@ -103,6 +107,18 @@ export default function TherapistSchedule() {
   const isSessionCompleted = (aptId: string) =>
     completedSessionIds.has(aptId) ||
     sessionRecords.some((r) => r.appointmentId === aptId);
+
+  // ── Plan limit check ──────────────────────────────────────────────────────
+  const { planConfig, allPlans, isAtMonthlyLimit } = useTherapistPlan(therapist?.plan ?? "therapist_free");
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+  const monthlyAppointmentCount = useMemo(
+    () => myAppointments.filter(
+      (a) => a.date.startsWith(currentMonthPrefix) && a.status !== "cancelled"
+    ).length,
+    [myAppointments, currentMonthPrefix]
+  );
 
   const [tab, setTab] = useState<"agenda" | "disponibilidade">("agenda");
   const [centerOffset, setCenterOffset] = useState(0);
@@ -288,6 +304,11 @@ export default function TherapistSchedule() {
 
   // ── Booking helpers ──────────────────────────────────────────────────────
   const openBooking = (presetTime?: string) => {
+    // ── Plan limit gate ───────────────────────────────────────────────────
+    if (isAtMonthlyLimit(monthlyAppointmentCount)) {
+      setShowUpgradeModal(true);
+      return;
+    }
     setBookingForm({
       date: selectedDay,
       time: presetTime ?? "09:00",
@@ -681,57 +702,10 @@ export default function TherapistSchedule() {
 
       {/* ── Disponibilidade ──────────────────────────────────────────────────── */}
       {tab === "disponibilidade" && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-violet-100 p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-1"><Clock className="w-4 h-4 text-violet-500" /><h3 className="text-gray-900">Horários disponíveis</h3></div>
-            <p className="text-gray-400 text-xs mb-5">Clique para marcar ou desmarcar sua disponibilidade.</p>
-            <div className="grid grid-cols-7 gap-2">
-              {ALL_WEEK_DAYS.map((day) => {
-                const slots = availability[day.dayKey] ?? [];
-                return (
-                  <div key={day.dayKey}>
-                    <p className="text-xs text-gray-500 text-center mb-2" style={{ fontWeight: 700 }}>{day.label}</p>
-                    <div className="space-y-1">
-                      {HOURS.map((slot) => {
-                        const active = slots.includes(slot);
-                        return (
-                          <button
-                            key={slot}
-                            onClick={() => toggleSlot(day.dayKey, slot)}
-                            className={`w-full py-1 px-0.5 rounded-lg text-xs transition-all ${active ? "bg-violet-600 text-white" : "bg-gray-50 text-gray-400 hover:bg-violet-50 hover:text-violet-500 border border-gray-100"}`}
-                            style={{ fontWeight: active ? 600 : 400 }}
-                          >
-                            {slot}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-center text-violet-500 text-xs mt-2" style={{ fontWeight: 600 }}>{slots.length}h</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="bg-white rounded-xl border border-violet-100 p-5 shadow-sm">
-            <h3 className="text-gray-900 mb-3">Resumo semanal</h3>
-            <div className="space-y-2">
-              {ALL_WEEK_DAYS.map((day) => {
-                const slots = availability[day.dayKey] ?? [];
-                if (slots.length === 0) return null;
-                return (
-                  <div key={day.dayKey} className="flex items-center gap-3">
-                    <p className="text-sm text-gray-600 w-20 shrink-0" style={{ fontWeight: 600 }}>{DAY_LABELS[day.dayKey]}</p>
-                    <div className="flex-1 flex flex-wrap gap-1">
-                      {slots.slice(0, 6).map((s) => (<span key={s} className="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded-lg">{s}</span>))}
-                      {slots.length > 6 && <span className="text-xs text-gray-400">+{slots.length - 6}</span>}
-                    </div>
-                    <p className="text-xs text-gray-400 shrink-0">{slots.length} horários</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <AvailabilityEditor
+          availability={availability}
+          onSave={(next) => mutateMyAvailability(next)}
+        />
       )}
 
       {/* ── Booking Wizard ────────────────────────────────────────────────────── */}
@@ -814,6 +788,20 @@ export default function TherapistSchedule() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Plan Upgrade Modal ───────────────────────────────────────────────── */}
+      {showUpgradeModal && (
+        <TherapistUpgradeModal
+          currentPlan={planConfig}
+          allPlans={allPlans}
+          monthlyCount={monthlyAppointmentCount}
+          onUpgrade={async (plan) => {
+            await mutateMyTherapistProfile({ plan: plan.id });
+            invalidateTherapistPlanCache();
+          }}
+          onClose={() => setShowUpgradeModal(false)}
+        />
       )}
     </div>
   );

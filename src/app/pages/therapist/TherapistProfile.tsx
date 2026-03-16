@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Save, Star, AtSign, Check, Copy, ExternalLink, Clock,
   CheckCircle, LogOut, Sparkles, AlertTriangle, X, Edit2,
-  Building2, Link2, Camera, ChevronRightIcon,
+  Building2, Link2, Camera, ChevronRightIcon, Zap,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { uploadMedia, ikFolders, ikAvatar } from "../../../lib/imagekit";
+import { useTherapistPlan, invalidateTherapistPlanCache } from "../../hooks/useTherapistPlan";
+import { TherapistUpgradeModal } from "../../components/therapist/TherapistUpgradeModal";
 
 const DAYS_MAP: Record<string, string> = {
   monday: "Seg", tuesday: "Ter", wednesday: "Qua",
@@ -21,6 +23,10 @@ export default function TherapistProfile() {
     mutateMyTherapistProfile,
     mutateLinkToCompany, mutateUnlinkFromCompany,
   } = usePageData();
+
+  // ── Plan ─────────────────────────────────────────────────────────────────
+  const { planConfig, allPlans, isAtMonthlyLimit } = useTherapistPlan(therapist?.plan ?? "therapist_free");
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -264,11 +270,6 @@ export default function TherapistProfile() {
               <p className="text-violet-600 text-sm" style={{ fontWeight: 500 }}>{therapist.specialty}</p>
             )}
             <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1">
-                <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                <span className="text-sm text-gray-700" style={{ fontWeight: 600 }}>{therapist.rating}</span>
-              </div>
-              <span className="text-xs text-gray-400">·</span>
               <span className="text-xs text-gray-500">{therapist.totalSessions} sessões realizadas</span>
               <span className="text-xs text-gray-400">·</span>
               <span className="text-xs text-gray-500">{therapist.monthSessions} este mês</span>
@@ -307,9 +308,8 @@ export default function TherapistProfile() {
       </div>
 
       {/* ── Stats row ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {[
-          { label: "Avaliação",     value: therapist.rating.toString(),        suffix: "★" },
           { label: "Total sessões", value: therapist.totalSessions.toString() },
           { label: "Este mês",      value: therapist.monthSessions.toString() },
         ].map((s) => (
@@ -468,6 +468,90 @@ export default function TherapistProfile() {
         <ChevronRightIcon className="w-4 h-4 text-violet-400 group-hover:text-violet-600 transition-colors" />
       </a>
 
+      {/* ── Assinatura ────────────────────────────────────────────────────── */}
+      {(() => {
+        const planLimit = planConfig.appointmentsPerMonth;
+        const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+        // We don't have appointments here, so just show the plan info
+        return (
+          <div className="bg-white rounded-2xl border border-violet-100 p-4 md:p-5 shadow-sm">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
+                  <Zap className="w-4 h-4 text-violet-500" />
+                </div>
+                <div>
+                  <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Assinatura</p>
+                  <p className="text-xs text-gray-400">Seu plano atual e benefícios</p>
+                </div>
+              </div>
+              {planLimit !== null && (
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-xs hover:shadow-md transition-all"
+                  style={{ fontWeight: 600 }}
+                >
+                  <Zap className="w-3.5 h-3.5" /> Fazer upgrade
+                </button>
+              )}
+            </div>
+
+            {/* Current plan pill */}
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-violet-50 border border-violet-100 mb-4">
+              <span className="text-2xl">{planConfig.badge}</span>
+              <div className="flex-1">
+                <p className="text-violet-700 text-sm" style={{ fontWeight: 700 }}>
+                  Plano {planConfig.name}
+                  {planConfig.price === 0 && (
+                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500" style={{ fontWeight: 500 }}>
+                      Gratuito
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-violet-500 mt-0.5">
+                  {planConfig.price > 0
+                    ? `R$ ${planConfig.price}/mês · renovação mensal`
+                    : "Sem custo mensal"}
+                </p>
+              </div>
+              {planLimit === null && (
+                <span className="text-xs px-2.5 py-1 rounded-full bg-violet-600 text-white" style={{ fontWeight: 600 }}>
+                  ♾️ Ilimitado
+                </span>
+              )}
+            </div>
+
+            {/* Usage bar (if limited) */}
+            {planLimit !== null && (
+              <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>Uso este mês</span>
+                  <span className="text-xs text-violet-600" style={{ fontWeight: 700 }}>
+                    limite: {planLimit} atendimentos
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  Acesse a agenda para ver o número exato de atendimentos usados.
+                </p>
+              </div>
+            )}
+
+            {/* Upgrade CTA for free/basic plans */}
+            {planLimit !== null && planLimit <= 50 && (
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm hover:shadow-lg transition-all"
+                style={{ fontWeight: 600 }}
+              >
+                <Zap className="w-4 h-4" />
+                Ver planos disponíveis
+              </button>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── Availability ──────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-violet-100 p-4 md:p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
@@ -579,6 +663,20 @@ export default function TherapistProfile() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Upgrade Modal ────────────────────────────────────────���───────── */}
+      {showUpgradeModal && (
+        <TherapistUpgradeModal
+          currentPlan={planConfig}
+          allPlans={allPlans}
+          monthlyCount={0}
+          onUpgrade={async (plan) => {
+            await mutateMyTherapistProfile({ plan: plan.id });
+            invalidateTherapistPlanCache();
+          }}
+          onClose={() => setShowUpgradeModal(false)}
+        />
       )}
     </div>
   );

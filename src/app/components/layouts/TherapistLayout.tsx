@@ -9,6 +9,7 @@ import {
 import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useNotifications } from "../../hooks/useNotifications";
 import { ZenHubLogo } from "../shared/ZenHubLogo";
+import { TherapistAvatarOnboarding } from "../therapist/TherapistAvatarOnboarding";
 
 const navItems = [
   { path: "/terapeuta",          icon: LayoutDashboard, label: "Início",   end: true },
@@ -24,11 +25,32 @@ const mobileNavItems = navItems.filter((item) => item.label !== "Galeria");
 
 export default function TherapistLayout() {
   const { user, signOut } = useAuth();
-  const { myTherapist: therapist, refresh } = usePageData();
+  const { myTherapist: therapist, refresh, mutateMyTherapistProfile } = usePageData();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { unreadCount } = useNotifications("therapist");
+
+  // ── Avatar onboarding ────────────────────────────────────────────────────
+  // Show once per session if the therapist has no avatar yet.
+  // "Skipped" flag lives in sessionStorage → clears on browser-session end (= next login).
+  const SKIP_KEY = `zen_avatar_skipped_${user?.therapistId ?? ""}`;
+  const [avatarOnboardingDone, setAvatarOnboardingDone] = useState(
+    () => !!sessionStorage.getItem(SKIP_KEY)
+  );
+  // We derive "should show" once therapist data is loaded
+  const showAvatarOnboarding =
+    !avatarOnboardingDone && therapist !== undefined && !therapist?.avatar;
+
+  function handleSkipAvatar() {
+    sessionStorage.setItem(SKIP_KEY, "1");
+    setAvatarOnboardingDone(true);
+  }
+
+  async function handleAvatarUploaded(url: string) {
+    await mutateMyTherapistProfile({ avatar: url });
+    setAvatarOnboardingDone(true);
+  }
 
   // One-time refresh when entering the therapist area so stale company state
   // (e.g. dissociation done in another session) is reflected immediately.
@@ -82,10 +104,6 @@ export default function TherapistLayout() {
               <div className="min-w-0">
                 <p className="text-xs text-gray-900 truncate" style={{ fontWeight: 600 }}>{therapist.name}</p>
                 <p className="text-xs text-violet-500 truncate">{therapist.specialty}</p>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <span className="text-yellow-400 text-xs">★</span>
-                  <span className="text-xs text-gray-500">{therapist.rating}</span>
-                </div>
               </div>
             </div>
           </div>
@@ -242,6 +260,16 @@ export default function TherapistLayout() {
         </nav>
 
       </div>
+
+      {/* ── Avatar onboarding overlay ───────────────────────────────────────── */}
+      {showAvatarOnboarding && therapist && (
+        <TherapistAvatarOnboarding
+          therapistId={therapist.id}
+          therapistName={therapist.name}
+          onUploaded={handleAvatarUploaded}
+          onSkip={handleSkipAvatar}
+        />
+      )}
     </div>
   );
 }

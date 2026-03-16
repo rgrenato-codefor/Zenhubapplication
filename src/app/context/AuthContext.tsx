@@ -455,6 +455,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         specialty: params.specialty,
         username: params.username,
         commission: params.commission ?? 100,
+        plan: "therapist_free",
         rating: 5.0,
         status: "active",
         therapies: [],

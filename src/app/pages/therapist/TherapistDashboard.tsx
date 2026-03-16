@@ -1,13 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { SvgBarChart } from "../../components/shared/CssCharts";
 import { useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { usePageData } from "../../hooks/usePageData";
 import { useTherapistStore } from "../../store/therapistStore";
+import { useTherapistPlan, invalidateTherapistPlanCache } from "../../hooks/useTherapistPlan";
+import { TherapistUpgradeModal } from "../../components/therapist/TherapistUpgradeModal";
 import {
   Building2,
   Sparkles,
-  Star,
   AlertCircle,
   CalendarCheck,
   DollarSign,
@@ -16,6 +17,7 @@ import {
   ArrowRight,
   CheckCircle,
   Clock,
+  Zap,
 } from "../../components/shared/icons";
 
 export default function TherapistDashboard() {
@@ -31,25 +33,22 @@ export default function TherapistDashboard() {
     therapistEarningsData,
     clients,
     therapies,
+    mutateMyTherapistProfile,
   } = usePageData();
 
-  // ── Resolve the active company ───────────────────────────────────────────────
-  // Demo mode: derive exclusively from the in-memory association store so that
-  // dissociation (from either the company or therapist side) is reflected
-  // immediately without relying on DataContext's React state.
-  // Real mode: use the DataContext value (TherapistLayout calls refresh() on mount
-  // to ensure Firestore data is up-to-date).
   const myId = therapist?.id ?? user?.therapistId ?? "";
   const company = ctxCompany;
 
+  // ── Plan resolution ──────────────────────────────────────────────────────────
+  const { planConfig, allPlans, isAtMonthlyLimit } = useTherapistPlan(therapist?.plan ?? "therapist_free");
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
   // ── Own appointments & records ─────────────────────────────────────────────
-  // Use DataContext sessionRecords (works for both demo AND real Firestore users)
   const myRecords = useMemo(
     () => sessionRecords.filter((r) => r.therapistId === myId),
     [sessionRecords, myId]
   );
 
-  // Use DataContext completedSessionIds (works for both demo AND real Firestore users)
   const isCompleted = (aptId: string) => completedSessionIds.has(aptId);
 
   const myAppointments = useMemo(
@@ -62,7 +61,14 @@ export default function TherapistDashboard() {
 
   // ── Date helpers ────────────────────────────────────────────────────────────
   const todayStr = new Date().toISOString().split("T")[0];
-  const currentMonthPrefix = todayStr.slice(0, 7); // "YYYY-MM"
+  const currentMonthPrefix = todayStr.slice(0, 7);
+
+  const monthlyAppointmentCount = useMemo(
+    () => myAppointments.filter(
+      (a) => a.date.startsWith(currentMonthPrefix) && a.status !== "cancelled"
+    ).length,
+    [myAppointments, currentMonthPrefix]
+  );
 
   const todayAppointments = myAppointments.filter((a) => a.date === todayStr);
   const pendingClosure = todayAppointments.filter(
@@ -74,34 +80,25 @@ export default function TherapistDashboard() {
   const monthEarned = monthRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
   const allTimeEarned = myRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
 
-  // Unpaid vs paid breakdown (company owes therapist)
-  // Only records with companyId are subject to company payment.
-  // Autonomous sessions (companyId === null) are collected directly from the
-  // client — they are never "owed" by any company.
   const unpaidRecords = myRecords.filter((r) => r.companyId && !r.paidByCompany);
   const paidRecords   = myRecords.filter((r) => r.companyId && r.paidByCompany === true);
   const pendingReceivable = unpaidRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
   const alreadyReceived   = paidRecords.reduce((acc, r) => acc + r.therapistEarned, 0);
 
-  // Total = historical base (from profile) + all records tracked in the system
   const profileTotal = therapist?.totalEarnings ?? 0;
   const totalEarned = Math.max(profileTotal, allTimeEarned);
 
-  // Month earnings: prefer computed from records; fall back to profile field
   const monthEarnings = monthEarned > 0 ? monthEarned : (therapist?.monthEarnings ?? 0);
-
-  // Sessions count this month (from records)
   const monthSessionCount = monthRecords.length > 0
     ? monthRecords.length
     : (therapist?.monthSessions ?? 0);
 
   const recentRecords = myRecords.slice(0, 3);
 
-  // ── Chart: build from real records if available, else use mock data ─────────
+  // ── Chart ───────────────────────────────────────────────────────────────────
   const chartData = useMemo(() => {
     if (myRecords.length === 0) return therapistEarningsData.map((item, idx) => ({ ...item, id: `mock-${idx}` }));
 
-    // Group by "MMM/YY"
     const map: Record<string, { gross: number; net: number; sessions: number }> = {};
     myRecords.forEach((r) => {
       const d = new Date(r.date + "T12:00:00");
@@ -119,7 +116,6 @@ export default function TherapistDashboard() {
       commission: Math.round(v.gross - v.net),
       sessions: v.sessions,
     }));
-    // Merge with mock data for the chart (last 6 months mock + real data)
     return built.length >= 2 ? built : therapistEarningsData.map((item, idx) => ({ ...item, id: `mock-${idx}` }));
   }, [myRecords, therapistEarningsData]);
 
@@ -127,42 +123,110 @@ export default function TherapistDashboard() {
     <div className="text-gray-500 text-center py-20">Carregando dados do terapeuta...</div>
   );
 
+  // Plan usage values
+  const planLimit = planConfig.appointmentsPerMonth;
+  const planPct   = planLimit ? Math.min(100, Math.round((monthlyAppointmentCount / planLimit) * 100)) : 0;
+  const atLimit   = isAtMonthlyLimit(monthlyAppointmentCount);
+
   return (
     <div className="space-y-6">
       {/* ── Welcome ──────────────────────────────────────────────────────── */}
       <div className="bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl p-6 text-white">
-        <div className="flex items-center gap-4">
-          {therapist.avatar ? (
-            <img
-              src={therapist.avatar}
-              alt={therapist.name}
-              className="w-16 h-16 rounded-2xl object-cover border-2 border-white/30"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-2xl bg-white/20 border-2 border-white/30 flex items-center justify-center text-white text-2xl" style={{ fontWeight: 700 }}>
-              {therapist.name.charAt(0)}
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-white/80 text-sm">Bem-vindo(a) de volta,</p>
-              {company ? (
-                <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-white/20">
-                  <Building2 className="w-3 h-3" /> {company.name}
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-white/20">
-                  <Sparkles className="w-3 h-3" /> Autônomo
-                </span>
-              )}
-            </div>
-            <h2 className="text-white text-xl" style={{ fontWeight: 700 }}>{therapist.name.split(" ")[0]}!</h2>
-            <div className="flex items-center gap-1 mt-1">
-              <Star className="w-3.5 h-3.5 fill-white text-white" />
-              <span className="text-sm text-white/90">{therapist.rating} · {therapist.totalSessions} sessões no total</span>
+
+        {/* Top: avatar+info  ↔  plan (desktop only) */}
+        <div className="flex items-start gap-4">
+
+          {/* Left: avatar + greeting */}
+          <div className="flex items-start gap-4 flex-1 min-w-0">
+            {therapist.avatar ? (
+              <img
+                src={therapist.avatar}
+                alt={therapist.name}
+                className="w-14 h-14 rounded-2xl object-cover border-2 border-white/30 shrink-0"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 flex items-center justify-center text-white text-2xl shrink-0" style={{ fontWeight: 700 }}>
+                {therapist.name.charAt(0)}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-white/80 text-sm">Bem-vindo(a) de volta,</p>
+                {company ? (
+                  <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-white/20">
+                    <Building2 className="w-3 h-3" /> {company.name}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-white/20">
+                    <Sparkles className="w-3 h-3" /> Autônomo
+                  </span>
+                )}
+              </div>
+              <h2 className="text-white text-xl" style={{ fontWeight: 700 }}>{therapist.name.split(" ")[0]}!</h2>
+              <p className="text-sm text-white/80 mt-1">{therapist.totalSessions} sessões realizadas</p>
             </div>
           </div>
+
+          {/* Right: attendance — desktop only */}
+          {planLimit !== null && (
+            <div className="hidden sm:flex shrink-0 w-36 flex-col justify-center gap-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-white/70 text-xs">Atendimentos</span>
+                <span
+                  className={`text-xs ${atLimit ? "text-red-300" : "text-white/90"}`}
+                  style={{ fontWeight: 700 }}
+                >
+                  {monthlyAppointmentCount}/{planLimit}
+                </span>
+              </div>
+              <div className="w-full bg-white/25 rounded-full h-1.5">
+                <div
+                  className="h-1.5 rounded-full transition-all"
+                  style={{
+                    width: `${planPct}%`,
+                    background: atLimit ? "#FCA5A5" : planPct >= 80 ? "#FCD34D" : "#C4B5FD",
+                  }}
+                />
+              </div>
+              {atLimit && (
+                <p className="text-red-300 text-[10px]" style={{ fontWeight: 600 }}>
+                  Limite atingido
+                </p>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Attendance — mobile only, between greeting and stats */}
+        {planLimit !== null && (
+          <div className="sm:hidden mt-3 flex flex-col gap-1.5">
+            <div className="flex justify-between items-center">
+              <span className="text-white/70 text-xs">Atendimentos</span>
+              <span
+                className={`text-xs ${atLimit ? "text-red-300" : "text-white/90"}`}
+                style={{ fontWeight: 700 }}
+              >
+                {monthlyAppointmentCount}/{planLimit}
+              </span>
+            </div>
+            <div className="w-full bg-white/25 rounded-full h-1.5">
+              <div
+                className="h-1.5 rounded-full transition-all"
+                style={{
+                  width: `${planPct}%`,
+                  background: atLimit ? "#FCA5A5" : planPct >= 80 ? "#FCD34D" : "#C4B5FD",
+                }}
+              />
+            </div>
+            {atLimit && (
+              <p className="text-red-300 text-[10px]" style={{ fontWeight: 600 }}>
+                Limite atingido
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Bottom stats */}
         <div className="mt-4 grid grid-cols-3 gap-3">
           <div className="bg-white/20 rounded-xl p-3 text-center">
             <p className="text-xl text-white" style={{ fontWeight: 700 }}>{todayAppointments.length}</p>
@@ -352,14 +416,11 @@ export default function TherapistDashboard() {
             const therapy = therapies.find((t) => t.id === apt.therapyId);
             const completed = isCompleted(apt.id);
 
-            // Para atendimento encerrado → valor congelado do SessionRecord.
-            // Para atendimento em aberto  → prévia com a comissão atual.
             const rec    = myRecords.find((r) => r.appointmentId === apt.id);
             const earned = completed && rec
               ? rec.therapistEarned
               : (isAutonomous ? apt.price : apt.price * commissionPct / 100);
 
-            // Nomes: preferir campos inline (autônomo) antes de buscar pelo id
             const clientName  = client?.name  ?? (apt as any).clientName  ?? "Cliente";
             const therapyName = therapy?.name ?? (apt as any).therapyName ?? "Terapia";
 
@@ -395,6 +456,20 @@ export default function TherapistDashboard() {
           )}
         </div>
       </div>
+
+      {/* ── Upgrade Modal ─────────────────────────────────────────────── */}
+      {showUpgradeModal && (
+        <TherapistUpgradeModal
+          currentPlan={planConfig}
+          allPlans={allPlans}
+          monthlyCount={monthlyAppointmentCount}
+          onUpgrade={async (plan) => {
+            await mutateMyTherapistProfile({ plan: plan.id });
+            invalidateTherapistPlanCache();
+          }}
+          onClose={() => setShowUpgradeModal(false)}
+        />
+      )}
     </div>
   );
 }

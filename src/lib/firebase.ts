@@ -1,6 +1,11 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { initializeFirestore, getFirestore, persistentLocalCache } from "firebase/firestore";
+import {
+  initializeFirestore,
+  getFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager,
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCj-rjgRt3319Fm4OjwkibBK_kr8JxlPrA",
@@ -26,10 +31,18 @@ export const auth = getAuth(app);
 
 // ignoreUndefinedProperties: true — evita erro "Unsupported field value: undefined"
 // quando campos opcionais (companyId, unitId, etc.) não são informados.
+// experimentalAutoDetectLongPolling: true — melhora a estabilidade da conexão e
+// evita o BloomFilterError causado por dados de cache IndexedDB corrompidos/incompatíveis.
+// persistentSingleTabManager({ forceOwnership: true }) — garante que esta aba
+// seja a proprietária do cache, prevenindo conflitos entre abas que causam BloomFilter errors.
 export const db = (() => {
   try {
     return initializeFirestore(app, {
       ignoreUndefinedProperties: true,
+      experimentalAutoDetectLongPolling: true,
+      localCache: persistentLocalCache({
+        tabManager: persistentSingleTabManager({ forceOwnership: true }),
+      }),
     });
   } catch {
     // Já inicializado (hot-reload) — usa a instância existente
