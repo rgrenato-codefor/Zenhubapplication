@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Sparkles, CalendarDays, UserCircle,
   DollarSign, BarChart3, Settings, LogOut, Menu, X, Bell,
   ChevronDown, ChevronRight, DoorOpen, MapPin, Check, Building2,
-  UserCircle as UserIcon, Lock, Wallet,
+  UserCircle as UserIcon, Lock, Wallet, ShieldCheck,
 } from "../shared/icons";
 import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useAuth } from "../../context/AuthContext";
@@ -14,6 +14,22 @@ import { ZenHubLogo } from "../shared/ZenHubLogo";
 import { useCompanyPlan } from "../../hooks/useCompanyPlan";
 import type { ModuleKey } from "../../lib/planConfig";
 import { FinancialProvider } from "../../context/FinancialContext";
+
+// ── Role helpers ─────────────────────────────────────────────────────────────
+
+/** Rotas que o perfil "Vendedor" (sales) pode acessar */
+const SALES_ALLOWED_PATHS = [
+  "/empresa/agenda",
+  "/empresa/clientes",
+  "/empresa/salas",
+  "/empresa/terapias",
+];
+
+function getRoleLabel(role: string) {
+  if (role === "company_admin") return "Admin da Empresa";
+  if (role === "sales") return "Vendedor";
+  return "Empresa";
+}
 
 // ── Module map: route → module key ──────────────────────────────────────────
 
@@ -41,18 +57,22 @@ const dashboardChildren = [
 
 // ── Flat nav items ───────────────────────────────────────────────────────────
 
+const ALL_FLAT_ITEMS = [
+  { path: "/empresa/agenda",     icon: CalendarDays, label: "Agenda",        module: "schedule"         as ModuleKey },
+  { path: "/empresa/clientes",   icon: UserCircle,   label: "Clientes",      module: "clients"          as ModuleKey },
+  { path: "/empresa/terapeutas", icon: Users,        label: "Profissionais", module: "therapists_multi" as ModuleKey },
+  { path: "/empresa/salas",      icon: DoorOpen,     label: "Salas",         module: "rooms"            as ModuleKey },
+  { path: "/empresa/terapias",   icon: Sparkles,     label: "Terapias",      module: "services"         as ModuleKey },
+];
+
 const getFlatItems = (role: string) => {
-  const base = [
-    { path: "/empresa/agenda",     icon: CalendarDays, label: "Agenda",        module: "schedule"         as ModuleKey },
-    { path: "/empresa/clientes",   icon: UserCircle,   label: "Clientes",      module: "clients"          as ModuleKey },
-    { path: "/empresa/terapeutas", icon: Users,        label: "Profissionais", module: "therapists_multi" as ModuleKey },
-    { path: "/empresa/salas",      icon: DoorOpen,     label: "Salas",         module: "rooms"            as ModuleKey },
-    { path: "/empresa/terapias",   icon: Sparkles,     label: "Terapias",      module: "services"         as ModuleKey },
-  ];
-  if (role === "company_admin") {
-    return [...base, { path: "/empresa/configuracoes", icon: Settings, label: "Configurações", module: null as any }];
+  if (role === "sales") {
+    return ALL_FLAT_ITEMS.filter((i) => SALES_ALLOWED_PATHS.includes(i.path));
   }
-  return base;
+  return [
+    ...ALL_FLAT_ITEMS,
+    { path: "/empresa/configuracoes", icon: Settings, label: "Configurações", module: null as any },
+  ];
 };
 
 // ── Unit Switcher dropdown ───────────────────────────────────────────────────
@@ -147,7 +167,17 @@ function CompanyLayoutInner() {
   const location = useLocation();
 
   const primaryColor = company?.color || "#0D9488";
-  const flatItems = getFlatItems(user?.role ?? "sales");
+  const role = user?.role ?? "sales";
+  const flatItems = getFlatItems(role);
+
+  // ── Sales guard: redirect to /empresa/agenda if visiting a forbidden route ──
+  useEffect(() => {
+    if (role !== "sales") return;
+    const allowed = SALES_ALLOWED_PATHS.some(
+      (p) => location.pathname === p || location.pathname.startsWith(p + "/")
+    );
+    if (!allowed) navigate("/empresa/agenda", { replace: true });
+  }, [role, location.pathname, navigate]);
 
   // ── Plan enforcement ────────────────────────────────────────────────────────
   const { hasModule, planConfig } = useCompanyPlan(company?.plan);
@@ -181,7 +211,7 @@ function CompanyLayoutInner() {
             <div className="flex flex-col justify-center">
               <ZenHubLogo variant="full" textColor="#111827" height={34} />
               <p className="text-xs text-gray-400 mt-0.5 capitalize">
-                {user?.role === "company_admin" ? "Admin da Empresa" : "Vendas"}
+                {getRoleLabel(role)}
               </p>
             </div>
           ) : (
@@ -192,79 +222,83 @@ function CompanyLayoutInner() {
         {/* Navigation */}
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
 
-          {/* ── Dashboard group ───────────────────────────────────────────── */}
-          {sidebarOpen ? (
-            <div>
-              <button
-                onClick={() => setDashOpen((o) => !o)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors ${
-                  dashActive && !dashOpen
-                    ? "text-white"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                }`}
-                style={dashActive && !dashOpen ? { background: primaryColor } : {}}
-              >
-                <div className="flex items-center gap-3">
-                  <LayoutDashboard className="w-5 h-5 shrink-0" />
-                  <span className="text-sm">Dashboard</span>
-                </div>
-                {dashOpen
-                  ? <ChevronDown className="w-3.5 h-3.5" />
-                  : <ChevronRight className="w-3.5 h-3.5" />}
-              </button>
+          {/* ── Dashboard group — hidden for sales ────────────────────────── */}
+          {role !== "sales" && (
+            <>
+              {sidebarOpen ? (
+                <div>
+                  <button
+                    onClick={() => setDashOpen((o) => !o)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors ${
+                      dashActive && !dashOpen
+                        ? "text-white"
+                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                    }`}
+                    style={dashActive && !dashOpen ? { background: primaryColor } : {}}
+                  >
+                    <div className="flex items-center gap-3">
+                      <LayoutDashboard className="w-5 h-5 shrink-0" />
+                      <span className="text-sm">Dashboard</span>
+                    </div>
+                    {dashOpen
+                      ? <ChevronDown className="w-3.5 h-3.5" />
+                      : <ChevronRight className="w-3.5 h-3.5" />}
+                  </button>
 
-              {dashOpen && (
-                <div className="ml-3 mt-0.5 border-l-2 pl-3 space-y-0.5" style={{ borderColor: `${primaryColor}40` }}>
-                  {dashboardChildren.map((item) => {
-                    const locked = item.module && !hasModule(item.module);
-                    if (locked) {
-                      return (
-                        <div
-                          key={item.path}
-                          className="flex items-center justify-between px-2 py-2 rounded-lg text-sm text-gray-300 cursor-not-allowed select-none"
-                          title={`Disponível a partir do plano Starter`}
-                        >
-                          <span>{item.label}</span>
-                          <Lock className="w-3 h-3 text-gray-300 shrink-0" />
-                        </div>
-                      );
-                    }
-                    return (
-                      <NavLink
-                        key={item.path}
-                        to={item.path}
-                        end={item.end}
-                        className={({ isActive }) =>
-                          `flex items-center px-2 py-2 rounded-lg text-sm transition-colors ${
-                            isActive ? "text-white" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                          }`
+                  {dashOpen && (
+                    <div className="ml-3 mt-0.5 border-l-2 pl-3 space-y-0.5" style={{ borderColor: `${primaryColor}40` }}>
+                      {dashboardChildren.map((item) => {
+                        const locked = item.module && !hasModule(item.module);
+                        if (locked) {
+                          return (
+                            <div
+                              key={item.path}
+                              className="flex items-center justify-between px-2 py-2 rounded-lg text-sm text-gray-300 cursor-not-allowed select-none"
+                              title={`Disponível a partir do plano Starter`}
+                            >
+                              <span>{item.label}</span>
+                              <Lock className="w-3 h-3 text-gray-300 shrink-0" />
+                            </div>
+                          );
                         }
-                        style={({ isActive }) =>
-                          isActive ? { background: primaryColor, fontWeight: 600 } : {}
-                        }
-                      >
-                        {item.label}
-                      </NavLink>
-                    );
-                  })}
+                        return (
+                          <NavLink
+                            key={item.path}
+                            to={item.path}
+                            end={item.end}
+                            className={({ isActive }) =>
+                              `flex items-center px-2 py-2 rounded-lg text-sm transition-colors ${
+                                isActive ? "text-white" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                              }`
+                            }
+                            style={({ isActive }) =>
+                              isActive ? { background: primaryColor, fontWeight: 600 } : {}
+                            }
+                          >
+                            {item.label}
+                          </NavLink>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className={`w-full flex items-center justify-center px-3 py-2.5 rounded-lg transition-colors ${
+                    dashActive ? "text-white" : "text-gray-500 hover:bg-gray-50"
+                  }`}
+                  style={dashActive ? { background: primaryColor } : {}}
+                  title="Dashboard"
+                >
+                  <LayoutDashboard className="w-5 h-5" />
+                </button>
               )}
-            </div>
-          ) : (
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className={`w-full flex items-center justify-center px-3 py-2.5 rounded-lg transition-colors ${
-                dashActive ? "text-white" : "text-gray-500 hover:bg-gray-50"
-              }`}
-              style={dashActive ? { background: primaryColor } : {}}
-              title="Dashboard"
-            >
-              <LayoutDashboard className="w-5 h-5" />
-            </button>
-          )}
 
-          {/* ── Divider ───────────────────────────────────────────────────── */}
-          <div className="h-px bg-gray-100 my-1" />
+              {/* ── Divider ─────────────────────────────────────────────── */}
+              <div className="h-px bg-gray-100 my-1" />
+            </>
+          )}
 
           {/* ── Flat items ────────────────────────────────────────────────── */}
           {flatItems.map((item) => {

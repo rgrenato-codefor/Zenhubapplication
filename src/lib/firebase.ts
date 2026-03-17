@@ -7,7 +7,7 @@ import {
   persistentSingleTabManager,
 } from "firebase/firestore";
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyCj-rjgRt3319Fm4OjwkibBK_kr8JxlPrA",
   authDomain: "zen-hub-f61be.firebaseapp.com",
   projectId: "zen-hub-f61be",

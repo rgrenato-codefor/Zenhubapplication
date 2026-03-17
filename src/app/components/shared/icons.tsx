@@ -215,6 +215,7 @@ export const BadgeCheck     = CheckBadgeIcon;
 
 // Navigation / layout
 export const Shield          = ShieldCheckIcon;
+export const ShieldCheck     = ShieldCheckIcon;
 export const LayoutDashboard = Squares2X2Icon;
 export const LayoutGrid      = Squares2X2Icon;
 export const Grid            = Squares2X2Icon;

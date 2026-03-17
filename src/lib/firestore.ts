@@ -218,6 +218,25 @@ export async function getAllUserProfiles(): Promise<UserProfile[]> {
   } catch { return []; }
 }
 
+export async function deleteUserProfile(uid: string): Promise<void> {
+  await deleteDoc(doc(db, "users", uid));
+}
+
+export function subscribeUsersByCompanyAndRole(
+  companyId: string,
+  role: UserRole,
+  callback: (users: UserProfile[]) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, "users"),
+    where("companyId", "==", companyId),
+    where("role", "==", role)
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ ...d.data(), uid: d.id } as UserProfile)));
+  });
+}
+
 /**
  * Migrate existing user profiles to add emailVerified field from Firebase Auth
  */
@@ -676,7 +695,7 @@ export async function setAvailability(therapistId: string, schedule: Record<stri
   await setDoc(doc(db, "availability", therapistId), schedule);
 }
 
-// ─── Session Records ──────────────────────────────────────────────────────────
+// ─── Session Records ─────────────────────────────────────────────────────���────
 
 export async function getSessionRecordsByTherapist(therapistId: string): Promise<SessionRecord[]> {
   try {

@@ -4,6 +4,7 @@ import {
   MapPin, Plus, Edit2, Trash2, X, Phone, Mail, Star,
   CheckCircle, AlertCircle, ChevronRight, ToggleLeft, ToggleRight,
   Download, QrCode, Smartphone, Share2, Camera, Image, Search, Lock,
+  ShieldCheck, UserPlus, Eye, EyeOff, Loader2,
 } from "../../components/shared/icons";
 import { useCepLookup } from "../../hooks/useCepLookup";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
@@ -15,9 +16,18 @@ import { uploadMedia, deleteMedia, ikFolders } from "../../../lib/imagekit";
 import type { MediaItem } from "../../../lib/imagekit";
 import { useCompanyPlan } from "../../hooks/useCompanyPlan";
 import { PlanLimitBanner } from "../../components/shared/PlanGate";
+import {
+  subscribeUsersByCompanyAndRole,
+  deleteUserProfile,
+  createUserProfile,
+  type UserProfile,
+} from "../../../lib/firestore";
+import { initializeApp, deleteApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword, signOut as fbSignOut } from "firebase/auth";
+import { firebaseConfig } from "../../../lib/firebase";
 
 type UnitStatus = "active" | "inactive";
-type ActiveTab = "company" | "units" | "gallery" | "notifications" | "invites";
+type ActiveTab = "company" | "units" | "gallery" | "notifications" | "invites" | "team";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -470,6 +480,249 @@ function UnitModal({ mode, initial, companyId, primaryColor, onSave, onClose }: 
   );
 }
 
+// ── Sales Team Tab ────────────────────────────────────────────────────────────
+
+const BLANK_SELLER = { name: "", email: "", password: "", confirmPassword: "" };
+
+function TeamTab({ companyId, primaryColor }: { companyId: string; primaryColor: string }) {
+  const [sellers, setSellers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState(BLANK_SELLER);
+  const [showPwd, setShowPwd] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (!companyId) return;
+    const unsub = subscribeUsersByCompanyAndRole(companyId, "sales", (users) => {
+      setSellers(users);
+      setLoading(false);
+    });
+    return unsub;
+  }, [companyId]);
+
+  const handleCreate = async () => {
+    setError("");
+    if (!form.name.trim()) return setError("Informe o nome.");
+    if (!form.email.trim()) return setError("Informe o e-mail.");
+    if (form.password.length < 6) return setError("A senha deve ter no mínimo 6 caracteres.");
+    if (form.password !== form.confirmPassword) return setError("As senhas não coincidem.");
+    setSaving(true);
+    try {
+      // Cria usuário em app secundário para não fazer logout do admin
+      const secName = `seller_${Date.now()}`;
+      const secApp = initializeApp(firebaseConfig, secName);
+      const secAuth = getAuth(secApp);
+      const cred = await createUserWithEmailAndPassword(secAuth, form.email.trim(), form.password);
+      await createUserProfile(cred.user.uid, {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        role: "sales",
+        companyId,
+        emailVerified: false,
+      });
+      await fbSignOut(secAuth);
+      await deleteApp(secApp);
+      setModalOpen(false);
+      setForm(BLANK_SELLER);
+    } catch (e: any) {
+      const code = e?.code ?? "";
+      if (code === "auth/email-already-in-use") setError("Este e-mail já está em uso.");
+      else if (code === "auth/invalid-email") setError("E-mail inválido.");
+      else setError("Erro ao criar conta. Tente novamente.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (uid: string) => {
+    setDeleting(true);
+    try { await deleteUserProfile(uid); setDeleteConfirm(null); }
+    finally { setDeleting(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+
+      {/* Header */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${primaryColor}15` }}>
+              <ShieldCheck className="w-5 h-5" style={{ color: primaryColor }} />
+            </div>
+            <div>
+              <h2 className="text-gray-900" style={{ fontWeight: 700 }}>Equipe de Vendas</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Vendedores acessam somente Agenda, Clientes, Salas e Terapias.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => { setForm(BLANK_SELLER); setError(""); setModalOpen(true); }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-white shrink-0 transition-opacity hover:opacity-90"
+            style={{ background: primaryColor, fontWeight: 600 }}
+          >
+            <UserPlus className="w-4 h-4" />
+            Novo Vendedor
+          </button>
+        </div>
+
+        {/* Permissions badges */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {["Agenda", "Clientes", "Salas", "Terapias"].map((m) => (
+            <span key={m} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs" style={{ background: `${primaryColor}12`, color: primaryColor, fontWeight: 600 }}>
+              <CheckCircle className="w-3 h-3" />{m}
+            </span>
+          ))}
+          {["Dashboard", "Profissionais", "Comissões", "Relatórios", "Financeiro", "Configurações"].map((m) => (
+            <span key={m} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-400" style={{ fontWeight: 500 }}>
+              <Lock className="w-3 h-3" />{m}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-300" /></div>
+        ) : sellers.length === 0 ? (
+          <div className="p-12 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-3">
+              <Users className="w-6 h-6 text-gray-300" />
+            </div>
+            <p className="text-gray-500 text-sm" style={{ fontWeight: 600 }}>Nenhum vendedor cadastrado</p>
+            <p className="text-gray-400 text-xs mt-1">Crie uma conta para que sua equipe acesse a plataforma.</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-50">
+                <th className="text-left px-6 py-3.5 text-xs text-gray-400" style={{ fontWeight: 500 }}>Vendedor</th>
+                <th className="text-left px-4 py-3.5 text-xs text-gray-400" style={{ fontWeight: 500 }}>E-mail</th>
+                <th className="text-left px-4 py-3.5 text-xs text-gray-400 hidden sm:table-cell" style={{ fontWeight: 500 }}>Desde</th>
+                <th className="px-4 py-3.5" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {sellers.map((seller) => (
+                <tr key={seller.uid} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm shrink-0" style={{ background: primaryColor, fontWeight: 700 }}>
+                        {seller.name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-gray-900" style={{ fontWeight: 600 }}>{seller.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-gray-500 text-xs">{seller.email}</td>
+                  <td className="px-4 py-4 text-gray-400 text-xs hidden sm:table-cell">
+                    {seller.createdAt ? new Date((seller.createdAt as any).seconds * 1000).toLocaleDateString("pt-BR") : "—"}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex justify-end">
+                      {deleteConfirm === seller.uid ? (
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleDelete(seller.uid)} disabled={deleting}
+                            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors" style={{ fontWeight: 600 }}>
+                            {deleting && <Loader2 className="w-3 h-3 animate-spin" />}Confirmar remoção
+                          </button>
+                          <button onClick={() => setDeleteConfirm(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setDeleteConfirm(seller.uid)}
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Create modal */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${primaryColor}15` }}>
+                  <UserPlus className="w-4 h-4" style={{ color: primaryColor }} />
+                </div>
+                <h3 className="text-gray-900" style={{ fontWeight: 700 }}>Novo Vendedor</h3>
+              </div>
+              <button onClick={() => setModalOpen(false)} className="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
+                <p className="text-blue-700 text-xs" style={{ fontWeight: 600 }}>🔐 Acesso restrito: Agenda, Clientes, Salas e Terapias</p>
+                <p className="text-blue-500 text-xs mt-0.5">O vendedor não terá acesso ao dashboard, financeiro ou configurações.</p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1.5 block" style={{ fontWeight: 600 }}>Nome completo *</label>
+                <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Nome do vendedor"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-400 transition-colors" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1.5 block" style={{ fontWeight: 600 }}>E-mail *</label>
+                <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="email@exemplo.com"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-400 transition-colors" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1.5 block" style={{ fontWeight: 600 }}>Senha *</label>
+                <div className="relative">
+                  <input type={showPwd ? "text" : "password"} value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-400 transition-colors" />
+                  <button type="button" onClick={() => setShowPwd((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1.5 block" style={{ fontWeight: 600 }}>Confirmar senha *</label>
+                <input type={showPwd ? "text" : "password"} value={form.confirmPassword}
+                  onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+                  placeholder="Repita a senha"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-400 transition-colors" />
+              </div>
+              {error && (
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-100">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                  <p className="text-red-600 text-xs" style={{ fontWeight: 500 }}>{error}</p>
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+              <button onClick={() => setModalOpen(false)} className="px-5 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Cancelar</button>
+              <button onClick={handleCreate} disabled={saving}
+                className="flex items-center gap-2 px-6 py-2 rounded-xl text-sm text-white disabled:opacity-50 transition-opacity hover:opacity-90"
+                style={{ background: primaryColor, fontWeight: 600 }}>
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {saving ? "Criando…" : "Criar conta"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CompanySettings() {
@@ -589,6 +842,7 @@ export default function CompanySettings() {
     { id: "gallery",       label: "Galeria" },
     { id: "notifications", label: "Notificações" },
     { id: "invites",       label: "Convites" },
+    { id: "team",          label: "Equipe" },
   ];
 
   return (
@@ -1198,6 +1452,11 @@ export default function CompanySettings() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Equipe ───────────────────────────────────────────────────────────── */}
+      {activeTab === "team" && (
+        <TeamTab companyId={companyId} primaryColor={primaryColor} />
       )}
 
       {/* ── Unit Add/Edit Modal ───────────────────────────────────────────────── */}
