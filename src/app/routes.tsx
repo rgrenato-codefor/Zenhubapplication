@@ -36,6 +36,7 @@ import CompanyReports from "./pages/company/CompanyReports";
 import CompanySettings from "./pages/company/CompanySettings";
 import CompanyRooms from "./pages/company/CompanyRooms";
 import CompanyTherapistDetail from "./pages/company/CompanyTherapistDetail";
+import CompanyFinancial from "./pages/company/CompanyFinancial";
 
 // Therapist Pages
 import TherapistDashboard from "./pages/therapist/TherapistDashboard";
@@ -105,6 +106,7 @@ export const router = createBrowserRouter([
               { path: "comissoes", Component: CompanyCommissions },
               { path: "comissoes/terapeuta/:therapistId", Component: CompanyTherapistDetail },
               { path: "relatorios", Component: CompanyReports },
+              { path: "financeiro", Component: CompanyFinancial },
               { path: "configuracoes", Component: CompanySettings },
             ],
           },

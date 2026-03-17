@@ -12,18 +12,19 @@
 // ── Module catalogue ──────────────────────────────────────────────────────────
 
 export const COMPANY_MODULES = {
-  dashboard:         "Dashboard",
-  schedule:          "Agenda",
-  clients:           "Clientes",
-  services:          "Serviços / Terapias",
-  therapists_multi:  "Múltiplos Terapeutas",
-  sales:             "Vendas",
-  commissions:       "Comissões",
-  units:             "Múltiplas Unidades",
-  rooms:             "Salas",
-  reports_basic:     "Relatórios Básicos",
-  reports_advanced:  "Relatórios Avançados",
-  api:               "API / Integrações",
+  dashboard:          "Dashboard",
+  schedule:           "Agenda",
+  clients:            "Clientes",
+  services:           "Serviços / Terapias",
+  therapists_multi:   "Múltiplos Terapeutas",
+  sales:              "Vendas",
+  commissions:        "Comissões",
+  units:              "Múltiplas Unidades",
+  rooms:              "Salas",
+  reports_basic:      "Relatórios Básicos",
+  reports_advanced:   "Relatórios Avançados",
+  financial_control:  "Controle Financeiro",
+  api:                "API / Integrações",
 } as const;
 
 export type ModuleKey = keyof typeof COMPANY_MODULES;
@@ -118,7 +119,8 @@ export const DEFAULT_COMPANY_PLANS: CompanyPlan[] = [
     modules: [
       "dashboard", "schedule", "clients", "services",
       "therapists_multi", "sales", "commissions",
-      "units", "rooms", "reports_basic", "reports_advanced", "api",
+      "units", "rooms", "reports_basic", "reports_advanced",
+      "financial_control", "api",
     ],
     limits: { therapists: null, clients: null, appointments_monthly: null, units: null },
     isDefault: false,

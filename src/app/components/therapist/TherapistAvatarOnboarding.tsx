@@ -95,11 +95,8 @@ export function TherapistAvatarOnboarding({
         Pular por agora
       </button>
 
-      {/* Card */}
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-violet-100 overflow-hidden">
-
-        {/* Header stripe */}
-        <div className="h-2 bg-gradient-to-r from-violet-500 to-indigo-500" />
+      {/* Content — sem card */}
+      <div className="w-full max-w-md">
 
         <div className="p-8">
 

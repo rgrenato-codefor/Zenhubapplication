@@ -555,6 +555,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ─── signOut ─────────────────────────────────────────────────────────────
 
   const signOut = useCallback(async () => {
+    // Limpa flags de "pular onboarding" para que apareçam novamente no próximo login
+    Object.keys(sessionStorage)
+      .filter((k) => k.startsWith("zen_avatar_skipped_"))
+      .forEach((k) => sessionStorage.removeItem(k));
     await firebaseSignOut(auth);
     setUser(null);
   }, []);

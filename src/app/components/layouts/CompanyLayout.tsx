@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Sparkles, CalendarDays, UserCircle,
   DollarSign, BarChart3, Settings, LogOut, Menu, X, Bell,
   ChevronDown, ChevronRight, DoorOpen, MapPin, Check, Building2,
-  UserCircle as UserIcon, Lock,
+  UserCircle as UserIcon, Lock, Wallet,
 } from "../shared/icons";
 import { NotificationsDropdown } from "../shared/NotificationsDropdown";
 import { useAuth } from "../../context/AuthContext";
@@ -13,6 +13,7 @@ import { CompanyProvider, useCompanyUnit } from "../../context/CompanyContext";
 import { ZenHubLogo } from "../shared/ZenHubLogo";
 import { useCompanyPlan } from "../../hooks/useCompanyPlan";
 import type { ModuleKey } from "../../lib/planConfig";
+import { FinancialProvider } from "../../context/FinancialContext";
 
 // ── Module map: route → module key ──────────────────────────────────────────
 
@@ -25,15 +26,17 @@ const ROUTE_MODULE_MAP: Record<string, ModuleKey> = {
   "/empresa/vendas":      "sales",
   "/empresa/comissoes":   "commissions",
   "/empresa/relatorios":  "reports_basic",
+  "/empresa/financeiro":  "financial_control",
 };
 
 // ── Dashboard sub-items ──────────────────────────────────────────────────────
 
 const dashboardChildren = [
-  { path: "/empresa",            label: "Painel Geral",  end: true,  module: "dashboard"      as ModuleKey },
-  { path: "/empresa/vendas",     label: "Vendas",                    module: "sales"          as ModuleKey },
-  { path: "/empresa/comissoes",  label: "Comissões",                 module: "commissions"    as ModuleKey },
-  { path: "/empresa/relatorios", label: "Relatórios",                module: "reports_basic"  as ModuleKey },
+  { path: "/empresa",             label: "Painel Geral",       end: true,  module: "dashboard"         as ModuleKey },
+  { path: "/empresa/vendas",      label: "Vendas",                         module: "sales"             as ModuleKey },
+  { path: "/empresa/comissoes",   label: "Comissões",                      module: "commissions"       as ModuleKey },
+  { path: "/empresa/relatorios",  label: "Relatórios",                     module: "reports_basic"     as ModuleKey },
+  { path: "/empresa/financeiro",  label: "Financeiro",                     module: "financial_control" as ModuleKey },
 ];
 
 // ── Flat nav items ───────────────────────────────────────────────────────────
@@ -484,7 +487,9 @@ export default function CompanyLayout() {
   const { user } = useAuth();
   return (
     <CompanyProvider companyId={user?.companyId ?? ""}>
-      <CompanyLayoutInner />
+      <FinancialProvider>
+        <CompanyLayoutInner />
+      </FinancialProvider>
     </CompanyProvider>
   );
 }
