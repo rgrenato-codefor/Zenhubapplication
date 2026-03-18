@@ -16,7 +16,7 @@ const DAYS_MAP: Record<string, string> = {
 };
 
 export default function TherapistProfile() {
-  const { user }    = useAuth();
+  const { user, signOut } = useAuth();
   const {
     myTherapist: therapist, company,
     myGallery,
@@ -592,6 +592,22 @@ export default function TherapistProfile() {
         ) : (
           <p className="text-xs text-gray-400 italic">Nenhum horário configurado</p>
         )}
+      </div>
+
+      {/* ── Sair ──────────────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-red-100 p-4 md:p-5 shadow-sm">
+        <button
+          onClick={() => signOut()}
+          className="w-full flex items-center gap-3 group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center shrink-0 group-hover:bg-red-100 transition-colors">
+            <LogOut className="w-4 h-4 text-red-500" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-red-500 text-sm" style={{ fontWeight: 600 }}>Sair da conta</p>
+            <p className="text-xs text-gray-400 mt-0.5">{user?.email}</p>
+          </div>
+        </button>
       </div>
 
       {/* ── Modal: entrar em empresa ──────────────────────────────────────── */}
