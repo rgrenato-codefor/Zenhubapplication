@@ -65,9 +65,11 @@ export default function TherapistProfile() {
   const isActive   = myAssociation?.status === "active" || (!!company && myAssociation?.status !== "pending");
   const isLinked   = isPending || isActive;
   const linkedCompany     = company ?? null;
-  // For active: use the commission from myAssociation (set by company on approval)
-  // For pending: commission is not defined yet
-  const companyCommission = isActive ? (myAssociation?.commission ?? therapist?.commission ?? null) : null;
+  // PRIORITY: therapist.commission (therapists/{id}) is always updated by
+  // mutateUpdateTherapistCommission. myAssociation.commission is kept in sync
+  // too (as of the latest fix), but therapist doc is the canonical source.
+  // Prefer it to avoid showing stale values from old association records.
+  const companyCommission = isActive ? (therapist?.commission ?? myAssociation?.commission ?? null) : null;
 
   if (!therapist) return (
     <div className="text-gray-500 text-center py-20">Carregando perfil...</div>

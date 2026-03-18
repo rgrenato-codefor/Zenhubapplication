@@ -559,6 +559,18 @@ export async function setTherapistAssociation(data: TherapistAssociation): Promi
 }
 
 /**
+ * Partial update for therapistAssociations — use instead of setTherapistAssociation
+ * when you only want to change specific fields (e.g. commission after approval).
+ * setTherapistAssociation uses setDoc (full overwrite) which would clear other fields.
+ */
+export async function patchTherapistAssociation(
+  therapistId: string,
+  data: Partial<Omit<TherapistAssociation, "therapistId">>
+): Promise<void> {
+  await updateDoc(doc(db, "therapistAssociations", therapistId), data as Record<string, unknown>);
+}
+
+/**
  * Real-time listener for all therapist association records that belong to a
  * given company (any status). Filter by status on the consumer side to avoid
  * requiring a Firestore composite index.

@@ -26,7 +26,7 @@ import {
   deleteTherapist as fsDeleteTherapist, getTherapistByUsername,
   clearTherapistCompanyId as fsClearTherapistCompanyId,
   getCompanyByInviteCode, searchCompaniesByName as fsSearchCompaniesByName,
-  getTherapistAssociation, setTherapistAssociation,
+  getTherapistAssociation, setTherapistAssociation, patchTherapistAssociation,
   subscribeTherapistAssociationsByCompany,
   subscribeTherapistOwnAssociation,
   getCatalogByTherapist, saveCatalogItem, deleteCatalogItem,
@@ -499,7 +499,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const mutateUpdateTherapistCommission = useCallback(async (therapistId: string, commission: number) => {
+    // 1. Update the therapist doc — source of truth for company-side list
     await fsUpdateTherapist(therapistId, { commission });
+    // 2. Patch therapistAssociations/{id} with only the commission field.
+    //    Uses patchTherapistAssociation (updateDoc) instead of setTherapistAssociation
+    //    (setDoc/overwrite) to preserve all other fields (unitId, linkedAt, status…).
+    //    This keeps myAssociation (real-time subscribed) in sync so the therapist's
+    //    profile shows the updated value without a page refresh.
+    try {
+      await patchTherapistAssociation(therapistId, { commission });
+    } catch {
+      // Association doc may not exist for legacy therapists — not critical
+    }
     setTherapists((prev) => prev.map((t) => t.id === therapistId ? { ...t, commission } : t));
   }, []);
 

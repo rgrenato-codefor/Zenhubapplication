@@ -57,15 +57,14 @@ export default function CompanyTherapists() {
     .filter((t) => t.companyId === user?.companyId)
     .filter((t) => {
       if (!selectedUnitId) return true;
-      const assoc = store.getAssociation(t.id);
-      return assoc.unitId === selectedUnitId || (t as any).unitId === selectedUnitId;
+      // Use the unitId from the Firestore therapist object directly — the in-memory
+      // store defaults to null for real therapists and can't be trusted after refresh.
+      return (t as any).unitId === selectedUnitId;
     })
     .filter((t) => t.name.toLowerCase().includes(search.toLowerCase()));
 
   const selectedTherapist = allTherapists.find((t) => t.id === selectedId);
-  const selectedAssoc = selectedId ? store.getAssociation(selectedId) : null;
   const detailTherapist = allTherapists.find((t) => t.id === detailId);
-  const detailAssoc = detailId ? store.getAssociation(detailId) : null;
 
   const handleSearchTherapist = async () => {
     setInviteError("");
@@ -98,12 +97,13 @@ export default function CompanyTherapists() {
       setInviteError("Profissional não encontrado. Verifique o @username.");
       return;
     }
-    const current = store.getAssociation(found.id);
-    if (current.companyId && current.companyId !== user?.companyId) {
+    // Check if already linked to another company using Firestore data (found.companyId),
+    // not the in-memory store which resets on every refresh.
+    if (found.companyId && found.companyId !== user?.companyId) {
       setInviteError("Este profissional já está vinculado a outra empresa.");
       return;
     }
-    if (current.status === "pending" && current.companyId === user?.companyId) {
+    if (found.status === "pending" && found.companyId === user?.companyId) {
       setInviteError("Este profissional já tem uma solicitação pendente. Use a seção \"Solicitações pendentes\" acima para aprovar.");
       return;
     }
@@ -155,8 +155,10 @@ export default function CompanyTherapists() {
 
   const openEditCommission = (therapistId: string) => {
     setSelectedId(therapistId);
-    const assoc = store.getAssociation(therapistId);
-    setNewCommission(assoc.commission || 50);
+    // Read commission from Firestore therapist object, not the in-memory store
+    // (store defaults to 50% for real therapists that aren't in initialTherapists).
+    const t = allTherapists.find((t) => t.id === therapistId);
+    setNewCommission(t?.commission ?? 50);
     setModal("edit_commission");
   };
 
@@ -317,8 +319,11 @@ export default function CompanyTherapists() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {companyTherapists.map((therapist) => {
-            const assoc = store.getAssociation(therapist.id);
-            const commission = assoc.commission;
+            // Commission comes from the Firestore therapist object (updated by
+            // mutateUpdateTherapistCommission which writes to therapists/{id}).
+            // Previously used store.getAssociation which always returned 50% after
+            // a page refresh because it re-initializes from mock initialTherapists.
+            const commission = therapist.commission ?? 50;
             const therapistTherapies = therapies.filter((th) => therapist.therapies.includes(th.id));
             const companyRecords = store.getCompanyRecords(user?.companyId ?? "")
               .filter((r) => r.therapistId === therapist.id);
@@ -808,7 +813,7 @@ export default function CompanyTherapists() {
       })()}
 
       {/* ── Modal: Editar comissão ─────────────────────────────────────────── */}
-      {modal === "edit_commission" && selectedTherapist && selectedAssoc && (
+      {modal === "edit_commission" && selectedTherapist && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex items-center gap-3 mb-5">
