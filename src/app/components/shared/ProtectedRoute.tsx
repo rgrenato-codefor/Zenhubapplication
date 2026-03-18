@@ -10,6 +10,7 @@
 import { Navigate, Outlet } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { ROLE_ROUTES } from "../../context/AuthContext";
+import { auth } from "../../../lib/firebase";
 
 interface Props {
   /** Which roles are allowed to view this layout */
@@ -34,6 +35,13 @@ export function ProtectedRoute({ allowed }: Props) {
 
   // Not authenticated → go to login
   if (!user) return <Navigate to="/" replace />;
+
+  // Second-layer defence: block unverified email accounts even if the
+  // AuthContext user state was set before the verification check ran.
+  const currentFbUser = auth.currentUser;
+  if (currentFbUser && !currentFbUser.emailVerified) {
+    return <Navigate to={`/verificar-email?email=${encodeURIComponent(user.email)}`} replace />;
+  }
 
   // User in the correct environment
   if (allowed.includes(user.role)) return <Outlet />;

@@ -12,6 +12,7 @@ import {
   onSnapshot,
   serverTimestamp,
   increment,
+  deleteField,
   Timestamp,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -191,7 +192,17 @@ export interface CatalogItem {
 export interface TherapistAssociation {
   therapistId: string;
   companyId: string | null;
+  /** "none" = autônomo, "pending" = aguardando aprovação, "active" = vinculado */
+  status: "none" | "pending" | "active";
+  commission?: number;
+  unitId?: string | null;
+  linkedAt?: string | null;
   associatedAt?: Timestamp;
+  // Therapist metadata for display in company's pending list
+  therapistName?: string;
+  therapistAvatar?: string | null;
+  therapistSpecialty?: string;
+  therapistUsername?: string;
 }
 
 // ─── User Profiles ────────────────────────────────────────────────────────────
@@ -488,6 +499,17 @@ export async function updateTherapist(id: string, data: Partial<Therapist>): Pro
   await updateDoc(doc(db, "therapists", id), data);
 }
 
+/**
+ * Removes the companyId field from a therapist document.
+ * Must use deleteField() — passing companyId: undefined is silently ignored
+ * by Firestore when ignoreUndefinedProperties: true is set.
+ * Without this, dissociation never actually clears the field and the therapist
+ * keeps appearing in subscribeTherapistsByCompany results.
+ */
+export async function clearTherapistCompanyId(id: string): Promise<void> {
+  await updateDoc(doc(db, "therapists", id), { companyId: deleteField() });
+}
+
 export async function deleteTherapist(id: string): Promise<void> {
   await deleteDoc(doc(db, "therapists", id));
 }
@@ -500,6 +522,24 @@ export async function getAllTherapists(): Promise<Therapist[]> {
     console.error("[firestore] getAllTherapists failed:", err);
     return [];
   }
+}
+
+/**
+ * Real-time listener: fires immediately with the current list and again whenever
+ * a therapist document with this companyId is added, updated, or removed.
+ * This ensures the company's therapist list stays in sync even when a therapist
+ * self-associates by entering an invite code from their own profile.
+ */
+export function subscribeTherapistsByCompany(
+  companyId: string,
+  callback: (therapists: Therapist[]) => void
+): Unsubscribe {
+  const q = query(collection(db, "therapists"), where("companyId", "==", companyId));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Therapist)));
+  }, (err) => {
+    console.error("[firestore] subscribeTherapistsByCompany error:", err);
+  });
 }
 
 // ─── Therapist Association ────────────────────────────────────────────────────
@@ -515,6 +555,41 @@ export async function setTherapistAssociation(data: TherapistAssociation): Promi
   await setDoc(doc(db, "therapistAssociations", data.therapistId), {
     ...data,
     associatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Real-time listener for all therapist association records that belong to a
+ * given company (any status). Filter by status on the consumer side to avoid
+ * requiring a Firestore composite index.
+ */
+export function subscribeTherapistAssociationsByCompany(
+  companyId: string,
+  callback: (associations: TherapistAssociation[]) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, "therapistAssociations"),
+    where("companyId", "==", companyId),
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => d.data() as TherapistAssociation));
+  }, (err) => {
+    console.error("[firestore] subscribeTherapistAssociationsByCompany error:", err);
+  });
+}
+
+/**
+ * Real-time listener for a therapist's own association record.
+ * Used by the therapist profile to show pending/active status after a refresh.
+ */
+export function subscribeTherapistOwnAssociation(
+  therapistId: string,
+  callback: (association: TherapistAssociation | null) => void
+): Unsubscribe {
+  return onSnapshot(doc(db, "therapistAssociations", therapistId), (snap) => {
+    callback(snap.exists() ? (snap.data() as TherapistAssociation) : null);
+  }, (err) => {
+    console.error("[firestore] subscribeTherapistOwnAssociation error:", err);
   });
 }
 
@@ -695,7 +770,7 @@ export async function setAvailability(therapistId: string, schedule: Record<stri
   await setDoc(doc(db, "availability", therapistId), schedule);
 }
 
-// ─── Session Records ─────────────────────────────────────────────────────���────
+// ─── Session Records ─────────────────────────────────────────────────────────
 
 export async function getSessionRecordsByTherapist(therapistId: string): Promise<SessionRecord[]> {
   try {

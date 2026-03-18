@@ -20,7 +20,9 @@ export default function CompanyTherapists() {
   const store = useTherapistStore();
   const { company, therapists: allTherapists, therapies,
     mutateInviteTherapist, mutateDissociateTherapist, mutateUpdateTherapistCommission,
-    mutateApproveAssociation, mutateRejectAssociation } = usePageData();
+    mutateApproveAssociation, mutateRejectAssociation,
+    pendingAssociations,
+  } = usePageData();
   const { selectedUnitId, companyUnits } = useCompanyUnit();
   const primaryColor = company?.color || "#0D9488";
 
@@ -163,8 +165,9 @@ export default function CompanyTherapists() {
     setModal("dissociate");
   };
 
-  // Pending association requests (therapist-initiated, awaiting company approval)
-  const pendingRequests = store.getPendingForCompany(user?.companyId ?? "");
+  // Pending association requests — now from Firestore (real-time) via DataContext,
+  // replacing the previous in-memory store which was empty on every page refresh.
+  const pendingRequests = pendingAssociations;
 
   const atTherapistLimit = isAtLimit("therapists", companyTherapists.length);
 

@@ -22,6 +22,7 @@ export default function TherapistProfile() {
     myGallery,
     mutateMyTherapistProfile,
     mutateLinkToCompany, mutateUnlinkFromCompany,
+    myAssociation,
   } = usePageData();
 
   // ── Plan ─────────────────────────────────────────────────────────────────
@@ -59,11 +60,14 @@ export default function TherapistProfile() {
     }
   }, [therapist]);
 
-  const isPending  = false;
-  const isActive   = !!company;
+  // Derive association status from Firestore record (real-time via subscription)
+  const isPending  = myAssociation?.status === "pending";
+  const isActive   = myAssociation?.status === "active" || (!!company && myAssociation?.status !== "pending");
   const isLinked   = isPending || isActive;
   const linkedCompany     = company ?? null;
-  const companyCommission = therapist?.commission ?? null;
+  // For active: use the commission from myAssociation (set by company on approval)
+  // For pending: commission is not defined yet
+  const companyCommission = isActive ? (myAssociation?.commission ?? therapist?.commission ?? null) : null;
 
   if (!therapist) return (
     <div className="text-gray-500 text-center py-20">Carregando perfil...</div>
@@ -665,7 +669,7 @@ export default function TherapistProfile() {
         </div>
       )}
 
-      {/* ── Upgrade Modal ────────────────────────────────────────���───────── */}
+      {/* ── Upgrade Modal ───────────────────────────────────────────────── */}
       {showUpgradeModal && (
         <TherapistUpgradeModal
           currentPlan={planConfig}

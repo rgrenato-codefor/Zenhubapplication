@@ -3,13 +3,15 @@
  *
  * Componente que protege a rota raiz "/":
  * - Enquanto o Firebase ainda resolve a sessão → spinner neutro
- * - Usuário autenticado → redireciona direto para a home do seu perfil
+ * - Usuário autenticado com e-mail verificado → redireciona para a home do perfil
+ * - Usuário autenticado mas e-mail NÃO verificado → tela de verificação
  * - Sem sessão → renderiza a página de Login normalmente
  */
 
 import { Navigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { ROLE_ROUTES } from "../../context/AuthContext";
+import { auth } from "../../../lib/firebase";
 import Login from "../../pages/Login";
 
 export function RootRedirect() {
@@ -43,8 +45,14 @@ export function RootRedirect() {
     );
   }
 
-  // Já autenticado → vai direto para a home do perfil
   if (user) {
+    // Second-layer defence: if firebase user is still unverified, force verify screen
+    const currentFbUser = auth.currentUser;
+    if (currentFbUser && !currentFbUser.emailVerified) {
+      return <Navigate to={`/verificar-email?email=${encodeURIComponent(user.email)}`} replace />;
+    }
+
+    // Verified → redirect to role home
     const destination = ROLE_ROUTES[user.role] ?? "/";
     return <Navigate to={destination} replace />;
   }

@@ -235,6 +235,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // ── Stale check ─────────────────────────────────────────────────────
+        // The callback is async and awaits a Firestore fetch. During that
+        // await, the user could have been signed out (e.g., unverified email
+        // detected by signIn → signOut called). If the current Firebase user
+        // no longer matches the user this callback was called for, discard
+        // this result entirely to prevent a stale setUser overwriting null.
+        const currentFbUser = auth.currentUser;
+        if (!currentFbUser || currentFbUser.uid !== fbUser.uid) {
+          setLoading(false);
+          return;
+        }
+
+        // ── Email verification gate ──────────────────────────────────────────
+        // Never allow an unverified account into the app via the listener.
+        // (Google OAuth users always have emailVerified = true.)
+        if (!currentFbUser.emailVerified) {
+          await firebaseSignOut(auth); // ensure clean state
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
         const baseUser: AuthUser = {
           uid: fbUser.uid,
           name: profile.name,

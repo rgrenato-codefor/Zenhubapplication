@@ -33,6 +33,10 @@ export function usePageData() {
     myGallery: data.myGallery,
     companyGallery: data.companyGallery,
 
+    // Association state
+    pendingAssociations: data.pendingAssociations,
+    myAssociation: data.myAssociation,
+
     // ── Store bridges (same API as the original stores) ───────────────────────
     therapistStore: data.therapistStoreBridge,
     unitStore: data.unitStoreBridge,

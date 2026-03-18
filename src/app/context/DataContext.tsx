@@ -24,8 +24,11 @@ import {
   getTherapistsByCompany, getTherapistByUserId,
   createTherapist as fsCreateTherapist, updateTherapist as fsUpdateTherapist,
   deleteTherapist as fsDeleteTherapist, getTherapistByUsername,
+  clearTherapistCompanyId as fsClearTherapistCompanyId,
   getCompanyByInviteCode, searchCompaniesByName as fsSearchCompaniesByName,
   getTherapistAssociation, setTherapistAssociation,
+  subscribeTherapistAssociationsByCompany,
+  subscribeTherapistOwnAssociation,
   getCatalogByTherapist, saveCatalogItem, deleteCatalogItem,
   getAvailability, setAvailability as fsSetAvailability,
   getClientsByCompany, getClientByUserId,
@@ -47,6 +50,7 @@ import {
   getAllUserProfiles as fsGetAllUserProfiles,
   subscribeAppointmentsByCompany, subscribeAppointmentsByTherapist,
   subscribeSessionRecordsByCompany, subscribeSessionRecordsByTherapist,
+  subscribeTherapistsByCompany,
   type Company, type Unit, type Therapist, type Client,
   type Therapy, type Room, type Appointment, type SessionRecord,
   type CatalogItem, type TherapistAssociation,
@@ -83,6 +87,20 @@ interface DataContextValue {
   myCatalog: CatalogItem[];
   myAvailability: Record<string, string[]>;
   myClient: Client | null;
+
+  /**
+   * Pending association requests for the company side.
+   * Therapists who entered the invite code and are awaiting approval.
+   * Populated in real-time via subscribeTherapistAssociationsByCompany.
+   */
+  pendingAssociations: TherapistAssociation[];
+
+  /**
+   * The therapist's own association record (Firestore).
+   * Used to show real pending/active status in TherapistProfile — replaces the
+   * hardcoded `isPending = false`.
+   */
+  myAssociation: TherapistAssociation | null;
 
   // Chart data (empty for real users)
   revenueData: any[];
@@ -211,6 +229,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
 
+  // Pending associations (company side) and own association (therapist side)
+  const [pendingAssociations, setPendingAssociations] = useState<TherapistAssociation[]>([]);
+  const [myAssociation, setMyAssociation] = useState<TherapistAssociation | null>(null);
+
   // Super Admin — platform-wide lists
   const [allAdminCompanies, setAllAdminCompanies] = useState<Company[]>([]);
   const [allAdminTherapists, setAllAdminTherapists] = useState<Therapist[]>([]);
@@ -234,6 +256,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setSessionRecords(recs);
           setCompletedSessionIds(new Set(recs.map((r) => r.appointmentId)));
         }),
+        // Active therapists (companyId is set on their doc)
+        subscribeTherapistsByCompany(cid, (ths) => setTherapists(ths)),
+        // Pending association requests (therapist-initiated, awaiting approval)
+        subscribeTherapistAssociationsByCompany(cid, (assocs) => {
+          setPendingAssociations(assocs.filter((a) => a.status === "pending"));
+        }),
       );
     }
 
@@ -245,12 +273,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setSessionRecords(recs);
           setCompletedSessionIds(new Set(recs.map((r) => r.appointmentId)));
         }),
+        // Own association — shows real pending/active status without page refresh
+        subscribeTherapistOwnAssociation(tid, (assoc) => {
+          setMyAssociation(assoc);
+        }),
       );
     }
 
     return () => unsubs.forEach((u) => u());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, user?.role, user?.companyId, myTherapist?.id]);
+
+  // ── Load company data when therapist has a pending association ────────────
+  // When a therapist self-associates (pending), their therapist doc does NOT
+  // get companyId set yet — that only happens after company approval.
+  // But we still need to show the company name/color in the profile.
+  useEffect(() => {
+    if (user?.role === "therapist" && myAssociation?.companyId && !company) {
+      getCompany(myAssociation.companyId).then((co) => {
+        if (co) setCompany(co);
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myAssociation?.companyId, user?.role]);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
 
@@ -428,6 +473,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     await setTherapistAssociation({
       therapistId: t.id,
       companyId: user!.companyId!,
+      status: "active",
       unitId: unitId ?? null,
       commission,
       linkedAt: new Date().toISOString(),
@@ -440,8 +486,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const mutateDissociateTherapist = useCallback(async (therapistId: string) => {
-    await fsUpdateTherapist(therapistId, { companyId: undefined });
-    await setTherapistAssociation({ therapistId, companyId: null, unitId: null, commission: 50, linkedAt: null });
+    await fsClearTherapistCompanyId(therapistId);
+    await setTherapistAssociation({
+      therapistId,
+      companyId: null,
+      status: "none",
+      commission: 0,
+      unitId: null,
+      linkedAt: null,
+    });
     setTherapists((prev) => prev.filter((t) => t.id !== therapistId));
   }, []);
 
@@ -451,14 +504,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const mutateApproveAssociation = useCallback(async (therapistId: string, commission: number, unitId?: string | null) => {
+    // 1. Set companyId on the therapist doc → triggers subscribeTherapistsByCompany
     await fsUpdateTherapist(therapistId, { companyId: user!.companyId!, commission, unitId: unitId ?? undefined });
+    // 2. Mark association as active in Firestore
     await setTherapistAssociation({
       therapistId,
       companyId: user!.companyId!,
+      status: "active",
       unitId: unitId ?? null,
       commission,
       linkedAt: new Date().toISOString(),
     });
+    // 3. Remove from pending list optimistically (subscription will confirm)
+    setPendingAssociations((prev) => prev.filter((a) => a.therapistId !== therapistId));
     setTherapists((prev) =>
       prev.some((p) => p.id === therapistId)
         ? prev.map((p) => p.id === therapistId ? { ...p, companyId: user!.companyId!, commission } : p)
@@ -467,7 +525,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const mutateRejectAssociation = useCallback(async (therapistId: string) => {
-    await setTherapistAssociation({ therapistId, companyId: null, unitId: null, commission: 0, linkedAt: null });
+    await setTherapistAssociation({
+      therapistId,
+      companyId: null,
+      status: "none",
+      commission: 0,
+      unitId: null,
+      linkedAt: null,
+    });
+    setPendingAssociations((prev) => prev.filter((a) => a.therapistId !== therapistId));
   }, []);
 
   // Clients
@@ -626,26 +692,56 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const mutateLinkToCompany = useCallback(async (inviteCode: string): Promise<Company | null> => {
     const co = await getCompanyByInviteCode(inviteCode);
     if (!co || !myTherapist) return null;
-    await fsUpdateTherapist(myTherapist.id, { companyId: co.id });
+
+    // Create a PENDING association — do NOT write companyId to the therapist doc yet.
+    // The company admin must approve, which then calls mutateApproveAssociation.
+    // This avoids Firestore permission issues (therapist can't write companyId to
+    // their own doc) and provides a proper moderation/approval flow.
     await setTherapistAssociation({
       therapistId: myTherapist.id,
       companyId: co.id,
+      status: "pending",
+      commission: 0,
       unitId: null,
-      commission: 50,
-      linkedAt: new Date().toISOString(),
+      linkedAt: null,
+      // Include therapist metadata so the company can identify the requester
+      therapistName: myTherapist.name,
+      therapistAvatar: myTherapist.avatar ?? null,
+      therapistSpecialty: myTherapist.specialty,
+      therapistUsername: myTherapist.username,
     });
-    setMyTherapist((prev) => prev ? { ...prev, companyId: co.id } : prev);
+
+    // Optimistic local state update (subscribeTherapistOwnAssociation will confirm)
+    setMyAssociation({
+      therapistId: myTherapist.id,
+      companyId: co.id,
+      status: "pending",
+      commission: 0,
+      unitId: null,
+      linkedAt: null,
+    });
     setCompany(co);
     return co;
   }, [myTherapist]);
 
   const mutateUnlinkFromCompany = useCallback(async () => {
     if (!myTherapist) return;
-    await fsUpdateTherapist(myTherapist.id, { companyId: undefined });
-    await setTherapistAssociation({ therapistId: myTherapist.id, companyId: null, unitId: null, commission: 50, linkedAt: null });
+    // If active: clear companyId from therapist doc
+    if (myAssociation?.status === "active") {
+      await fsClearTherapistCompanyId(myTherapist.id);
+    }
+    await setTherapistAssociation({
+      therapistId: myTherapist.id,
+      companyId: null,
+      status: "none",
+      commission: 0,
+      unitId: null,
+      linkedAt: null,
+    });
     setMyTherapist((prev) => prev ? { ...prev, companyId: undefined } : prev);
+    setMyAssociation(null);
     setCompany(null);
-  }, [myTherapist]);
+  }, [myTherapist, myAssociation]);
 
   const mutateAddMyGalleryItem = useCallback(async (item: MediaItem) => {
     if (!myTherapist) return;
@@ -715,6 +811,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     myCatalog,
     myAvailability,
     myClient,
+    pendingAssociations,
+    myAssociation,
     revenueData: chartRevenueData,
     weeklyData: chartWeeklyData,
     unitRevenueData: chartUnitRevenueData,
