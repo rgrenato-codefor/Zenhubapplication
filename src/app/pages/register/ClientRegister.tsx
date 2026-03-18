@@ -1,26 +1,29 @@
 import { useState } from "react";
 import { useNavigate, useParams, Link } from "react-router";
 import {
-  Sparkles, User, Mail, Phone, Lock, Eye, EyeOff,
+  User, Mail, Phone, Lock, Eye, EyeOff,
   ArrowRight, CheckCircle, Loader2, Heart, Calendar, Star, AlertCircle,
 } from "../../components/shared/icons";
 import { useAuth } from "../../context/AuthContext";
+import { ZenHubLogo } from "../../components/shared/ZenHubLogo";
 
-// Google sign-in temporariamente desativado:
-// import { GoogleButton } from "../../components/shared/GoogleButton";
-// import { signInWithGoogleGIS } from "../../../lib/googleGIS";
 const signInGoogle = async () => ({ route: "/cliente" }); // stub
 
-const BG_IMAGE = "https://images.unsplash.com/photo-1633526543913-d30e3c230d1f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtYXNzYWdlJTIwdGhlcmFweSUyMHJlbGF4YXRpb24lMjBoYW5kc3xlbnwxfHx8fDE3NzI2Nzg2NjF8MA&ixlib=rb-4.1.0&q=80&w=1080";
+const BG_IMAGE =
+  "https://images.unsplash.com/photo-1633526543913-d30e3c230d1f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtYXNzYWdlJTIwdGhlcmFweSUyMHJlbGF4YXRpb24lMjBoYW5kc3xlbnwxfHx8fDE3NzI2Nzg2NjF8MA&ixlib=rb-4.1.0&q=80&w=1080";
 
 function maskPhone(v: string) {
-  return v.replace(/\D/g, "").slice(0, 11)
+  return v
+    .replace(/\D/g, "")
+    .slice(0, 11)
     .replace(/(\d{2})(\d)/, "($1) $2")
     .replace(/(\d{5})(\d)/, "$1-$2");
 }
 
 function maskDate(v: string) {
-  return v.replace(/\D/g, "").slice(0, 8)
+  return v
+    .replace(/\D/g, "")
+    .slice(0, 8)
     .replace(/(\d{2})(\d)/, "$1/$2")
     .replace(/(\d{2})(\d)/, "$1/$2");
 }
@@ -28,8 +31,6 @@ function maskDate(v: string) {
 type Form = {
   name: string;
   email: string;
-  phone: string;
-  birthdate: string;
   password: string;
   confirmPassword: string;
 };
@@ -46,7 +47,10 @@ export default function ClientRegister() {
   const { registerClient } = useAuth();
 
   const [form, setForm] = useState<Form>({
-    name: "", email: "", phone: "", birthdate: "", password: "", confirmPassword: "",
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
   });
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -66,11 +70,11 @@ export default function ClientRegister() {
     if (!form.name.trim()) e.name = "Obrigatório";
     if (!form.email.trim()) e.email = "Obrigatório";
     else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = "E-mail inválido";
-    if (!form.phone.trim()) e.phone = "Obrigatório";
     if (!form.password) e.password = "Obrigatório";
     else if (form.password.length < 6) e.password = "Mínimo 6 caracteres";
     if (!form.confirmPassword) e.confirmPassword = "Obrigatório";
-    else if (form.password !== form.confirmPassword) e.confirmPassword = "Senhas não coincidem";
+    else if (form.password !== form.confirmPassword)
+      e.confirmPassword = "Senhas não coincidem";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -78,15 +82,18 @@ export default function ClientRegister() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    if (!agreed) { alert("Aceite os termos para continuar."); return; }
+    if (!agreed) {
+      alert("Aceite os termos para continuar.");
+      return;
+    }
     setSubmitting(true);
     setSubmitError("");
     try {
       await registerClient({
         name: form.name,
         email: form.email,
-        phone: form.phone,
-        birthdate: form.birthdate,
+        phone: "",
+        birthdate: "",
         password: form.password,
         slug,
       });
@@ -95,7 +102,9 @@ export default function ClientRegister() {
     } catch (err: any) {
       const code = err?.code ?? "";
       if (code === "auth/email-already-in-use") {
-        setSubmitError("Este e-mail já está cadastrado. Faça login ou use outro e-mail.");
+        setSubmitError(
+          "Este e-mail já está cadastrado. Faça login ou use outro e-mail."
+        );
       } else if (code === "auth/weak-password") {
         setSubmitError("Senha muito fraca. Use no mínimo 6 caracteres.");
       } else {
@@ -103,11 +112,6 @@ export default function ClientRegister() {
       }
       setSubmitting(false);
     }
-  };
-
-  const handleGoogle = async () => {
-    const { route } = await signInGoogle();
-    navigate(route);
   };
 
   const inputCls = (field: keyof Form) =>
@@ -128,11 +132,18 @@ export default function ClientRegister() {
           <div className="w-20 h-20 rounded-full bg-emerald-500 flex items-center justify-center mx-auto mb-6 shadow-lg">
             <CheckCircle className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-white mb-3" style={{ fontWeight: 700, fontSize: "1.75rem" }}>
+          <h1
+            className="text-white mb-3"
+            style={{ fontWeight: 700, fontSize: "1.75rem" }}
+          >
             Conta criada! 🌿
           </h1>
           <p className="text-gray-400 mb-2">
-            Bem-vindo(a), <span className="text-white" style={{ fontWeight: 600 }}>{form.name.split(" ")[0]}</span>!
+            Bem-vindo(a),{" "}
+            <span className="text-white" style={{ fontWeight: 600 }}>
+              {form.name.split(" ")[0]}
+            </span>
+            !
           </p>
           <p className="text-gray-500 text-sm mb-8">
             Enviamos um e-mail de confirmação para{" "}
@@ -161,25 +172,28 @@ export default function ClientRegister() {
         />
         <div className="absolute inset-0 bg-gradient-to-b from-gray-900/60 via-gray-900/40 to-gray-900/90" />
         <div className="relative z-10 flex flex-col h-full p-10">
-          {/* Logo */}
           <div className="flex items-center gap-3 mb-auto">
             <ZenHubLogo variant="full" textColor="#ffffff" height={36} />
           </div>
-
-          {/* Content */}
           <div className="flex-1 flex flex-col justify-center py-10">
             <div className="mb-8">
               <div className="w-14 h-14 rounded-2xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center mb-5">
                 <Heart className="w-7 h-7 text-teal-400" />
               </div>
-              <h2 className="text-white mb-2" style={{ fontWeight: 700, fontSize: "1.75rem", lineHeight: 1.2 }}>
-                Cuide-se com quem<br />entende de você
+              <h2
+                className="text-white mb-2"
+                style={{ fontWeight: 700, fontSize: "1.75rem", lineHeight: 1.2 }}
+              >
+                Cuide-se com quem
+                <br />
+                entende de você
               </h2>
               <p className="text-gray-400 text-sm leading-relaxed">
-                Crie sua conta de cliente e tenha acesso a terapeutas especializados, agendamento fácil e histórico completo de sessões.
+                Crie sua conta de cliente e tenha acesso a terapeutas
+                especializados, agendamento fácil e histórico completo de
+                sessões.
               </p>
             </div>
-
             <div className="space-y-4">
               {BENEFITS.map((b) => {
                 const Icon = b.icon;
@@ -194,7 +208,6 @@ export default function ClientRegister() {
               })}
             </div>
           </div>
-
           <p className="text-white/30 text-xs">
             © 2026 ZEN HUB. Todos os direitos reservados.
           </p>
@@ -214,30 +227,34 @@ export default function ClientRegister() {
         <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
           <div className="w-full max-w-lg">
             <div className="mb-8">
-              <h2 className="text-white mb-1" style={{ fontWeight: 700, fontSize: "1.5rem" }}>
+              <h2
+                className="text-white mb-1"
+                style={{ fontWeight: 700, fontSize: "1.5rem" }}
+              >
                 Criar conta de cliente
               </h2>
               <p className="text-gray-400 text-sm">
                 {slug
-                  ? `Cadastro para acesso ao espaço`
+                  ? "Cadastro para acesso ao espaço"
                   : "Preencha os dados para criar sua conta"}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Google - temporariamente oculto */}
-              {/* <GoogleButton onClick={handleGoogle} label="Cadastrar com Google" variant="dark" /> */}
-
-              {/* Divider */}
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-white/10" />
-                <span className="text-gray-500 text-xs">ou preencha os dados</span>
+                <span className="text-gray-500 text-xs">
+                  preencha os dados abaixo
+                </span>
                 <div className="flex-1 h-px bg-white/10" />
               </div>
 
               {/* Name */}
               <div>
-                <label className="block text-sm mb-1.5" style={{ fontWeight: 600, color: "#D1D5DB" }}>
+                <label
+                  className="block text-sm mb-1.5"
+                  style={{ fontWeight: 600, color: "#D1D5DB" }}
+                >
                   Nome completo *
                 </label>
                 <div className="relative">
@@ -249,12 +266,17 @@ export default function ClientRegister() {
                     onChange={(e) => set("name", e.target.value)}
                   />
                 </div>
-                {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name}</p>}
+                {errors.name && (
+                  <p className="text-red-400 text-xs mt-1">{errors.name}</p>
+                )}
               </div>
 
               {/* Email */}
               <div>
-                <label className="block text-sm mb-1.5" style={{ fontWeight: 600, color: "#D1D5DB" }}>
+                <label
+                  className="block text-sm mb-1.5"
+                  style={{ fontWeight: 600, color: "#D1D5DB" }}
+                >
                   E-mail *
                 </label>
                 <div className="relative">
@@ -267,42 +289,17 @@ export default function ClientRegister() {
                     onChange={(e) => set("email", e.target.value)}
                   />
                 </div>
-                {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email}</p>}
-              </div>
-
-              {/* Phone + Birthdate */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm mb-1.5" style={{ fontWeight: 600, color: "#D1D5DB" }}>
-                    Telefone *
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      className={`${inputCls("phone")} pl-10`}
-                      placeholder="(11) 99999-9999"
-                      value={form.phone}
-                      onChange={(e) => set("phone", maskPhone(e.target.value))}
-                    />
-                  </div>
-                  {errors.phone && <p className="text-red-400 text-xs mt-1">{errors.phone}</p>}
-                </div>
-                <div>
-                  <label className="block text-sm mb-1.5" style={{ fontWeight: 600, color: "#D1D5DB" }}>
-                    Data de nascimento
-                  </label>
-                  <input
-                    className={inputCls("birthdate")}
-                    placeholder="DD/MM/AAAA"
-                    value={form.birthdate}
-                    onChange={(e) => set("birthdate", maskDate(e.target.value))}
-                  />
-                </div>
+                {errors.email && (
+                  <p className="text-red-400 text-xs mt-1">{errors.email}</p>
+                )}
               </div>
 
               {/* Password */}
               <div>
-                <label className="block text-sm mb-1.5" style={{ fontWeight: 600, color: "#D1D5DB" }}>
+                <label
+                  className="block text-sm mb-1.5"
+                  style={{ fontWeight: 600, color: "#D1D5DB" }}
+                >
                   Senha *
                 </label>
                 <div className="relative">
@@ -319,15 +316,24 @@ export default function ClientRegister() {
                     onClick={() => setShowPass(!showPass)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-500"
                   >
-                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPass ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
-                {errors.password && <p className="text-red-400 text-xs mt-1">{errors.password}</p>}
+                {errors.password && (
+                  <p className="text-red-400 text-xs mt-1">{errors.password}</p>
+                )}
               </div>
 
               {/* Confirm Password */}
               <div>
-                <label className="block text-sm mb-1.5" style={{ fontWeight: 600, color: "#D1D5DB" }}>
+                <label
+                  className="block text-sm mb-1.5"
+                  style={{ fontWeight: 600, color: "#D1D5DB" }}
+                >
                   Confirmar senha *
                 </label>
                 <div className="relative">
@@ -344,10 +350,18 @@ export default function ClientRegister() {
                     onClick={() => setShowConfirm(!showConfirm)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-500"
                   >
-                    {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showConfirm ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
-                {errors.confirmPassword && <p className="text-red-400 text-xs mt-1">{errors.confirmPassword}</p>}
+                {errors.confirmPassword && (
+                  <p className="text-red-400 text-xs mt-1">
+                    {errors.confirmPassword}
+                  </p>
+                )}
               </div>
 
               {submitError && (
@@ -371,9 +385,13 @@ export default function ClientRegister() {
                 </div>
                 <span className="text-sm text-gray-400">
                   Li e aceito os{" "}
-                  <a href="#" className="text-teal-400 hover:text-teal-300">Termos de Uso</a>{" "}
+                  <a href="#" className="text-teal-400 hover:text-teal-300">
+                    Termos de Uso
+                  </a>{" "}
                   e a{" "}
-                  <a href="#" className="text-teal-400 hover:text-teal-300">Política de Privacidade</a>
+                  <a href="#" className="text-teal-400 hover:text-teal-300">
+                    Política de Privacidade
+                  </a>
                 </span>
               </label>
 
@@ -385,22 +403,35 @@ export default function ClientRegister() {
                 style={{ fontWeight: 600 }}
               >
                 {submitting ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Criando conta...</>
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Criando
+                    conta...
+                  </>
                 ) : (
-                  <>Criar minha conta <ArrowRight className="w-4 h-4" /></>
+                  <>
+                    Criar minha conta <ArrowRight className="w-4 h-4" />
+                  </>
                 )}
               </button>
             </form>
 
             <p className="text-center text-gray-500 text-sm mt-6">
               Já tem uma conta?{" "}
-              <Link to="/" className="text-teal-400 hover:text-teal-300" style={{ fontWeight: 600 }}>
+              <Link
+                to="/"
+                className="text-teal-400 hover:text-teal-300"
+                style={{ fontWeight: 600 }}
+              >
                 Fazer login
               </Link>
             </p>
             <p className="text-center text-gray-600 text-xs mt-3">
               É uma empresa?{" "}
-              <Link to="/cadastro" className="text-violet-400 hover:text-violet-300" style={{ fontWeight: 600 }}>
+              <Link
+                to="/cadastro"
+                className="text-violet-400 hover:text-violet-300"
+                style={{ fontWeight: 600 }}
+              >
                 Cadastrar empresa
               </Link>
             </p>

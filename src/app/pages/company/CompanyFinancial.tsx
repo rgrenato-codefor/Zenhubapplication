@@ -1,11 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from "recharts";
 import {
   TrendingUp, TrendingDown, DollarSign, Wallet,
-  Plus, X, Trash2, Edit2, Filter, ChevronDown,
+  Plus, X, Trash2, Edit2, Filter, ChevronDown, ChevronUp,
+  ChevronLeft, ChevronRight,
   ArrowUp, Calendar, Banknote, ShoppingBag,
   Briefcase, Globe, Zap, Users, ClipboardList, Percent,
 } from "../../components/shared/icons";
@@ -17,6 +18,12 @@ import { useFinancial, type FinancialTransaction } from "../../context/Financial
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type TxType = "entrada" | "saida";
+type SortKey = "createdAt" | "date" | "description" | "category" | "paymentMethod" | "amount";
+type SortDir = "asc" | "desc";
+
+// ─── Pagination ───────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 10;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -175,6 +182,15 @@ export default function CompanyFinancial() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // ── Sort & pagination ─────────────────────────────────────────────────────
+  // Default: insertion order desc — id = "tx_{timestamp}_{random}" → newest first
+  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [page, setPage] = useState(0);
+
+  // Reset to page 0 whenever filter/sort/tab/period changes
+  useEffect(() => { setPage(0); }, [sortKey, sortDir, tab, search, period]);
+
   // ── Derived data — all hooks before any early return ─────────────────────
   const filtered = useMemo(() => filterByPeriod(transactions, period), [transactions, period]);
 
@@ -212,9 +228,9 @@ export default function CompanyFinancial() {
       .sort((a, b) => b.value - a.value);
   }, [filtered]);
 
-  // Table rows
+  // All filtered + searched rows (full list for summary totals)
   const tableRows = useMemo(() => {
-    let rows = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
+    let rows = [...filtered];
     if (tab !== "all") rows = rows.filter((t) => t.type === tab);
     if (search) {
       const q = search.toLowerCase();
@@ -225,8 +241,28 @@ export default function CompanyFinancial() {
           t.paymentMethod.toLowerCase().includes(q),
       );
     }
+    // ── Sort ──────────────────────────────────────────────────────────────
+    rows.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "createdAt":     cmp = a.id.localeCompare(b.id); break;
+        case "date":          cmp = a.date.localeCompare(b.date); break;
+        case "description":   cmp = a.description.localeCompare(b.description, "pt"); break;
+        case "category":      cmp = getCategoryLabel(a.category).localeCompare(getCategoryLabel(b.category), "pt"); break;
+        case "paymentMethod": cmp = a.paymentMethod.localeCompare(b.paymentMethod, "pt"); break;
+        case "amount":        cmp = a.amount - b.amount; break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
     return rows;
-  }, [filtered, tab, search]);
+  }, [filtered, tab, search, sortKey, sortDir]);
+
+  // Pagination derived values
+  const totalPages    = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE));
+  const safePage      = Math.min(page, totalPages - 1);
+  const paginatedRows = tableRows.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const firstItem     = tableRows.length === 0 ? 0 : safePage * PAGE_SIZE + 1;
+  const lastItem      = Math.min((safePage + 1) * PAGE_SIZE, tableRows.length);
 
   // ── Plan gate — after all hooks ───────────────────────────────────────────
   if (!planLoading && planConfig && !hasModule("financial_control")) {
@@ -288,6 +324,30 @@ export default function CompanyFinancial() {
   async function handleDelete(id: string) {
     await deleteTransaction(id);
     setDeleteConfirm(null);
+  }
+
+  // ── Sort helper ───────────────────────────────────────────────────────────
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "amount" || key === "createdAt" || key === "date" ? "desc" : "asc");
+    }
+  }
+
+  function SortIcon({ col }: { col: SortKey }) {
+    if (sortKey !== col) {
+      return (
+        <span className="inline-flex flex-col gap-px ml-1 opacity-25 align-middle">
+          <ChevronUp className="w-2.5 h-2.5" />
+          <ChevronDown className="w-2.5 h-2.5 -mt-0.5" />
+        </span>
+      );
+    }
+    return sortDir === "asc"
+      ? <ChevronUp   className="w-3 h-3 ml-1 inline align-middle" style={{ color: primaryColor }} />
+      : <ChevronDown className="w-3 h-3 ml-1 inline align-middle" style={{ color: primaryColor }} />;
   }
 
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "Este mês";
@@ -519,33 +579,86 @@ export default function CompanyFinancial() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-50">
-                <th className="text-left px-5 py-3 text-xs text-gray-400" style={{ fontWeight: 500 }}>Data</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400" style={{ fontWeight: 500 }}>Descrição</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400" style={{ fontWeight: 500 }}>Categoria</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400" style={{ fontWeight: 500 }}>Pagamento</th>
-                <th className="text-right px-4 py-3 text-xs text-gray-400" style={{ fontWeight: 500 }}>Valor</th>
+                <th
+                  className="text-left px-5 py-3 text-xs cursor-pointer select-none whitespace-nowrap hover:text-gray-600 transition-colors"
+                  style={sortKey === "createdAt" ? { color: primaryColor, fontWeight: 600 } : { color: "#9CA3AF", fontWeight: 500 }}
+                  onClick={() => handleSort("createdAt")}
+                  title="Ordenar por ordem de inserção"
+                >
+                  Inserção <SortIcon col="createdAt" />
+                </th>
+                <th
+                  className="text-left px-4 py-3 text-xs cursor-pointer select-none whitespace-nowrap hover:text-gray-600 transition-colors"
+                  style={sortKey === "date" ? { color: primaryColor, fontWeight: 600 } : { color: "#9CA3AF", fontWeight: 500 }}
+                  onClick={() => handleSort("date")}
+                >
+                  Data <SortIcon col="date" />
+                </th>
+                <th
+                  className="text-left px-4 py-3 text-xs cursor-pointer select-none hover:text-gray-600 transition-colors"
+                  style={sortKey === "description" ? { color: primaryColor, fontWeight: 600 } : { color: "#9CA3AF", fontWeight: 500 }}
+                  onClick={() => handleSort("description")}
+                >
+                  Descrição <SortIcon col="description" />
+                </th>
+                <th
+                  className="text-left px-4 py-3 text-xs cursor-pointer select-none whitespace-nowrap hover:text-gray-600 transition-colors"
+                  style={sortKey === "category" ? { color: primaryColor, fontWeight: 600 } : { color: "#9CA3AF", fontWeight: 500 }}
+                  onClick={() => handleSort("category")}
+                >
+                  Categoria <SortIcon col="category" />
+                </th>
+                <th
+                  className="text-left px-4 py-3 text-xs cursor-pointer select-none whitespace-nowrap hover:text-gray-600 transition-colors"
+                  style={sortKey === "paymentMethod" ? { color: primaryColor, fontWeight: 600 } : { color: "#9CA3AF", fontWeight: 500 }}
+                  onClick={() => handleSort("paymentMethod")}
+                >
+                  Pagamento <SortIcon col="paymentMethod" />
+                </th>
+                <th
+                  className="text-right px-4 py-3 text-xs cursor-pointer select-none whitespace-nowrap hover:text-gray-600 transition-colors"
+                  style={sortKey === "amount" ? { color: primaryColor, fontWeight: 600 } : { color: "#9CA3AF", fontWeight: 500 }}
+                  onClick={() => handleSort("amount")}
+                >
+                  Valor <SortIcon col="amount" />
+                </th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {tableRows.length === 0 ? (
+              {paginatedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-gray-400 text-sm">
+                  <td colSpan={7} className="px-5 py-12 text-center text-gray-400 text-sm">
                     Nenhuma transação encontrada.
                   </td>
                 </tr>
               ) : (
-                tableRows.map((tx) => {
+                paginatedRows.map((tx) => {
                   const isEntrada = tx.type === "entrada";
                   const catColor = getCategoryColor(tx.category);
+                  // id = "tx_{timestamp}_{random}" → parse timestamp for insertion label
+                  const insertionTs = parseInt(tx.id.split("_")[1] || "0", 10);
+                  const insertionLabel = insertionTs
+                    ? new Date(insertionTs).toLocaleString("pt-BR", {
+                        day: "2-digit", month: "2-digit", year: "2-digit",
+                        hour: "2-digit", minute: "2-digit",
+                      })
+                    : "—";
                   return (
                     <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">
+                      {/* Inserção */}
+                      <td className="px-5 py-3.5 text-gray-400 text-xs whitespace-nowrap">
+                        {insertionLabel}
+                      </td>
+                      {/* Data */}
+                      <td className="px-4 py-3.5 text-gray-500 whitespace-nowrap">
                         {new Date(tx.date + "T12:00:00").toLocaleDateString("pt-BR")}
                       </td>
+                      {/* Descrição */}
                       <td className="px-4 py-3.5 text-gray-900 max-w-[200px] truncate">
                         {tx.description}
                       </td>
+                      {/* Categoria */}
                       <td className="px-4 py-3.5">
                         <span
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs"
@@ -555,7 +668,9 @@ export default function CompanyFinancial() {
                           {getCategoryLabel(tx.category)}
                         </span>
                       </td>
+                      {/* Pagamento */}
                       <td className="px-4 py-3.5 text-gray-500 text-xs whitespace-nowrap">{tx.paymentMethod}</td>
+                      {/* Valor */}
                       <td className="px-4 py-3.5 text-right whitespace-nowrap">
                         <span
                           className="inline-flex items-center gap-1"
@@ -567,6 +682,7 @@ export default function CompanyFinancial() {
                           {fmtBRL(tx.amount)}
                         </span>
                       </td>
+                      {/* Ações */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1 justify-end">
                           <button
@@ -609,18 +725,77 @@ export default function CompanyFinancial() {
           </table>
         </div>
 
-        {/* Footer summary */}
-        {tableRows.length > 0 && (
-          <div className="px-5 py-3 border-t border-gray-50 bg-gray-50 flex flex-wrap gap-4 text-xs text-gray-500">
-            <span>{tableRows.length} transações</span>
-            <span className="text-emerald-600" style={{ fontWeight: 600 }}>
-              Entradas: {fmtBRL(tableRows.filter((t) => t.type === "entrada").reduce((s, t) => s + t.amount, 0))}
-            </span>
-            <span className="text-red-500" style={{ fontWeight: 600 }}>
-              Saídas: {fmtBRL(tableRows.filter((t) => t.type === "saida").reduce((s, t) => s + t.amount, 0))}
-            </span>
+        {/* ── Footer: summary + paginator ──────────────────────────────── */}
+        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Summary */}
+          <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+            {tableRows.length > 0 ? (
+              <>
+                <span>
+                  {firstItem}–{lastItem} de{" "}
+                  <span style={{ fontWeight: 600 }}>{tableRows.length}</span> transação(ões)
+                </span>
+                <span className="text-emerald-600" style={{ fontWeight: 600 }}>
+                  Entradas: {fmtBRL(tableRows.filter((t) => t.type === "entrada").reduce((s, t) => s + t.amount, 0))}
+                </span>
+                <span className="text-red-500" style={{ fontWeight: 600 }}>
+                  Saídas: {fmtBRL(tableRows.filter((t) => t.type === "saida").reduce((s, t) => s + t.amount, 0))}
+                </span>
+              </>
+            ) : (
+              <span>Nenhuma transação</span>
+            )}
           </div>
-        )}
+
+          {/* Paginator — only when multiple pages */}
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1 shrink-0">
+              {/* Prev */}
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={safePage === 0}
+                className="w-8 h-8 rounded-lg flex items-center justify-center border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              {/* Page numbers with ellipsis */}
+              {Array.from({ length: totalPages }, (_, i) => i).map((i) => {
+                const show = i === 0 || i === totalPages - 1 || Math.abs(i - safePage) <= 1;
+                const isEllipsisBefore = i === safePage - 2 && safePage > 2;
+                const isEllipsisAfter  = i === safePage + 2 && safePage < totalPages - 3;
+                if (isEllipsisBefore || isEllipsisAfter) {
+                  return <span key={`ell-${i}`} className="w-6 text-center text-xs text-gray-400">…</span>;
+                }
+                if (!show) return null;
+                const isActive = i === safePage;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setPage(i)}
+                    className="w-8 h-8 rounded-lg text-xs transition-colors border"
+                    style={
+                      isActive
+                        ? { background: primaryColor, color: "#fff", fontWeight: 700, borderColor: primaryColor }
+                        : { background: "#fff", color: "#374151", borderColor: "#E5E7EB", fontWeight: 500 }
+                    }
+                  >
+                    {i + 1}
+                  </button>
+                );
+              })}
+
+              {/* Next */}
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={safePage === totalPages - 1}
+                className="w-8 h-8 rounded-lg flex items-center justify-center border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Transaction modal ──────────────────────────────────────────────── */}

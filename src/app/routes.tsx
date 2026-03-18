@@ -46,12 +46,14 @@ import TherapistProfile from "./pages/therapist/TherapistProfile";
 import TherapistTherapies from "./pages/therapist/TherapistTherapies";
 import TherapistNotifications from "./pages/therapist/TherapistNotifications";
 import TherapistGallery from "./pages/therapist/TherapistGallery";
+import TherapistPublications from "./pages/therapist/TherapistPublications";
 
 // Client Pages
 import ClientHome from "./pages/client/ClientHome";
 import ClientTherapists from "./pages/client/ClientTherapists";
 import ClientBookings from "./pages/client/ClientBookings";
 import ClientProfile from "./pages/client/ClientProfile";
+import ClientFeed from "./pages/client/ClientFeed";
 
 export const router = createBrowserRouter([
   {
@@ -128,6 +130,7 @@ export const router = createBrowserRouter([
               { path: "ganhos",         Component: TherapistEarnings },
               { path: "perfil",         Component: TherapistProfile },
               { path: "notificacoes",   Component: TherapistNotifications },
+              { path: "publicacoes",    Component: TherapistPublications },
             ],
           },
         ],
@@ -141,10 +144,12 @@ export const router = createBrowserRouter([
             path: "/cliente",
             Component: ClientLayout,
             children: [
-              { index: true, Component: ClientHome },
+              { index: true, Component: ClientFeed },
+              { path: "painel",      Component: ClientHome },
               { path: "terapeutas", Component: ClientTherapists },
-              { path: "reservas", Component: ClientBookings },
-              { path: "perfil", Component: ClientProfile },
+              { path: "feed",       Component: ClientFeed },
+              { path: "reservas",   Component: ClientBookings },
+              { path: "perfil",     Component: ClientProfile },
             ],
           },
         ],

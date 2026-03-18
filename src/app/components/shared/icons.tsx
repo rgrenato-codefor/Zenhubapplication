@@ -40,6 +40,7 @@ import {
   UserIcon,
   UserCircleIcon,
   UserPlusIcon,
+  UserMinusIcon,
   UsersIcon,
   // Buildings / Places
   BuildingOffice2Icon,
@@ -231,6 +232,7 @@ export const PanelLeftIcon   = Bars3BottomLeftIcon;
 export const User       = UserIcon;
 export const UserCircle = UserCircleIcon;
 export const UserPlus   = UserPlusIcon;
+export const UserMinus  = UserMinusIcon;
 export const Users      = UsersIcon;
 
 // Buildings / places
@@ -341,6 +343,7 @@ export {
   UserIcon,
   UserCircleIcon,
   UserPlusIcon,
+  UserMinusIcon,
   UsersIcon,
   HomeIcon,
   MapPinIcon,

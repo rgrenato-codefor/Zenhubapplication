@@ -4,19 +4,149 @@ import {
   Star, MapPin, Clock, CheckCircle, ArrowLeft, Share2,
   Calendar, Sparkles, Award, X,
   User, Building2, Grid,
-  ListBullet, InformationCircle, Send,
+  ListBullet, InformationCircle, Send, Heart, MessageCircle,
 } from "../../components/shared/icons";
 import { getTherapistByUsername, getTherapiesByCompany, getCompany, getCatalogByTherapist } from "../../../lib/firestore";
 import { therapists as mockTherapists, therapies as mockTherapies, companies as mockCompanies } from "../../data/mockData";
 import { therapistStore } from "../../store/therapistStore";
 import { ZenHubLogo } from "../../components/shared/ZenHubLogo";
+import { db } from "../../../lib/firebase";
+import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
 
 const DAYS_MAP: Record<string, string> = {
   monday: "Seg", tuesday: "Ter", wednesday: "Qua",
   thursday: "Qui", friday: "Sex",
 };
 
-type Tab = "fotos" | "servicos" | "sobre";
+type Tab = "feed" | "fotos" | "servicos" | "sobre";
+
+// ── Feed Lightbox ─────────────────────────────────────────────────────────────
+function FeedLightbox({
+  posts,
+  initialIndex,
+  onClose,
+}: {
+  posts: any[];
+  initialIndex: number;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(initialIndex);
+  const touchStartX = useRef<number | null>(null);
+  const post = posts[index];
+
+  const goNext = () => { if (index < posts.length - 1) setIndex((i) => i + 1); };
+  const goPrev = () => { if (index > 0) setIndex((i) => i - 1); };
+
+  // Keyboard nav
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") goNext();
+      else if (e.key === "ArrowLeft") goPrev();
+      else if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = e.changedTouches[0].clientX - touchStartX.current;
+    if (diff < -50) goNext();
+    else if (diff > 50) goPrev();
+    touchStartX.current = null;
+  };
+
+  if (!post) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] bg-black flex flex-col select-none"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Close button */}
+      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 pt-safe pt-4 pb-2">
+        <button
+          onClick={onClose}
+          className="w-9 h-9 rounded-full flex items-center justify-center bg-black/40 text-white/80 hover:text-white hover:bg-black/60 transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+        {posts.length > 1 && (
+          <span className="text-white/50 text-sm" style={{ fontWeight: 500 }}>
+            {index + 1} / {posts.length}
+          </span>
+        )}
+      </div>
+
+      {/* Image — fills screen, object-contain */}
+      <div className="flex-1 flex items-center justify-center relative">
+        <img
+          src={post.mediaUrl}
+          alt={post.caption ?? ""}
+          className="max-w-full max-h-full w-full object-contain"
+          draggable={false}
+        />
+
+        {/* Prev arrow */}
+        {index > 0 && (
+          <button
+            onClick={goPrev}
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        )}
+        {/* Next arrow */}
+        {index < posts.length - 1 && (
+          <button
+            onClick={goNext}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white transition-colors"
+            style={{ transform: "translateY(-50%) rotate(180deg)" }}
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        )}
+      </div>
+
+      {/* Bottom info */}
+      <div className="px-5 pt-3 pb-6 bg-black/80 backdrop-blur-sm">
+        <div className="flex items-center gap-5 mb-2">
+          <span className="flex items-center gap-1.5 text-white/70 text-sm">
+            <Heart className="w-4 h-4" /> {post.likesCount ?? 0}
+          </span>
+          <span className="flex items-center gap-1.5 text-white/70 text-sm">
+            <MessageCircle className="w-4 h-4" /> {post.commentsCount ?? 0}
+          </span>
+        </div>
+        {post.caption && (
+          <p className="text-white/90 text-sm leading-snug">{post.caption}</p>
+        )}
+        {/* Dot indicators */}
+        {posts.length > 1 && (
+          <div className="flex gap-1.5 justify-center mt-3">
+            {posts.map((_: any, i: number) => (
+              <button
+                key={i}
+                onClick={() => setIndex(i)}
+                className="rounded-full transition-all duration-300"
+                style={{
+                  width: i === index ? 18 : 6,
+                  height: 6,
+                  background: i === index ? "#fff" : "rgba(255,255,255,0.3)",
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── Story Viewer ─────────────────────────────────────────────────────────────
 function StoryViewer({
@@ -207,7 +337,7 @@ export default function TherapistPublicProfile() {
   const { username } = useParams<{ username: string }>();
   const [copied, setCopied] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>("fotos");
+  const [activeTab, setActiveTab] = useState<Tab>("feed");
   const [bookingModal, setBookingModal] = useState(false);
   const [bookingStep, setBookingStep] = useState<"form" | "success">("form");
   const [bookingForm, setBookingForm] = useState({ name: "", phone: "", therapyId: "", date: "", time: "" });
@@ -216,6 +346,8 @@ export default function TherapistPublicProfile() {
   const [company, setCompany] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [firestoreCatalog, setFirestoreCatalog] = useState<any[]>([]);
+  const [therapistFeedPosts, setTherapistFeedPosts] = useState<any[]>([]);
+  const [feedLightbox, setFeedLightbox] = useState<number | null>(null);
 
   useEffect(() => {
     if (!username) return;
@@ -242,6 +374,28 @@ export default function TherapistPublicProfile() {
           } else {
             setAllTherapies([]);
           }
+        }
+        // Fetch public feed posts for this therapist
+        try {
+          const q = query(
+            collection(db, "feedPosts"),
+            where("therapistId", "==", t.id),
+          );
+          const snap = await getDocs(q);
+          const all = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
+          // filter type === "feed" and sort by createdAt desc — client-side
+          // (avoids composite index requirement)
+          const sorted = all
+            .filter((p) => !p.type || p.type === "feed")
+            .sort((a, b) => {
+              const ta = a.createdAt?.toMillis?.() ?? 0;
+              const tb = b.createdAt?.toMillis?.() ?? 0;
+              return tb - ta;
+            });
+          setTherapistFeedPosts(sorted);
+        } catch (err) {
+          console.error("Erro ao buscar posts do terapeuta:", err);
+          setTherapistFeedPosts([]);
         }
       } else {
         const mockT = mockTherapists.find((m) => m.username === username);
@@ -335,10 +489,11 @@ export default function TherapistPublicProfile() {
     setBookingForm({ name: "", phone: "", therapyId: "", date: "", time: "" });
   };
 
-  const tabs: Tab[] = ["fotos", "servicos", "sobre"];
+  const tabs: Tab[] = ["feed", "fotos", "servicos", "sobre"];
   const effectiveTab = tabs.includes(activeTab) ? activeTab : tabs[0];
 
   const tabConfig: Record<Tab, { icon: React.ReactNode; label: string }> = {
+    feed:     { icon: <Sparkles className="w-4 h-4" />,          label: "Feed" },
     fotos:    { icon: <Grid className="w-4 h-4" />,              label: "Fotos" },
     servicos: { icon: <ListBullet className="w-4 h-4" />,        label: "Serviços" },
     sobre:    { icon: <InformationCircle className="w-4 h-4" />, label: "Sobre" },
@@ -390,12 +545,6 @@ export default function TherapistPublicProfile() {
               <div className="flex gap-6">
                 <div className="text-center">
                   <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "1.1rem", lineHeight: 1.2 }}>
-                    {therapist.totalSessions ?? 0}
-                  </p>
-                  <p className="text-gray-400 text-xs mt-0.5">sessões</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "1.1rem", lineHeight: 1.2 }}>
                     {therapist.rating ?? "—"}
                   </p>
                   <p className="text-gray-400 text-xs mt-0.5">avaliação</p>
@@ -405,6 +554,12 @@ export default function TherapistPublicProfile() {
                     {displayTherapies.length}
                   </p>
                   <p className="text-gray-400 text-xs mt-0.5">serviços</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "1.1rem", lineHeight: 1.2 }}>
+                    {therapistFeedPosts.length}
+                  </p>
+                  <p className="text-gray-400 text-xs mt-0.5">posts</p>
                 </div>
               </div>
             </div>
@@ -440,6 +595,57 @@ export default function TherapistPublicProfile() {
               })}
             </div>
           </div>
+
+          {/* ── FEED tab ──────────────────────────────────────────────────── */}
+          {effectiveTab === "feed" && (
+            <div className="bg-white">
+              {therapistFeedPosts.length === 0 ? (
+                <div className="py-16 flex flex-col items-center gap-3 text-center px-6">
+                  <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
+                    <Sparkles className="w-6 h-6 text-gray-300" />
+                  </div>
+                  <p className="text-gray-500 text-sm" style={{ fontWeight: 600 }}>Nenhuma publicação ainda</p>
+                  <p className="text-gray-400 text-xs">Quando este profissional publicar, aparecerá aqui.</p>
+                </div>
+              ) : (
+                <div>
+                  {therapistFeedPosts.map((post, idx) => (
+                    <div key={post.id} className="border-b border-gray-100 last:border-0">
+                      {/* Media — full width, tappable */}
+                      {post.mediaUrl && (
+                        <button
+                          className="w-full block focus:outline-none"
+                          onClick={() => setFeedLightbox(idx)}
+                        >
+                          <img
+                            src={post.mediaUrl}
+                            alt={post.caption ?? ""}
+                            className="w-full aspect-square object-cover"
+                          />
+                        </button>
+                      )}
+                      {/* Actions + caption */}
+                      <div className="px-4 pt-3 pb-4">
+                        <div className="flex items-center gap-4 mb-2">
+                          <span className="flex items-center gap-1.5 text-sm text-gray-500">
+                            <Heart className="w-5 h-5" />
+                            {post.likesCount ?? 0}
+                          </span>
+                          <span className="flex items-center gap-1.5 text-sm text-gray-500">
+                            <MessageCircle className="w-5 h-5" />
+                            {post.commentsCount ?? 0}
+                          </span>
+                        </div>
+                        {post.caption && (
+                          <p className="text-sm text-gray-700 leading-snug">{post.caption}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── FOTOS tab ─────────────────────────────────────────────────── */}
           {effectiveTab === "fotos" && (
@@ -680,6 +886,15 @@ export default function TherapistPublicProfile() {
           </button>
         </div>
       </div>
+
+      {/* Feed Lightbox */}
+      {feedLightbox !== null && (
+        <FeedLightbox
+          posts={therapistFeedPosts}
+          initialIndex={feedLightbox}
+          onClose={() => setFeedLightbox(null)}
+        />
+      )}
 
       {/* Story Viewer */}
       {galleryIndex !== null && (
